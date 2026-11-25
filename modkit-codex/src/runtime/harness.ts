@@ -1,5 +1,5 @@
 import { copy } from '@atuin/modkit-target-node/runtime/clipboard'
-import { run } from '@atuin/modkit-target-node/runtime/run'
+import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import type { Failure, HarnessAdapter, Store } from '@atuin/modkit-target/host'
 
@@ -12,21 +12,6 @@ export interface SessionState {
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
-
-// The checkout `cwd` is in, or `cwd` itself outside one: Codex's hooks name only the directory.
-async function rootOf(cwd: string): Promise<string> {
-  try {
-    const found = await run({
-      argv: ['git', 'rev-parse', '--show-toplevel'],
-      options: undefined,
-      cwd,
-    })
-    const root = found.stdout.trim()
-    return found.exitCode === 0 && root !== '' ? root : cwd
-  } catch {
-    return cwd
-  }
-}
 
 const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 
@@ -44,7 +29,8 @@ export function harnessFor({
   return {
     session: { id: session.id },
     cwd: async () => session.cwd,
-    root: async () => rootOf(session.cwd),
+    // Codex's hooks name only the session's directory.
+    root: async () => projectRootOf(session.cwd),
     env: async (name) => process.env[name],
     run: async (argv, options) => run({ argv, options, cwd: session.cwd }),
     mcp: async (call) => servers.call(call),

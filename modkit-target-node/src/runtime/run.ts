@@ -50,3 +50,18 @@ export async function run({
     return failedRun({ command, error })
   }
 }
+
+// The checkout `cwd` is in, or `cwd` itself outside one, for a harness that names only a directory.
+export async function projectRootOf(cwd: string): Promise<string> {
+  try {
+    const found = await run({
+      argv: ['git', 'rev-parse', '--show-toplevel'],
+      options: undefined,
+      cwd,
+    })
+    const root = found.stdout.trim()
+    return found.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    return cwd
+  }
+}
