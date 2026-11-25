@@ -114,6 +114,8 @@
     // `typescript/switch-exhaustiveness-check` requires.
     "eslint/complexity": ["error", { "max": 10, "variant": "modified" }],
     "eslint/max-statements": ["error", 15],
+    // A type-only import couples no code.
+    "import/max-dependencies": ["error", { "max": 10, "ignoreTypeImports": true }],
     "eslint/max-depth": ["error", 3],
     "eslint/max-nested-callbacks": ["error", 3],
     // Props and payloads take one object.

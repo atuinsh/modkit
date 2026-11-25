@@ -6,7 +6,7 @@
  */
 
 import type { Diagnostic } from './diagnostics.ts'
-import type { ModpartCounts } from './modparts.ts'
+import type { Modparts } from './modparts.ts'
 import type { Shape } from './shape.ts'
 
 /** Mod author metadata parsed from `package.json`. */
@@ -66,6 +66,6 @@ export type Compiled =
       /** Sorted unique environment variable names referenced by `harness.env()` calls. */
       env: string[]
       tools: { before: string[]; after: string[]; cards: string[] }
-      modparts: ModpartCounts
+      modparts: Modparts
     }
   | { isOk: false; diagnostics: Diagnostic[] }

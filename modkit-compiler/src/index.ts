@@ -1,7 +1,12 @@
 export { compile } from './compile.ts'
-export { authorOf } from './manifest.ts'
-export { MODPARTS, type ModpartCounts, type ModpartName } from './modparts.ts'
-export { formatDiagnostic, type Diagnostic, type DiagnosticCode } from './diagnostics.ts'
+export { authorOf, manifestAt } from './manifest.ts'
+export { MODPARTS, type ModpartName, type ModpartUsage, type Modparts } from './modparts.ts'
+export {
+  formatDiagnostic,
+  type Diagnostic,
+  type DiagnosticCode,
+  type Place,
+} from './diagnostics.ts'
 export type {
   Author,
   Compiled,

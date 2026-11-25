@@ -37,7 +37,8 @@ const fileError = ({
   path: string
 }): Diagnostic => ({ code, message, file: path, line: 1, column: 1 })
 
-function manifestAt(
+/** Read `path` as a `package.json`, or return the `'manifest'` diagnostic that says why it isn't one. */
+export function manifestAt(
   path: string,
 ): { isOk: true; manifest: unknown } | { isOk: false; diagnostic: Diagnostic } {
   if (!existsSync(path)) {

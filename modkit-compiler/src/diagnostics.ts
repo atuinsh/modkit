@@ -26,11 +26,21 @@ export type DiagnosticCode =
   /** A `harness.env()` call passes a non-literal variable name. */
   | 'env-name'
   | 'tool-name'
+  /** A mod imports what only a target may: `@atuin/modkit/host` or an `@atuin/modkit-*` package. */
+  | 'host-import'
+  /** `package.json` lists no `modkit.targets`, or its `modkit` field is malformed. */
+  | 'targets'
+  /** A target `modkit.targets` lists is not installed, or its package exports no target. */
+  | 'target-missing'
+  /** A target's section of the `modkit` field fails that target's options. */
+  | 'target-options'
+  /** A target lowers or drops a modpart the mod uses, and the mod's `gaps` do not accept it. */
+  | 'target-gap'
+  /** The mod accepts a gap that its target or its own parts do not have. */
+  | 'stale-gap'
 
-/** A compiler error anchored to a 1-based source location. */
-export interface Diagnostic {
-  code: DiagnosticCode
-  message: string
+/** A 1-based location in a source file. */
+export interface Place {
   file: string
   /** 1-based line number. */
   line: number
@@ -38,15 +48,21 @@ export interface Diagnostic {
   column: number
 }
 
-function placeOf({
-  file,
-  position,
-}: {
-  file: SourceFile
-  position: number
-}): Pick<Diagnostic, 'file' | 'line' | 'column'> {
+/** A compiler error anchored to a 1-based source location. */
+export interface Diagnostic extends Place {
+  code: DiagnosticCode
+  message: string
+}
+
+function placeOf({ file, position }: { file: SourceFile; position: number }): Place {
   const { line, character } = file.getLineAndCharacterOfPosition(position)
   return { file: file.fileName, line: line + 1, column: character + 1 }
+}
+
+/** The {@link Place} where AST `node` starts. */
+export function placeAt(node: Node): Place {
+  const file = node.getSourceFile()
+  return placeOf({ file, position: node.getStart(file) })
 }
 
 /** Build a {@link Diagnostic} anchored at the start of AST `node`. */
@@ -59,8 +75,7 @@ export function diagnosticAt({
   message: string
   node: Node
 }): Diagnostic {
-  const file = node.getSourceFile()
-  return { code, message, ...placeOf({ file, position: node.getStart(file) }) }
+  return { code, message, ...placeAt(node) }
 }
 
 /** Convert a TypeScript diagnostic in `file` into a modkit `'type-error'` {@link Diagnostic}. */
