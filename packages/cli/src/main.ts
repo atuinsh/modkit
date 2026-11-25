@@ -20,7 +20,7 @@ import { watch } from 'chokidar'
 import { defineCommand, runMain } from 'citty'
 import { debounce } from 'es-toolkit/function'
 
-import { buildClaude } from '@atuin/modkit-claude/codegen'
+import { buildClaude } from '@atuin/modkit-claude-code/codegen'
 import { formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
 
 const QUIET_MS = 150

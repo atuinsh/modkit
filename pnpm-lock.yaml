@@ -211,7 +211,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@atuin/modkit-claude':
+      '@atuin/modkit-claude-code':
         specifier: workspace:*
         version: link:../targets/claude
       '@atuin/modkit-compiler':

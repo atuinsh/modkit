@@ -1,6 +1,6 @@
 /**
  * Hand-written ambient declarations for the subset of Claude Code's plugin runtime API called by
- * `@atuin/modkit-claude`, plus the virtual modules synthesized by codegen.
+ * `@atuin/modkit-claude-code`, plus the virtual modules synthesized by codegen.
  *
  * Claude Code provides the real `claude-code` module and global `h` factory at runtime; accuracy
  * against the engine is verified by `claude plugin validate` and `claude plugin test` on built
