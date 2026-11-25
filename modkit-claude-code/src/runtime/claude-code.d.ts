@@ -198,7 +198,7 @@ declare const h: (
   ...children: unknown[]
 ) => unknown
 
-/** Virtual module synthesized by `stateSource()` for this mod's Claude Code state atoms. */
+/** Virtual module synthesized by `StateModule.source()` for this mod's Claude Code state atoms. */
 declare module 'modkit-claude:state' {
   import type { EngineInterface } from 'claude-code'
 
