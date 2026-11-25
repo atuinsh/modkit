@@ -15,7 +15,7 @@
     "@atuin/modkit-compiler": "workspace:*",
     "es-toolkit": "catalog:",
     "knitwork": "^1.3.0",
-    "rolldown": "^1.2.19",
+    "rolldown": "^1.3.2",
     "scule": "catalog:"
   },
   "devDependencies": {
