@@ -11,13 +11,16 @@
   },
   "dependencies": {
     "@atuin/modkit-compiler": "workspace:*",
-    "@atuin/modkit-target": "workspace:*",
     "chokidar": "^6.0.0",
     "citty": "^0.2.2",
     "es-toolkit": "catalog:"
   },
   "devDependencies": {
+    "@atuin/modkit-target": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@atuin/modkit-target": "workspace:^"
   }
 }

@@ -11,12 +11,15 @@
     "typecheck": "tsc -p . && tsc -p tsconfig.host.json"
   },
   "dependencies": {
-    "@atuin/modkit": "workspace:*",
     "@atuin/modkit-compiler": "workspace:*",
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "@atuin/modkit": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@atuin/modkit": "workspace:^"
   }
 }
