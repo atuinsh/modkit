@@ -95,6 +95,25 @@ function textLines({
   return joined.flatMap((line) => wrapTextWithAnsi(line, width))
 }
 
+interface Placed {
+  lines: string[]
+  width: number
+}
+
+// The children placed on one line of a row, side by side.
+function besideLines({ placed, gap }: { placed: readonly Placed[]; gap: number }): string[] {
+  const height = Math.max(0, ...placed.map((one) => one.lines.length))
+  return Array.from({ length: height }, (_unused, row) =>
+    placed
+      .map((one, index) => {
+        const line = one.lines[row] ?? ''
+        return index === placed.length - 1 ? line : padded({ line, width: one.width })
+      })
+      .join(' '.repeat(gap))
+      .trimEnd(),
+  )
+}
+
 function rowLines({
   children,
   width,
@@ -106,25 +125,20 @@ function rowLines({
   gap: number
   paint: Paint
 }): string[] {
-  const placed: { lines: string[]; width: number }[] = []
+  const rows: Placed[][] = [[]]
   let left = width
   for (const child of children) {
-    if (left <= 0) break
+    // A child with no room left beside the ones before it starts the row's next line.
+    if (left <= 0) {
+      rows.push([])
+      left = width
+    }
     const lines = linesOf({ nodes: [child], width: left, paint })
     const drawn = widest(lines)
-    placed.push({ lines, width: drawn })
+    rows.at(-1)?.push({ lines, width: drawn })
     left -= drawn + gap
   }
-  const height = Math.max(0, ...placed.map((one) => one.lines.length))
-  return Array.from({ length: height }, (_unused, row) =>
-    placed
-      .map((one, index) => {
-        const line = one.lines[row] ?? ''
-        return index === placed.length - 1 ? line : padded({ line, width: one.width })
-      })
-      .join(' '.repeat(gap))
-      .trimEnd(),
-  )
+  return rows.flatMap((placed) => besideLines({ placed, gap }))
 }
 
 function boxed({
