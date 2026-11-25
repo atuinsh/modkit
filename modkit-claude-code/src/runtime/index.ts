@@ -54,7 +54,7 @@ import {
 
 import { completionOf, mcpResultOf } from './answers'
 import { decide, exitCodeOf } from './decide'
-import { draw } from './draw'
+import { Drawing } from './draw'
 
 const TICK_MS = 1000
 
@@ -367,7 +367,7 @@ export async function drawCards(
   const press = (button: ButtonNode): void => {
     pressOn($, button, e.surface)
   }
-  const under = draw({ elements, nodes: cards, press, at: 'card' })
+  const under = new Drawing({ elements, press }).nodes(cards, 'card')
   return h(elements.Box, { flexDirection: 'column' }, drawn, ...under)
 }
 
@@ -392,7 +392,7 @@ function registerDrawing(on: On): void {
       return h(
         elements.Box,
         { key, flexDirection: 'row' },
-        ...draw({ elements, nodes: status, press, at: key }),
+        ...new Drawing({ elements, press }).nodes(status, key),
       )
     })
     const hasModes = Array.isArray(e.props['modes']) && e.props['modes'].length > 0
@@ -408,7 +408,11 @@ function registerDrawing(on: On): void {
     const press = (button: ButtonNode): void => {
       pressOn($, button, e.surface)
     }
-    return h(elements.Box, { flexDirection: 'column' }, ...draw({ elements, nodes: body, press }))
+    return h(
+      elements.Box,
+      { flexDirection: 'column' },
+      ...new Drawing({ elements, press }).nodes(body),
+    )
   })
 }
 
