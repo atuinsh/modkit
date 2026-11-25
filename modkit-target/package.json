@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@atuin/modkit-compiler": "workspace:*",
+    "import-meta-resolve": "^4.2.0",
     "valibot": "catalog:"
   },
   "devDependencies": {

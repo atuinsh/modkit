@@ -12,10 +12,11 @@
  * @module
  */
 
-import { createRequire } from 'node:module'
+import { findPackageJSON } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { resolve as resolveImport } from 'import-meta-resolve'
 import * as v from 'valibot'
 
 import {
@@ -92,6 +93,9 @@ const issuesAt = ({
       return `${path === null ? at : `${at}.${path}`}: ${issue.message}`
     })
     .join('; ')
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
 
 const packageOf = (name: string): string => `@atuin/modkit-${name}`
 
@@ -181,14 +185,36 @@ export class ModPackage {
   }
 
   // Resolved from the package's directory, where the mod installs the targets it builds for.
-  #entryOf(name: string): Read<string> {
+  // What the mod's own imports resolve from.
+  get #importer(): string {
+    return pathToFileURL(join(this.#dir, 'package.json')).href
+  }
+
+  // Whether the mod has package `pkg` installed. A failure other than its absence is thrown, not
+  // taken for it.
+  #isInstalled(pkg: string): boolean {
     try {
-      const entry = createRequire(join(this.#dir, 'package.json')).resolve(
-        `${packageOf(name)}/codegen`,
-      )
-      return { isOk: true, value: entry }
-    } catch {
-      const message = `modkit.targets lists ${name}; add ${packageOf(name)} to the mod's devDependencies`
+      return findPackageJSON(pkg, this.#importer) !== undefined
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ERR_MODULE_NOT_FOUND') {
+        return false
+      }
+      throw error
+    }
+  }
+
+  // The URL of target `name`'s codegen, resolved from the mod as an import, so a target's package
+  // can export it under an `import` condition and the CLI loads the build the mod itself would.
+  #entryOf(name: string): Read<string> {
+    const pkg = packageOf(name)
+    if (!this.#isInstalled(pkg)) {
+      const message = `modkit.targets lists ${name}; add ${pkg} to the mod's devDependencies`
+      return this.#failed('target-missing', message)
+    }
+    try {
+      return { isOk: true, value: resolveImport(`${pkg}/codegen`, this.#importer) }
+    } catch (error) {
+      const message = `${pkg} is installed, but its ./codegen does not resolve as an import: ${messageOf(error)}`
       return this.#failed('target-missing', message)
     }
   }
@@ -196,7 +222,7 @@ export class ModPackage {
   async #targetNamed(name: string): Promise<Read<ModkitTarget>> {
     const entry = this.#entryOf(name)
     if (!entry.isOk) return entry
-    const module: unknown = await import(pathToFileURL(entry.value).href)
+    const module: unknown = await import(entry.value)
     const exported = v.safeParse(ModuleSchema, module)
     if (!exported.success) {
       const [issue] = exported.issues
