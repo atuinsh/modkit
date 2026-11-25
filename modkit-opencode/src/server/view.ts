@@ -18,7 +18,10 @@ function buttonJson({
 }): NodeJson {
   // A key or a hotkey names its button for good; a position moves as the list around it does.
   const name = node.key ?? (node.hotkey === undefined ? here : `hotkey:${node.hotkey}`)
-  const id = `${at.split('.')[0] ?? at}:${name}`
+  const named = `${at.split('.')[0] ?? at}:${name}`
+  // Two buttons of one pane may share a key or a hotkey, as in separate lists; the later one is
+  // told apart by where it is.
+  const id = buttons.has(named) ? `${named}@${here}` : named
   buttons.set(id, node)
   return {
     kind: 'Button',
