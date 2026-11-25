@@ -18,10 +18,10 @@ import type { Shape, StateDecl } from '@atuin/modkit-compiler'
 const VIEW_KEY = 'modkit.view'
 
 const toolHook = ({ event, tool, hook }: { event: string; tool: string; hook: string }): string =>
-  `  on(${genString(event)}, ${genObjectFromValues({ tool })}, ($, e, next) => ${hook}($, e, next)).catch(($, e, next) => next(e))`
+  `  on(${genString(event)}, ${genObjectFromValues({ tool })}, ($, e, next) => runtime.${hook}(engineOf($), e, next)).catch(($, e, next) => next(e))`
 
 const rowHook = (tool: string): string =>
-  `  on("ui.render", ${genObjectFromValues({ component: 'ToolUse', props: { tool } })}, ($, e, next) => drawCards($, e, next))`
+  `  on("ui.render", ${genObjectFromValues({ component: 'ToolUse', props: { tool } })}, ($, e, next) => runtime.renderCards(engineOf($), e, next))`
 
 export const entrySource = ({
   mod,
@@ -33,11 +33,12 @@ export const entrySource = ({
   tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
 }): string =>
   [
-    genImport(runtime, ['callTool', 'checkTool', 'drawCards', 'registerHooks']),
+    genImport(runtime, ['ClaudeCodeRuntime', 'engineOf', 'registerHooks']),
     genImport(mod, 'mod'),
     '',
     'export const register = (on, options) => {',
-    '  registerHooks(on, mod, options)',
+    '  const runtime = new ClaudeCodeRuntime({ mod, options })',
+    '  registerHooks(on, runtime)',
     ...tools.before.map((tool) => toolHook({ event: 'tool.check', tool, hook: 'checkTool' })),
     ...tools.after.map((tool) => toolHook({ event: 'tool.call', tool, hook: 'callTool' })),
     ...tools.cards.map((tool) => rowHook(tool)),
