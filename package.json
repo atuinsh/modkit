@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsdown",
-    "typecheck": "pnpm -r --no-sort --no-bail --if-present typecheck",
+    "typecheck": "tsc -p . && pnpm -r --no-sort --no-bail --if-present typecheck",
     "lint": "oxlint --type-aware",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",

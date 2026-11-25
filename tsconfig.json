@@ -1,0 +1,11 @@
+{
+  // The workspace's own tooling files; each package type-checks its sources with its own config.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Nothing builds declarations from tooling files.
+    "isolatedDeclarations": false,
+    "declaration": false
+  },
+  "include": ["tsdown.config.ts"]
+}

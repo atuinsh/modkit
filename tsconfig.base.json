@@ -23,6 +23,9 @@
     "allowUnusedLabels": false,
     "noUncheckedSideEffectImports": true,
     "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // Every export states its type, so each file's declarations follow from that file alone.
+    "isolatedDeclarations": true,
+    "declaration": true
   }
 }
