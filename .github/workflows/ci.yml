@@ -23,7 +23,8 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           cache: true
-      - uses: astral-sh/setup-uv@v10
+      # codespell is a Python tool; `pnpm spell` runs it pinned through uvx.
+      - uses: astral-sh/setup-uv@v10.4.0
       - name: Dependencies
         run: pnpm install --frozen-lockfile
       - name: Format
