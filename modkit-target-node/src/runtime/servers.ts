@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 import { isPlainObject } from 'es-toolkit/predicate'
 
@@ -11,7 +10,6 @@ import { peerOn, type Peer } from './rpc'
 const PROTOCOL_VERSION = '2025-06-18'
 const START_MS = 30_000
 const CALL_MS = 120_000
-const MS_PER_SECOND = 1000
 
 export interface StdioServer {
   command: string
@@ -54,27 +52,6 @@ export function mcpResultOf(result: unknown): McpResult {
   return { isOk: true, text, ...(structured !== undefined && { structured }) }
 }
 
-async function within<T>({
-  promise,
-  ms,
-  what,
-}: {
-  promise: Promise<T>
-  ms: number
-  what: string
-}): Promise<T> {
-  const timer = new AbortController()
-  const late = async (): Promise<never> => {
-    await sleep(ms, undefined, { signal: timer.signal })
-    throw new Error(`${what} took longer than ${ms / MS_PER_SECOND}s`)
-  }
-  try {
-    return await Promise.race([promise, late()])
-  } finally {
-    timer.abort()
-  }
-}
-
 interface Connection {
   peer: Peer
   child: ChildProcess
@@ -105,9 +82,10 @@ async function connect({
       capabilities: {},
       clientInfo: { name: 'modkit', version: '0' },
     },
+    timeout: { ms: START_MS, what: `starting ${name}` },
   })
   try {
-    await within({ promise: initialized, ms: START_MS, what: `starting ${name}` })
+    await initialized
   } catch (error) {
     // A server that started and never answered is still running, and nothing else holds it.
     child.kill()
@@ -121,6 +99,7 @@ export class Servers {
   readonly #connections = new Map<string, Promise<Connection>>()
   readonly #find: (name: string) => Promise<StdioServer | Unreachable>
   readonly #own: string | undefined
+  #isClosed = false
 
   constructor({
     find,
@@ -135,15 +114,13 @@ export class Servers {
 
   async call({ server, tool, input }: McpCall): Promise<McpResult> {
     if (server === this.#own) return { isOk: false, reason: `${server} is this mod's own server` }
+    if (this.#isClosed) return { isOk: false, reason: 'the session ended' }
     try {
       const { peer } = await this.#connection(server)
-      const result = await within({
-        promise: peer.request({
-          method: 'tools/call',
-          params: { name: tool, arguments: input ?? {} },
-        }),
-        ms: CALL_MS,
-        what: `${server}'s ${tool}`,
+      const result = await peer.request({
+        method: 'tools/call',
+        params: { name: tool, arguments: input ?? {} },
+        timeout: { ms: CALL_MS, what: `${server}'s ${tool}` },
       })
       return mcpResultOf(result)
     } catch (error) {
@@ -152,6 +129,8 @@ export class Servers {
   }
 
   close(): void {
+    // Set first, so a call still under way starts no server after this pass.
+    this.#isClosed = true
     for (const connecting of this.#connections.values()) void Servers.#killed(connecting)
     this.#connections.clear()
   }

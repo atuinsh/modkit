@@ -1,8 +1,12 @@
 import { build, type ExternalOption } from 'rolldown'
 
-import type { OptionDecl } from '@atuin/modkit-target'
+import type { OptionDecl, StateDecl } from '@atuin/modkit-target'
 
 import type { SettingDecl } from '../runtime/settings.ts'
+import type { Tags } from '../runtime/store.ts'
+
+export const tagsOf = (state: readonly StateDecl[]): Tags =>
+  Object.fromEntries(state.map((one) => [one.id, one.tag]))
 
 export function missingToolNotes({
   tools,
