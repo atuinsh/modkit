@@ -106,7 +106,13 @@ async function connect({
       clientInfo: { name: 'modkit', version: '0' },
     },
   })
-  await within({ promise: initialized, ms: START_MS, what: `starting ${name}` })
+  try {
+    await within({ promise: initialized, ms: START_MS, what: `starting ${name}` })
+  } catch (error) {
+    // A server that started and never answered is still running, and nothing else holds it.
+    child.kill()
+    throw error
+  }
   peer.notify({ method: 'notifications/initialized' })
   return { peer, child }
 }

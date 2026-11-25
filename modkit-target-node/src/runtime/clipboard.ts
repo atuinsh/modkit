@@ -23,6 +23,9 @@ export async function copy(text: string): Promise<Copied> {
   if (command === undefined) return NO_CLIPBOARD
   try {
     const child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'] })
+    // A clipboard tool that exits before it reads, as one with no display to reach, breaks the
+    // pipe; its exit code says so below.
+    child.stdin.on('error', () => undefined)
     child.stdin.end(text)
     const closed: readonly unknown[] = await once(child, 'close')
     return closed[0] === 0 ? { isCopied: true } : NO_CLIPBOARD
