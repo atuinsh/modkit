@@ -24,7 +24,7 @@ import { compile, pluginNameOf, type Diagnostic } from '@atuin/modkit-compiler'
 
 import { envSource } from './env.ts'
 import { manifestOf } from './manifest.ts'
-import { contractSource, entrySource, stateSource } from './state.ts'
+import { entrySource, StateModule } from './state.ts'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 const ENTRY = '\0modkit-claude-entry'
@@ -98,7 +98,7 @@ export async function buildClaude({
     out,
     modules: new Map([
       [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools })],
-      [STATE, stateSource({ plugin, state })],
+      [STATE, new StateModule({ plugin, state }).source()],
       [ENV, envSource(env)],
     ]),
   })
@@ -107,6 +107,6 @@ export async function buildClaude({
   const manifest = manifestOf({ plugin, mod, options })
   await writeFile(join(out, '.claude-plugin', 'plugin.json'), json(manifest))
   await writeFile(join(out, 'hooks', 'hooks.json'), json({ modules: ['./register.js'] }))
-  await writeFile(join(out, 'types', 'index.d.ts'), contractSource({ plugin, state }))
+  await writeFile(join(out, 'types', 'index.d.ts'), new StateModule({ plugin, state }).contract())
   return { isOk: true, out, plugin }
 }
