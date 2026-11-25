@@ -3,6 +3,7 @@ import { splitByCase, upperFirst } from 'scule'
 import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
 import type { ModCall } from './entry.ts'
 import type { OptionDecl, OptionKind } from './ir.ts'
+import type { NotJson } from './not-json.ts'
 import {
   isNumberLiteralType,
   isStringLiteralType,
@@ -16,7 +17,7 @@ import {
   type Type,
 } from './program.ts'
 import { canonical, type Field, type Shape } from './shape.ts'
-import { shapeOf, type NotJson } from './types.ts'
+import { shapeOf } from './types.ts'
 
 const SETTING_KINDS = 'a string, a number, a boolean, one of a few strings, or a list of strings'
 
