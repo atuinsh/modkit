@@ -21,14 +21,13 @@ import { defineCommand, runMain } from 'citty'
 import { uniqBy } from 'es-toolkit/array'
 import { debounce } from 'es-toolkit/function'
 
-import { compile, formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
+import { formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
 import {
   gapText,
-  gapsIn,
-  targetsIn,
+  ModPackage,
   type CompiledMod,
   type Gap,
-  type Selected,
+  type ListedTarget,
 } from '@atuin/modkit-target'
 
 const QUIET_MS = 150
@@ -49,51 +48,51 @@ function failed(diagnostics: readonly Diagnostic[]): false {
 
 const gapNote = (gap: Gap): string => `  ${gapText(gap)} (accepted in package.json)`
 
-/** A compiled mod and the gaps its package.json accepts, ready to build for each of its targets. */
+/** A compiled mod and the gaps its package.json accepts on one target, ready to build for it. */
 interface Checked {
   compiled: CompiledMod
-  accepted: readonly Gap[]
+  gaps: readonly Gap[]
 }
 
 /** A build of the mod in `dir` into `out`, for each target the mod's package.json lists. */
 class Build {
-  readonly #dir: string
+  readonly #package: ModPackage
   readonly #out: string
 
-  constructor({ dir, out }: { dir: string; out: string }) {
-    this.#dir = dir
+  constructor({ modPackage, out }: { modPackage: ModPackage; out: string }) {
+    this.#package = modPackage
     this.#out = out
   }
 
   /** The build the `build` and `dev` commands' arguments ask for. */
   static of({ dir: given, out }: { dir: string | undefined; out: string | undefined }): Build {
     const dir = resolve(given ?? '.')
-    return new Build({ dir, out: resolve(out ?? resolve(dir, 'dist')) })
+    return new Build({ modPackage: new ModPackage(dir), out: resolve(out ?? resolve(dir, 'dist')) })
   }
 
   /** Compile once, then build for each target in turn, reporting each; true when every one built. */
   async once(): Promise<boolean> {
-    const selected = await targetsIn(this.#dir).catch((error: unknown) => messageOf(error))
-    if (typeof selected === 'string') {
-      console.error(selected)
+    const targets = await this.#package.targets().catch((error: unknown) => messageOf(error))
+    if (typeof targets === 'string') {
+      console.error(targets)
       return false
     }
-    const compiled = compile({ dir: this.#dir })
-    if (!selected.isOk || !compiled.isOk) {
+    const compiled = this.#package.compile()
+    if (!targets.isOk || !compiled.isOk) {
       // Both read package.json, so an unreadable one would be reported twice.
       const all = [
         ...(compiled.isOk ? [] : compiled.diagnostics),
-        ...(selected.isOk ? [] : selected.diagnostics),
+        ...(targets.isOk ? [] : targets.diagnostics),
       ]
       return failed(uniqBy(all, (one) => formatDiagnostic(one)))
     }
-    const gaps = gapsIn({ compiled, selected: selected.value, dir: this.#dir })
-    if (gaps.diagnostics.length > 0) return failed(gaps.diagnostics)
-    const checked = { compiled, accepted: gaps.accepted }
+    const checks = targets.value.map((target) => ({ target, checked: target.check(compiled) }))
+    const diagnostics = checks.flatMap(({ checked }) => checked.diagnostics)
+    if (diagnostics.length > 0) return failed(diagnostics)
     const builds: boolean[] = []
-    for (const one of selected.value) {
+    for (const { target, checked } of checks) {
       // oxlint-disable-next-line no-await-in-loop -- one at a time, so their reports don't interleave
-      builds.push(await this.#for(one, checked))
+      builds.push(await this.#for(target, { compiled, gaps: checked.gaps }))
     }
     return builds.every(Boolean)
   }
@@ -101,12 +100,12 @@ class Build {
   /** Build, then build again after each quiet spell of changes under the mod's directory. */
   async watch(): Promise<void> {
     await this.once()
-    console.log(`watching ${shown(this.#dir)}`)
+    console.log(`watching ${shown(this.#package.dir)}`)
     let last: Promise<unknown> = Promise.resolve()
     const rebuild = debounce(() => {
       last = last.then(async () => this.once())
     }, QUIET_MS)
-    const watcher = watch(this.#dir, {
+    const watcher = watch(this.#package.dir, {
       ignoreInitial: true,
       // The build writes inside `dir` by default; its own output must not start the next build.
       ignored: [{ path: this.#out, recursive: true }, /(?:^|\/)node_modules(?:\/|$)/u],
@@ -117,20 +116,20 @@ class Build {
     })
   }
 
-  async #for({ target, options }: Selected, { compiled, accepted }: Checked): Promise<boolean> {
+  async #for(target: ListedTarget, { compiled, gaps }: Checked): Promise<boolean> {
     const out = join(this.#out, target.name)
-    const built = await target
-      .build({ compiled, dir: this.#dir, out, options })
-      .catch((error: unknown) => messageOf(error))
+    const built = await target.build(compiled, out).catch((error: unknown) => messageOf(error))
     if (typeof built === 'string') {
       console.error(built)
       return false
     }
     if (!built.isOk) return failed(built.diagnostics)
-    const gaps = accepted.filter((gap) => gap.target === target.name).map((gap) => gapNote(gap))
+    const accepted = gaps.map((gap) => gapNote(gap))
     const notes = built.notes.map((note) => `  ${note}`)
     console.log(
-      [`built ${built.plugin} for ${target.name} into ${shown(out)}`, ...gaps, ...notes].join('\n'),
+      [`built ${built.plugin} for ${target.name} into ${shown(out)}`, ...accepted, ...notes].join(
+        '\n',
+      ),
     )
     return true
   }

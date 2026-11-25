@@ -22,11 +22,12 @@ import { build } from 'rolldown'
 import * as v from 'valibot'
 
 import {
+  ModkitTarget,
   NATIVE,
   pluginNameOf,
   type BuildInput,
   type Built,
-  type Target,
+  type Capabilities,
 } from '@atuin/modkit-target'
 
 import { envSource } from './env.ts'
@@ -77,37 +78,16 @@ async function bundle({
   })
 }
 
-async function built({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-  const { mod, entry, state, options, env, tools } = compiled
-  const plugin = pluginNameOf(mod.name)
-  await bundle({
-    dir,
-    out,
-    modules: new Map([
-      [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools })],
-      [STATE, new StateModule({ plugin, state }).source()],
-      [ENV, envSource(env)],
-    ]),
-  })
-  await mkdir(join(out, '.claude-plugin'), { recursive: true })
-  await mkdir(join(out, 'types'), { recursive: true })
-  const manifest = manifestOf({ plugin, mod, options })
-  await writeFile(join(out, '.claude-plugin', 'plugin.json'), json(manifest))
-  await writeFile(join(out, 'hooks', 'hooks.json'), json({ modules: ['./register.js'] }))
-  await writeFile(join(out, 'types', 'index.d.ts'), new StateModule({ plugin, state }).contract())
-  return { isOk: true, plugin, notes: [`load it with claude --plugin-dir ${out}`] }
-}
-
 // Claude Code takes no options of a mod yet, so its section holds only the gaps it accepts.
 const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
   v.strictObject({}),
   v.transform(() => undefined),
 )
 
-/** Build a mod into a Claude Code plugin: `plugin.json`, `hooks.json`, `register.js` and its types. */
-export const target: Target<undefined> = {
-  name: 'claude-code',
-  capabilities: {
+/** Claude Code, which runs a mod as a plugin of `plugin.json`, `hooks.json`, `register.js` and types. */
+class ClaudeCodeTarget extends ModkitTarget<undefined> {
+  override readonly name = 'claude-code'
+  override readonly capabilities: Capabilities = {
     status: NATIVE,
     commands: NATIVE,
     panes: NATIVE,
@@ -116,7 +96,30 @@ export const target: Target<undefined> = {
     beforeTool: NATIVE,
     afterTool: NATIVE,
     toolCards: NATIVE,
-  },
-  options: OptionsSchema,
-  build: built,
+  }
+  override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
+
+  override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
+    const { mod, entry, state, options, env, tools } = compiled
+    const plugin = pluginNameOf(mod.name)
+    await bundle({
+      dir,
+      out,
+      modules: new Map([
+        [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools })],
+        [STATE, new StateModule({ plugin, state }).source()],
+        [ENV, envSource(env)],
+      ]),
+    })
+    await mkdir(join(out, '.claude-plugin'), { recursive: true })
+    await mkdir(join(out, 'types'), { recursive: true })
+    const manifest = manifestOf({ plugin, mod, options })
+    await writeFile(join(out, '.claude-plugin', 'plugin.json'), json(manifest))
+    await writeFile(join(out, 'hooks', 'hooks.json'), json({ modules: ['./register.js'] }))
+    await writeFile(join(out, 'types', 'index.d.ts'), new StateModule({ plugin, state }).contract())
+    return { isOk: true, plugin, notes: [`load it with claude --plugin-dir ${out}`] }
+  }
 }
+
+/** The Claude Code target, which the CLI loads for a mod that lists `claude-code`. */
+export const target: ModkitTarget<undefined> = new ClaudeCodeTarget()

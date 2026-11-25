@@ -1,16 +1,16 @@
 /**
- * The contract every harness target implements, and the checks the CLI runs across targets.
+ * The contract every harness target implements, and the mod's package the CLI builds for each.
  *
- * A target's package is `@atuin/modkit-<name>`. It exports a {@link Target} from `./codegen`, which
- * runs at build time in Node, and builds its runtime on `@atuin/modkit-target/host` alone.
+ * A target's package is `@atuin/modkit-<name>`. It exports a {@link ModkitTarget} from `./codegen`,
+ * which runs at build time in Node, and builds its runtime on `@atuin/modkit-target/host` alone.
  *
  * @module
  */
 
 export { NATIVE, type Capabilities, type Support } from './capabilities.ts'
-export { gapText, gapsIn, type Gap } from './gaps.ts'
-export { targetsIn, type Selected } from './load.ts'
-export type { BuildInput, Built, CompiledMod, Target } from './target.ts'
+export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
+export { ModPackage } from './package.ts'
+export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
 export {
   pluginNameOf,
   type Author,

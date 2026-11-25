@@ -31,13 +31,18 @@ export type Built =
 /**
  * A harness target: the name a mod picks it by, the modparts it provides, and how it builds a mod.
  *
- * A target's package is `@atuin/modkit-<name>` and exports its `target` from `./codegen`.
+ * A target's package is `@atuin/modkit-<name>`, and exports an instance of its subclass as `target`
+ * from `./codegen`. The CLI loads only an instance of this class, so a target extends it rather
+ * than matching its shape.
  */
-export interface Target<Options = unknown> {
+export abstract class ModkitTarget<Options = unknown> {
   /** The name a mod lists in its `modkit.targets`, `claude-code`. */
-  readonly name: string
-  readonly capabilities: Capabilities
+  abstract readonly name: string
+  /** How the target provides each modpart. */
+  abstract readonly capabilities: Capabilities
   /** Checks the target's section of the mod's `modkit` field, less its `gaps`. */
-  readonly options: v.GenericSchema<unknown, Options>
-  readonly build: (input: BuildInput<Options>) => Promise<Built>
+  abstract readonly options: v.GenericSchema<unknown, Options>
+
+  /** Write the mod's package for the harness into `input.out`. */
+  abstract build(input: BuildInput<Options>): Promise<Built>
 }

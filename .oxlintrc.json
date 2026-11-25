@@ -114,6 +114,8 @@
     // `typescript/switch-exhaustiveness-check` requires.
     "eslint/complexity": ["error", { "max": 10, "variant": "modified" }],
     "eslint/max-statements": ["error", 15],
+    // An override implements its base class's member, which no subclass can make static.
+    "eslint/class-methods-use-this": ["error", { "ignoreOverrideMethods": true }],
     // A type-only import couples no code.
     "import/max-dependencies": ["error", { "max": 10, "ignoreTypeImports": true }],
     "eslint/max-depth": ["error", 3],
