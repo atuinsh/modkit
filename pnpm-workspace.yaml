@@ -1,6 +1,6 @@
+# Each package is a root directory named for it: modkit, modkit-compiler, modkit-cli, ...
 packages:
-  - packages/*
-  - packages/targets/*
+  - 'modkit*'
 
 # Only install versions at least 3 days old: most malicious releases are pulled within hours.
 minimumReleaseAge: 4320
