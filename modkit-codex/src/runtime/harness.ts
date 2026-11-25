@@ -6,13 +6,27 @@ import type { Failure, HarnessAdapter, Store } from '@atuin/modkit-target/host'
 export interface SessionState {
   readonly id: string
   cwd: string
-  readonly root: string
   notes: string[]
   context: string[]
 }
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+
+// The checkout `cwd` is in, or `cwd` itself outside one: Codex's hooks name only the directory.
+async function rootOf(cwd: string): Promise<string> {
+  try {
+    const found = await run({
+      argv: ['git', 'rev-parse', '--show-toplevel'],
+      options: undefined,
+      cwd,
+    })
+    const root = found.stdout.trim()
+    return found.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    return cwd
+  }
+}
 
 const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 
@@ -30,7 +44,7 @@ export function harnessFor({
   return {
     session: { id: session.id },
     cwd: async () => session.cwd,
-    root: async () => session.root,
+    root: async () => rootOf(session.cwd),
     env: async (name) => process.env[name],
     run: async (argv, options) => run({ argv, options, cwd: session.cwd }),
     mcp: async (call) => servers.call(call),

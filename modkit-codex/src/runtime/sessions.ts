@@ -71,7 +71,7 @@ export class Sessions {
 
   #started({ id, cwd }: { id: string; cwd: string }): Live {
     const { plugin, mod } = this.#served
-    const state: SessionState = { id, cwd, root: cwd, notes: [], context: [] }
+    const state: SessionState = { id, cwd, notes: [], context: [] }
     const path = join(this.#dir, 'settings.json')
     const settings = settingsFrom({ decls: this.#served.settings, text: readText(path), path })
     for (const problem of settings.problems) state.notes.push(`${plugin}: ${problem}`)
