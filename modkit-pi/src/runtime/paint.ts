@@ -38,10 +38,12 @@ export function paintOf({ theme, hasKeys }: { theme: Theme; hasKeys: boolean }):
       })
     },
     border: ({ tone, text }) => theme.fg(borderColor(tone), text),
-    button: ({ label, hotkey }) =>
-      hasKeys && hotkey !== undefined
-        ? `${theme.fg('accent', theme.bold(hotkey))} ${theme.fg('accent', label)}`
-        : theme.fg('accent', label),
+    button: ({ label, hotkey, isPicked }) => {
+      const name = theme.fg('accent', isPicked ? theme.bold(`› ${label}`) : label)
+      return hasKeys && hotkey !== undefined
+        ? `${theme.fg('accent', theme.bold(hotkey))} ${name}`
+        : name
+    },
     markdown: ({ text, width }) => new Markdown(text, 0, 0, getMarkdownTheme()).render(width),
   }
 }

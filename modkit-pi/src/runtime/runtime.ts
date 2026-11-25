@@ -20,6 +20,7 @@ import {
   type PaneOpened,
   type PaneOpening,
   type Repeat,
+  type Store,
   type ToolRow,
   type UiNode,
   type Verdict,
@@ -68,6 +69,7 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
   #servers: Servers | undefined = undefined
   #report: ((failure: Failure) => void) | undefined = undefined
   #statuses = 0
+  #isStopped = false
 
   constructor(session: Session) {
     const { mod, options, pi, plugin, dir, state, registerCommand, redrawCards } = session
@@ -96,6 +98,7 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
   }
 
   stop(ctx: ExtensionContext): void {
+    this.#isStopped = true
     for (const repeat of this.#repeats) clearInterval(repeat)
     this.#overlays.stop()
     this.#drawStatuses(ctx, [])
@@ -166,10 +169,19 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
       tags: this.#state,
       report,
     })
-    return harnessFor({ pi: this.#pi, ctx, plugin, servers, store, report })
+    // A query still fetching when the session stopped would write its stale state over what the
+    // session's next runtime has saved since.
+    const kept: Store = {
+      get: (key) => store.get(key),
+      set: (key, stored) => {
+        if (!this.#isStopped) store.set(key, stored)
+      },
+    }
+    return harnessFor({ pi: this.#pi, ctx, plugin, servers, store: kept, report })
   }
 
   protected override async redraw(ctx: ExtensionContext): Promise<unknown> {
+    if (this.#isStopped) return undefined
     this.#drawStatuses(ctx, this.statuses())
     this.#overlays.redraw((id) => this.paneBody(id))
     this.#redrawCards()

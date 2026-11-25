@@ -12,17 +12,11 @@ import { linesOf, type Paint } from './lines'
 
 export const FOCUS_KEY = 'alt+m'
 
-function hotkeysIn(nodes: readonly UiNode[]): Map<string, ButtonNode> {
-  const found = new Map<string, ButtonNode>()
-  const walk = (node: UiNode): void => {
-    if (typeof node === 'string' || node.kind === 'Markdown') return
-    if (node.kind === 'Button' && node.hotkey !== undefined && !found.has(node.hotkey)) {
-      found.set(node.hotkey, node)
-    }
-    if (node.kind !== 'Button') for (const child of node.children) walk(child)
-  }
-  for (const node of nodes) walk(node)
-  return found
+function buttonsIn(nodes: readonly UiNode[]): ButtonNode[] {
+  return nodes.flatMap((node): ButtonNode[] => {
+    if (typeof node === 'string' || node.kind === 'Markdown') return []
+    return node.kind === 'Button' ? [node] : buttonsIn(node.children)
+  })
 }
 
 export interface PaneState {
@@ -30,11 +24,23 @@ export interface PaneState {
   body: readonly UiNode[]
 }
 
-function hintOf({ isFocused, canScroll }: { isFocused: boolean; canScroll: boolean }): string {
+function hintOf({
+  isFocused,
+  canScroll,
+  hasButtons,
+}: {
+  isFocused: boolean
+  canScroll: boolean
+  hasButtons: boolean
+}): string {
   if (!isFocused) return ` ${FOCUS_KEY} to use `
-  return canScroll
-    ? ` ↑↓ scroll · esc close · ${FOCUS_KEY} prompt `
-    : ` esc close · ${FOCUS_KEY} prompt `
+  const keys = [
+    ...(canScroll ? ['↑↓ scroll'] : []),
+    ...(hasButtons ? ['tab/enter buttons'] : []),
+    'esc close',
+    `${FOCUS_KEY} prompt`,
+  ]
+  return ` ${keys.join(' · ')} `
 }
 
 // A pane's frame: a side and a space each way across, and an edge above and below.
@@ -86,7 +92,8 @@ function paneLines({
   const body = linesOf({ nodes: pane.body, width: inner, paint: look })
   const room = height === undefined ? body.length : Math.max(1, height - FRAME_ROWS)
   const from = Math.max(0, Math.min(scroll, body.length - room))
-  const hint = hintOf({ isFocused, canScroll: body.length > room })
+  const hasButtons = buttonsIn(pane.body).length > 0
+  const hint = hintOf({ isFocused, canScroll: body.length > room, hasButtons })
   const top = `╭─${edged({ text: ` ${pane.title} `, width, end: '…', isAfter: true })}╮`
   const bottom = `╰${edged({ text: hint, width, end: '', isAfter: false })}─╯`
   const tone = isFocused ? 'success' : undefined
@@ -105,6 +112,11 @@ const SCROLLS: readonly { key: KeyId; by: (room: number) => number }[] = [
   { key: 'pageDown', by: (room) => room },
 ]
 
+const PICKS: readonly { key: KeyId; by: number }[] = [
+  { key: 'tab', by: 1 },
+  { key: 'shift+tab', by: -1 },
+]
+
 export class PaneComponent implements Component {
   readonly #pane: PaneState
   readonly #isFocused: () => boolean
@@ -115,6 +127,7 @@ export class PaneComponent implements Component {
   readonly #redraw: () => void
   #scroll = 0
   #room = 0
+  #picked: number | undefined = undefined
 
   constructor({
     pane,
@@ -149,7 +162,10 @@ export class PaneComponent implements Component {
       width,
       height: this.#height(),
       scroll: this.#scroll,
-      paint: this.#paint,
+      paint: (hasKeys) => ({
+        ...this.#paint(hasKeys),
+        ...(hasKeys && { picked: this.#pickedButton() }),
+      }),
     })
     this.#scroll = drawn.scroll
     this.#room = drawn.room
@@ -161,20 +177,41 @@ export class PaneComponent implements Component {
       this.#close()
       return
     }
-    const scroll = SCROLLS.find(({ key }) => matchesKey(data, key))
-    if (scroll !== undefined) {
-      // Held past either end at the next render, which knows how tall the body is.
-      this.#scroll = Math.max(0, this.#scroll + scroll.by(this.#room))
-      this.#redraw()
+    const button = matchesKey(data, 'enter') ? this.#pickedButton() : this.#hotkeyed(data)
+    if (button !== undefined) {
+      this.#press(button)
       return
     }
-    for (const [hotkey, button] of hotkeysIn(this.#pane.body)) {
+    if (this.#scrolled(data) || this.#moved(data)) this.#redraw()
+  }
+
+  #pickedButton(): ButtonNode | undefined {
+    return this.#picked === undefined ? undefined : buttonsIn(this.#pane.body)[this.#picked]
+  }
+
+  #hotkeyed(data: string): ButtonNode | undefined {
+    return buttonsIn(this.#pane.body).find(
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- a mod's hotkey is a key as pi spells one
-      if (matchesKey(data, hotkey as KeyId)) {
-        this.#press(button)
-        return
-      }
-    }
+      ({ hotkey }) => hotkey !== undefined && matchesKey(data, hotkey as KeyId),
+    )
+  }
+
+  #scrolled(data: string): boolean {
+    const scroll = SCROLLS.find(({ key }) => matchesKey(data, key))
+    if (scroll === undefined) return false
+    // Held past either end at the next render, which knows how tall the body is.
+    this.#scroll = Math.max(0, this.#scroll + scroll.by(this.#room))
+    return true
+  }
+
+  // Tab moves the keyboard to the next of the pane's buttons, and shift+tab to the one before.
+  #moved(data: string): boolean {
+    const step = PICKS.find(({ key }) => matchesKey(data, key))?.by
+    const count = buttonsIn(this.#pane.body).length
+    if (step === undefined || count === 0) return false
+    const from = this.#picked ?? (step > 0 ? -1 : 0)
+    this.#picked = (from + step + count) % count
+    return true
   }
 
   // oxlint-disable-next-line eslint/class-methods-use-this -- pi's Component asks for it

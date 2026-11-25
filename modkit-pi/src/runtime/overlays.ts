@@ -131,7 +131,11 @@ export class Overlays {
     const pane = this.#panes.get(id)
     if (pane === undefined) return undefined
     this.#panes.delete(id)
-    for (const hidden of pane.hid) hidden.handle?.setHidden(false)
+    // The panes this one hid stay hidden while the pane that hid it shows, which hides them in its
+    // place.
+    const hider = [...this.#panes.values()].find((other) => other.hid.includes(pane))
+    if (hider === undefined) for (const hidden of pane.hid) hidden.handle?.setHidden(false)
+    else hider.hid.push(...pane.hid)
     return pane
   }
 

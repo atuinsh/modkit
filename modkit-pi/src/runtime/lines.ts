@@ -3,6 +3,7 @@ import { visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui'
 import {
   textOf,
   type Border,
+  type ButtonNode,
   type Hex,
   type TextNode,
   type Tone,
@@ -12,7 +13,9 @@ import {
 export interface Paint {
   text: (span: Span) => string
   border: (border: { tone: Tone | undefined; text: string }) => string
-  button: (button: { label: string; hotkey: string | undefined }) => string
+  button: (button: { label: string; hotkey: string | undefined; isPicked: boolean }) => string
+  // The button the keyboard is on, which enter presses.
+  picked?: ButtonNode | undefined
   markdown: (markdown: { text: string; width: number }) => readonly string[]
 }
 
@@ -187,7 +190,10 @@ function nodeLines({
       })
     case 'Button': {
       const label = textOf(node.children)
-      return wrapped({ text: paint.button({ label, hotkey: node.hotkey }), width })
+      return wrapped({
+        text: paint.button({ label, hotkey: node.hotkey, isPicked: node === paint.picked }),
+        width,
+      })
     }
     case 'Markdown':
       break
