@@ -1,0 +1,26 @@
+{
+  "name": "@atuin/modkit-target-node",
+  "private": true,
+  "description": "What the targets that run a mod in a Node or Bun process share: MCP calls, commands, the clipboard, state on disk, settings, bundling",
+  "type": "module",
+  "exports": {
+    "./codegen": "./src/codegen/index.ts",
+    "./runtime/*": "./src/runtime/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p src/runtime && tsc -p src/codegen"
+  },
+  "dependencies": {
+    "es-toolkit": "catalog:",
+    "rolldown": "^1.3.2",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@atuin/modkit-target": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@atuin/modkit-target": "workspace:^"
+  }
+}
