@@ -17,3 +17,8 @@ catalog:
   scule: ^1.3.0
   typescript: ^7.0.2
   valibot: ^1.5.0
+
+# pi's own dependencies, installed for pi's types, which need none of their install scripts.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false
