@@ -13,8 +13,9 @@ import {
   type Built,
   type Capabilities,
 } from '@atuin/modkit-target'
-import { bundle, missingToolNotes, settingOf } from '@atuin/modkit-target-node/codegen'
+import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
 import type { SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
+import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 
 import { hooksJsonOf } from './hooks.ts'
 import { mcpJsonOf, pluginJsonOf } from './manifest.ts'
@@ -53,6 +54,7 @@ const entrySource = ({
     plugin: string
     version: string
     settings: readonly SettingDecl[]
+    state: Tags
     hasStatus: boolean
   }
 }): string =>
@@ -73,7 +75,10 @@ const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
 class CodexTarget extends ModkitTarget<undefined> {
   override readonly name = 'codex'
   override readonly capabilities: Capabilities = {
-    status: NATIVE,
+    status: {
+      kind: 'lowered',
+      why: "Codex's status line draws a button as text, which can't be pressed",
+    },
     commands: {
       kind: 'dropped',
       why: "Codex answers a slash command with a prompt, never with a mod's code",
@@ -88,13 +93,14 @@ class CodexTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, options, env, tools, modparts } = compiled
+    const { mod, entry, state, options, env, tools, modparts } = compiled
     const plugin = pluginNameOf(mod.name)
     const hasStatus = modparts.status !== undefined
     const served = {
       plugin,
       version: mod.version,
       settings: options.map((option) => settingOf(option)),
+      state: tagsOf(state),
       hasStatus,
     }
     await bundle({ dir, entry: entrySource({ mod: entry, served }), file: join(out, 'server.mjs') })

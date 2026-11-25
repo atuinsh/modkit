@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
-import { fileStore } from '@atuin/modkit-target-node/runtime/store'
+import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { Mod, Options } from '@atuin/modkit-target/host'
 
 import { configuredServer } from './configured'
@@ -17,6 +17,7 @@ export interface Served {
   plugin: string
   version: string
   settings: readonly SettingDecl[]
+  state: Tags
   hasStatus: boolean
 }
 
@@ -91,7 +92,12 @@ export class Sessions {
         process.stderr.write(`${line}\n`)
       },
     })
-    const store = fileStore({ dir: join(this.#dir, 'sessions'), session: state.id, report })
+    const store = fileStore({
+      dir: join(this.#dir, 'sessions'),
+      session: state.id,
+      tags: this.#served.state,
+      report,
+    })
     return harnessFor({ session: state, servers: this.#servers, store, report })
   }
 }
