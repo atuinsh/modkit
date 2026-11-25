@@ -22,3 +22,9 @@ catalog:
 allowBuilds:
   '@google/genai': false
   protobufjs: false
+
+# opencode's own packages, installed for their types, bring in npm's tooling at versions with
+# advisories. Nothing here runs it, so each is raised to its fixed release.
+overrides:
+  glob: ^14.0.2
+  minimatch: ^11.0.1
