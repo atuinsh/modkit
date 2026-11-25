@@ -209,14 +209,58 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  packages/cli:
+  modkit:
     dependencies:
-      '@atuin/modkit-claude':
+      canonicalize:
+        specifier: ^5.1.0
+        version: 5.1.0
+      es-toolkit:
+        specifier: 'catalog:'
+        version: 1.53.2
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  modkit-claude-code:
+    dependencies:
+      '@atuin/modkit':
         specifier: workspace:*
-        version: link:../targets/claude
+        version: link:../modkit
       '@atuin/modkit-compiler':
         specifier: workspace:*
-        version: link:../compiler
+        version: link:../modkit-compiler
+      es-toolkit:
+        specifier: 'catalog:'
+        version: 1.53.2
+      knitwork:
+        specifier: ^1.3.0
+        version: 1.3.0
+      rolldown:
+        specifier: ^1.3.2
+        version: 1.3.2
+      scule:
+        specifier: 'catalog:'
+        version: 1.3.0
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  modkit-cli:
+    dependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../modkit-claude-code
+      '@atuin/modkit-compiler':
+        specifier: workspace:*
+        version: link:../modkit-compiler
       chokidar:
         specifier: ^6.0.0
         version: 6.0.0
@@ -234,7 +278,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  packages/compiler:
+  modkit-compiler:
     dependencies:
       '@sindresorhus/slugify':
         specifier: ^4.0.1
@@ -255,50 +299,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
-
-  packages/modkit:
-    dependencies:
-      canonicalize:
-        specifier: ^5.1.0
-        version: 5.1.0
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.53.2
-      valibot:
-        specifier: 'catalog:'
-        version: 1.5.0(typescript@7.0.2)
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  packages/targets/claude:
-    dependencies:
-      '@atuin/modkit':
-        specifier: workspace:*
-        version: link:../../modkit
-      '@atuin/modkit-compiler':
-        specifier: workspace:*
-        version: link:../../compiler
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.53.2
-      knitwork:
-        specifier: ^1.3.0
-        version: 1.3.0
-      rolldown:
-        specifier: ^1.3.2
-        version: 1.3.2
-      scule:
-        specifier: 'catalog:'
-        version: 1.3.0
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
 packages:
 

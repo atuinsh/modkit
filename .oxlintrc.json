@@ -193,7 +193,7 @@
     {
       // Claude Code calls a hook as `($, e, next)` and declares its API so; the adapter keeps to it.
       // `.catch(($, e, next) => next(e))` there registers a fallback hook, not a promise handler.
-      "files": ["packages/targets/claude/src/runtime/**"],
+      "files": ["modkit-claude-code/src/runtime/**"],
       "rules": {
         "eslint/max-params": "off",
         "eslint/id-length": [
@@ -212,10 +212,7 @@
     {
       // `Mounted` is a class's surface and Claude Code does not document how its objects bind
       // `this`; a method signature keeps `typescript/unbound-method` guarding a detached call.
-      "files": [
-        "packages/modkit/src/runtime/mount.ts",
-        "packages/targets/claude/src/runtime/claude-code.d.ts"
-      ],
+      "files": ["modkit/src/runtime/mount.ts", "modkit-claude-code/src/runtime/claude-code.d.ts"],
       "rules": { "typescript/method-signature-style": "off" }
     },
     {
@@ -224,13 +221,13 @@
       "rules": { "import/no-default-export": "off" }
     },
     {
-      "files": ["packages/cli/src/**"],
+      "files": ["modkit-cli/src/**"],
       "rules": { "eslint/no-console": "off", "unicorn/no-process-exit": "off" }
     },
     {
       // Bundled into Claude Code mods, whose environment has no Node: everything outside the
       // module is reached through `$`.
-      "files": ["packages/modkit/src/**", "packages/targets/claude/src/runtime/**"],
+      "files": ["modkit/src/**", "modkit-claude-code/src/runtime/**"],
       "rules": { "import/no-nodejs-modules": "error" }
     }
   ]

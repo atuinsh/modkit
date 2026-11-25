@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
-    "packages/targets/claude": {
+    "modkit-claude-code": {
       // Claude Code provides `claude-code` to a mod, and the codegen writes `modkit-claude:state`.
       "ignoreDependencies": ["claude-code", "modkit-claude"],
     },

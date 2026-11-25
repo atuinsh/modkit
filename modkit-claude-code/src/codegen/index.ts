@@ -1,5 +1,5 @@
 /**
- * Claude Code plugin builder (`@atuin/modkit-claude/codegen`).
+ * Claude Code plugin builder (`@atuin/modkit-claude-code/codegen`).
  *
  * Compiles a modkit mod and writes a Claude Code plugin directory suitable for
  * `claude --plugin-dir <out>` and `claude plugin validate`:

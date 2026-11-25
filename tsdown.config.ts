@@ -6,7 +6,7 @@ const dts = { generator: 'tsgo' } as const
 
 export default defineConfig([
   {
-    cwd: 'packages/modkit',
+    cwd: 'modkit',
     entry: {
       index: 'src/index.ts',
       'ui/hooks': 'src/ui/hooks/index.ts',
@@ -16,20 +16,20 @@ export default defineConfig([
     dts,
   },
   {
-    cwd: 'packages/compiler',
+    cwd: 'modkit-compiler',
     entry: {
       index: 'src/index.ts',
     },
     dts,
   },
   {
-    cwd: 'packages/targets/claude',
+    cwd: 'modkit-claude-code',
     entry: { 'codegen/index': 'src/codegen/index.ts' },
     tsconfig: 'src/codegen/tsconfig.json',
     dts,
   },
   {
-    cwd: 'packages/targets/claude',
+    cwd: 'modkit-claude-code',
     entry: { 'runtime/index': 'src/runtime/index.ts' },
     tsconfig: 'src/runtime/tsconfig.json',
     platform: 'neutral',
@@ -37,7 +37,7 @@ export default defineConfig([
     dts,
   },
   {
-    cwd: 'packages/cli',
+    cwd: 'modkit-cli',
     entry: { main: 'src/main.ts' },
   },
 ])

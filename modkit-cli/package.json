@@ -10,7 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@atuin/modkit-claude": "workspace:*",
+    "@atuin/modkit-claude-code": "workspace:*",
     "@atuin/modkit-compiler": "workspace:*",
     "chokidar": "^6.0.0",
     "citty": "^0.2.2",

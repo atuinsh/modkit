@@ -1,5 +1,5 @@
 {
-  "name": "@atuin/modkit-claude",
+  "name": "@atuin/modkit-claude-code",
   "private": true,
   "description": "Claude Code mods: plugin.json, hooks.json, register.js and the state contract",
   "type": "module",
