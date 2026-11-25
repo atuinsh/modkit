@@ -84,6 +84,32 @@ export const toolResultOf = ({
   failed: false,
 })
 
+// A call opencode ended with an error rather than a result, as the mod's handlers take it.
+export function failedShellOf({
+  call,
+  message,
+  cwd,
+}: {
+  call: OcCall
+  message: string
+  cwd: string
+}): ShellResult | undefined {
+  const shell = shellCallOf({ call, cwd })
+  return shell === undefined
+    ? undefined
+    : { ...shell, output: message, exitCode: null, failed: true }
+}
+
+export const failedToolOf = ({
+  call,
+  message,
+  cwd,
+}: {
+  call: OcCall
+  message: string
+  cwd: string
+}): ToolResult => ({ ...toolCallOf({ call, cwd }), output: message, failed: true })
+
 export function withContext<Result extends OcResult>({
   result,
   context,

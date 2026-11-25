@@ -37,14 +37,17 @@ export async function hookCalls({
     event.message = ask.ask
   })
   await ctx.tool.hook('execute.after', async (event) => {
-    if (event.status !== 'completed') return
     try {
       const live = await sessions.live(event.sessionID)
-      const followup = await live?.runtime.followupOn({ call: event, result: event.result, cwd })
+      // A call that ended in an error has no result for a followup's context to join.
+      const followup =
+        event.status === 'completed'
+          ? await live?.runtime.followupOn({ call: event, result: event.result, cwd })
+          : await live?.runtime.followupOnFailed({ call: event, message: event.error.message, cwd })
       if (followup?.note !== undefined) {
         sessions.notify({ id: event.sessionID, text: followup.note })
       }
-      if (followup?.context !== undefined) {
+      if (followup?.context !== undefined && event.status === 'completed') {
         // oxlint-disable-next-line eslint/no-param-reassign -- opencode reads a hook's answer off its event
         event.result = withContext({ result: event.result, context: followup.context })
       }

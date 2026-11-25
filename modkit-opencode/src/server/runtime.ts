@@ -10,6 +10,8 @@ import {
 } from '@atuin/modkit-target/host'
 
 import {
+  failedShellOf,
+  failedToolOf,
   shellCallOf,
   shellResultOf,
   toolCallOf,
@@ -84,6 +86,15 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
     // A shell call still running has no result for the mod yet.
     if (shellCallOf({ call, cwd }) !== undefined) return {}
     return this.afterTool(toolResultOf({ call, result, cwd }))
+  }
+
+  async followupOnFailed(failed: {
+    call: OcCall
+    message: string
+    cwd: string
+  }): Promise<Followup> {
+    const shell = failedShellOf(failed)
+    return shell === undefined ? this.afterTool(failedToolOf(failed)) : this.afterShell(shell)
   }
 
   protected override async adapter(session: OpencodeSession): Promise<HarnessAdapter> {

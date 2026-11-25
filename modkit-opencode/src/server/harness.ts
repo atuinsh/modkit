@@ -2,7 +2,7 @@ import type { Plugin } from '@opencode/plugin'
 
 import { copy } from '@atuin/modkit-target-node/runtime/clipboard'
 import { modelFor } from '@atuin/modkit-target-node/runtime/models'
-import { run } from '@atuin/modkit-target-node/runtime/run'
+import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import type {
   Completion,
@@ -89,7 +89,7 @@ export function harnessFor({
   return {
     session: { id },
     cwd: async () => cwd,
-    root: async () => cwd,
+    root: async () => projectRootOf(cwd),
     env: async (name) => process.env[name],
     run: async (argv, options) => run({ argv, options, cwd }),
     mcp: async (call) => servers.call(call),
