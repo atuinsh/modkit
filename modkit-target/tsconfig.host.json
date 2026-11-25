@@ -4,5 +4,5 @@
     // Bundled into each target's runtime, which runs inside a harness that may have no Node.
     "types": []
   },
-  "include": ["src/host.ts"]
+  "include": ["src/host"]
 }

@@ -2,7 +2,8 @@
  * The contract every harness target implements, and the mod's package the CLI builds for each.
  *
  * A target's package is `@atuin/modkit-<name>`. It exports a {@link ModkitTarget} from `./codegen`,
- * which runs at build time in Node, and builds its runtime on `@atuin/modkit-target/host` alone.
+ * which runs at build time in Node, and builds its runtime on `@atuin/modkit-target/host`'s
+ * `ModkitTargetRuntime` alone.
  *
  * @module
  */

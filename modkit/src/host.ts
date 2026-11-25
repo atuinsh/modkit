@@ -2,8 +2,9 @@
  * What a harness target runs a mod with: {@link mount}, the {@link HarnessAdapter} it implements,
  * and the {@link UiNode} trees it draws.
  *
- * `@atuin/modkit-target` is this entry's one importer, and targets reach it through
- * `@atuin/modkit-target/host`. A mod's compiler rejects a mod that imports it.
+ * `@atuin/modkit-target` is this entry's one importer: its `ModkitTargetRuntime` mounts a mod, and
+ * `@atuin/modkit-target/host` gives targets the rest. A mod's compiler rejects a mod that imports
+ * it.
  *
  * @module
  */

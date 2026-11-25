@@ -271,7 +271,7 @@
     {
       // Bundled into Claude Code mods, whose environment has no Node: everything outside the
       // module is reached through `$`.
-      "files": ["modkit/src/**", "modkit-target/src/host.ts", "modkit-claude-code/src/runtime/**"],
+      "files": ["modkit/src/**", "modkit-target/src/host/**", "modkit-claude-code/src/runtime/**"],
       "rules": { "import/no-nodejs-modules": "error" }
     }
   ]

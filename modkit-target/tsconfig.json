@@ -4,5 +4,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/host.ts"]
+  "exclude": ["src/host"]
 }

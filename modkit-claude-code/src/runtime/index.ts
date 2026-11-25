@@ -4,8 +4,9 @@
  * Lifecycle:
  * - The generated entry module makes one {@link ClaudeCodeRuntime} and registers its hooks.
  * - On `session.start`, preloads persisted state atoms into memory (so synchronous renders can
- *   read state without awaiting), mounts the mod, registers slash commands, starts a 1s resource
- *   tick, and bumps the view atom on every state-driven re-render so `ui.render` hooks redraw.
+ *   read state without awaiting), then starts the session `ModkitTargetRuntime` runs: Claude Code
+ *   registers its slash commands, ticks it, and bumps the view atom on every state-driven
+ *   re-render so `ui.render` hooks redraw.
  * - Decision hooks fail open via `.catch((_, e, next) => next(e))` so mod faults never block the
  *   agent.
  *
@@ -33,30 +34,24 @@ import { readEnv } from 'modkit-claude:env'
 import { bumpView, load, plugin, readView, save } from 'modkit-claude:state'
 
 import {
-  dismissed,
-  mount,
-  nextShown,
-  NOTHING_SHOWN,
+  ModkitTargetRuntime,
   type ButtonNode,
+  type CommandView,
+  type Followup,
   type Harness,
   type HarnessAdapter,
-  type Mod,
-  type Mounted,
-  type Options,
-  type Followup,
-  type Shown,
+  type PaneOpened,
+  type PaneOpening,
+  type Repeat,
   type ShellResult,
   type ToolResult,
   type ToolRow,
-  type UiNode,
   type Verdict,
 } from '@atuin/modkit-target/host'
 
 import { completionOf, mcpResultOf } from './answers'
 import { decide, exitCodeOf } from './decide'
 import { Drawing } from './draw'
-
-const TICK_MS = 1000
 
 const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
   isPlainObject(value) ? value : {}
@@ -182,20 +177,10 @@ export function engineOf($: EngineInterface): ClaudeEngine {
   }
 }
 
-const PANE_ID_LENGTH = 64
-
-const paneId = (command: string): string =>
-  command.replaceAll(/[^A-Za-z0-9_-]/gu, '-').slice(0, PANE_ID_LENGTH)
-
-type Root = Mod<Options>
-
 // A hook's input, the `next` that hands it on, and its result, as Claude Code declares each event.
 type Input<K extends keyof Events> = Events[K][0]
 type Next<K extends keyof Events> = (e: Input<K>) => Promise<Events[K][1]>
 type Result<K extends keyof Events> = Events[K][1]
-
-// Until session.start builds the adapter, a failure has nowhere to be reported.
-const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
 
 function decided(
   engine: ClaudeEngine,
@@ -231,27 +216,13 @@ function rowOf(props: RenderInput['props']): ToolRow | undefined {
 }
 
 /**
- * A mod mounted on Claude Code: the session its hooks share, and what each hook does with it.
+ * A mod's session on Claude Code: what each of Claude Code's hooks asks of the session, and how
+ * Claude Code does what the session needs.
  *
  * Each method takes the {@link ClaudeEngine} of the hook it serves, as {@link engineOf} binds it to
  * that hook's `$`.
  */
-export class ClaudeCodeRuntime {
-  readonly #mod: Root
-  readonly #options: Options
-  #mounted: Mounted | undefined = undefined
-  #report: HarnessAdapter['report'] = REPORT_NOTHING
-  #shown: Shown = NOTHING_SHOWN
-  // True while a command or a button press runs its synchronous part, up to its first `await`.
-  // Background pane syncs wait it out, so a pane it opens opens on the interaction's own `$`,
-  // with keyboard focus and the relaxed placement rules an interaction gets.
-  #isAnswering = false
-
-  constructor({ mod, options }: { mod: Root; options: Options }) {
-    this.#mod = mod
-    this.#options = options
-  }
-
+export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
   /** The `tool.check` hook for a tool the mod's `beforeTool` names. */
   async checkTool(
     engine: ClaudeEngine,
@@ -259,13 +230,12 @@ export class ClaudeCodeRuntime {
     next: Next<'tool.check'>,
   ): Promise<Result<'tool.check'>> {
     const verdict = await next(e)
-    const mounted = this.#mounted
-    if (mounted === undefined) return verdict
+    if (!this.hasStarted) return verdict
     const input = recordOf(e.input)
     const call = { id: e.tool_use_id ?? '', tool: e.tool, input, cwd: await engine.cwd() }
     return decided(engine, {
       verdict,
-      mine: await mounted.beforeTool(call),
+      mine: await this.beforeTool(call),
       canAsk: e.approver !== undefined,
     })
   }
@@ -277,8 +247,7 @@ export class ClaudeCodeRuntime {
     next: Next<'tool.call'>,
   ): Promise<Result<'tool.call'>> {
     const ran = await next(e)
-    const mounted = this.#mounted
-    if (mounted === undefined || ran.deny !== undefined) return ran
+    if (!this.hasStarted || ran.deny !== undefined) return ran
     const result: ToolResult = {
       id: e.tool_use_id ?? '',
       tool: e.tool,
@@ -287,7 +256,7 @@ export class ClaudeCodeRuntime {
       output: ran.text ?? '',
       failed: ran.isError === true,
     }
-    return followedBy(engine, ran, await mounted.afterTool(result))
+    return followedBy(engine, ran, await this.afterTool(result))
   }
 
   /** The `ui.render` hook for the rows of a tool the mod's `toolCards` names. */
@@ -298,85 +267,11 @@ export class ClaudeCodeRuntime {
   ): Promise<Result<'ui.render'>> {
     await engine.readView()
     const row = rowOf(e.props)
-    const cards = row === undefined ? [] : (this.#mounted?.cards(row) ?? [])
+    const cards = row === undefined ? [] : this.cards(row)
     if (cards.length === 0) return next(e)
     const drawn = await next(e)
     const under = this.#drawingFor(engine, e).nodes(cards, 'card')
     return h(engine.resolve(e).Box, { flexDirection: 'column' }, drawn, ...under)
-  }
-
-  async #start(engine: ClaudeEngine): Promise<void> {
-    const adapter = await engine.harness()
-    this.#report = (failure) => {
-      adapter.report(failure)
-    }
-    this.#shown = NOTHING_SHOWN
-    const mounted = mount({ mod: this.#mod, options: this.#options, adapter })
-    this.#mounted = mounted
-    mounted.subscribe(() => {
-      void engine.bumpView()
-      if (!this.#isAnswering) this.#syncPanes(engine, false)
-    })
-    this.#syncPanes(engine, false)
-    for (const command of mounted.view().commands) {
-      // oxlint-disable-next-line no-await-in-loop -- the engine takes registrations one at a time
-      await engine.register({ name: command.name, description: command.description })
-    }
-    engine.repeat(TICK_MS, () => {
-      void mounted.tick()
-    })
-    await mounted.event('session.start')
-    await engine.bumpView()
-  }
-
-  #syncPanes(engine: ClaudeEngine, isPress: boolean): void {
-    const mounted = this.#mounted
-    if (mounted === undefined) return
-    const { shown, changes } = nextShown({ shown: this.#shown, rendered: mounted.view().panes })
-    // Kept before any call goes out, so a render while they're under way sees them made.
-    this.#shown = shown
-    const fail = (error: unknown): void => {
-      this.#report({ phase: 'render', error })
-    }
-    for (const change of changes) {
-      if (change.kind === 'close') {
-        engine.close({ id: change.id }).catch(fail)
-        continue
-      }
-      const { id, title } = change
-      const focus = isPress ? { focus: true as const } : {}
-      engine.open({ id, title, ...focus }).catch(fail)
-    }
-  }
-
-  async #answering<T>(engine: ClaudeEngine, start: () => Promise<T>): Promise<T> {
-    this.#isAnswering = true
-    // oxlint-disable-next-line typescript/promise-function-async -- answering is only start's synchronous part, up to its first await
-    const done = (() => {
-      try {
-        return start()
-      } finally {
-        this.#isAnswering = false
-      }
-    })()
-    this.#syncPanes(engine, true)
-    return done
-  }
-
-  // A Drawing for the surface `e` renders on, whose buttons press on that hook's `$`.
-  #drawingFor(engine: ClaudeEngine, e: RenderInput): Drawing {
-    return new Drawing({
-      elements: engine.resolve(e),
-      press: (button: ButtonNode): void => {
-        void this.#answering(engine, async () => button.press({ surface: e.surface }))
-      },
-    })
-  }
-
-  #paneBody(id: string): readonly UiNode[] | undefined {
-    const view = this.#mounted?.view()
-    const command = view?.commands.find((one) => paneId(one.name) === id)
-    return command?.pane?.body ?? view?.panes.find((pane) => pane.id === id)?.body
   }
 
   /** The `session.start` hook: mount the mod, register its commands and start its tick. */
@@ -386,7 +281,7 @@ export class ClaudeCodeRuntime {
     next: Next<'session.start'>,
   ): Promise<Result<'session.start'>> {
     const started = await next(e)
-    await this.#start(engine)
+    await this.start(engine)
     return started
   }
 
@@ -397,7 +292,7 @@ export class ClaudeCodeRuntime {
     next: Next<'turn.complete'>,
   ): Promise<Result<'turn.complete'>> {
     const completed = await next(e)
-    void this.#mounted?.event('turn.end')
+    this.turnEnded()
     return completed
   }
 
@@ -408,9 +303,7 @@ export class ClaudeCodeRuntime {
     next: Next<'ui.close'>,
   ): Promise<Result<'ui.close'>> {
     const closed = await next(e)
-    if (e.origin.kind !== 'person' || !this.#shown.open.has(e.id)) return closed
-    this.#shown = dismissed({ shown: this.#shown, id: e.id })
-    await this.#mounted?.closed(e.id)
+    if (e.origin.kind === 'person') await this.dismiss(e.id)
     return closed
   }
 
@@ -421,13 +314,12 @@ export class ClaudeCodeRuntime {
     next: Next<'tool.check'>,
   ): Promise<Result<'tool.check'>> {
     const verdict = await next(e)
-    const mounted = this.#mounted
     const { command } = recordOf(e.input)
-    if (mounted === undefined || typeof command !== 'string') return verdict
+    if (!this.hasStarted || typeof command !== 'string') return verdict
     const call = { id: e.tool_use_id ?? '', command, cwd: await engine.cwd() }
     return decided(engine, {
       verdict,
-      mine: await mounted.beforeShell(call),
+      mine: await this.beforeShell(call),
       canAsk: e.approver !== undefined,
     })
   }
@@ -439,10 +331,7 @@ export class ClaudeCodeRuntime {
     next: Next<'tool.call'>,
   ): Promise<Result<'tool.call'>> {
     const ran = await next(e)
-    const mounted = this.#mounted
-    if (mounted === undefined || ran.deny !== undefined || typeof e.command !== 'string') {
-      return ran
-    }
+    if (!this.hasStarted || ran.deny !== undefined || typeof e.command !== 'string') return ran
     const result: ShellResult = {
       id: e.tool_use_id ?? '',
       command: e.command,
@@ -451,7 +340,7 @@ export class ClaudeCodeRuntime {
       exitCode: exitCodeOf(ran),
       failed: ran.isError === true,
     }
-    return followedBy(engine, ran, await mounted.afterShell(result))
+    return followedBy(engine, ran, await this.afterShell(result))
   }
 
   /** The `ui.render` hook for the session's mode line, which the mod's statuses follow. */
@@ -461,7 +350,7 @@ export class ClaudeCodeRuntime {
     next: Next<'ui.render'>,
   ): Promise<Result<'ui.render'>> {
     await engine.readView()
-    const statuses = this.#mounted?.view().statuses ?? []
+    const statuses = this.statuses()
     if (statuses.length === 0) return next(e)
     const elements = engine.resolve(e)
     const modes = await next(e)
@@ -482,7 +371,7 @@ export class ClaudeCodeRuntime {
     next: Next<'ui.render'>,
   ): Promise<Result<'ui.render'>> {
     await engine.readView()
-    const body = this.#paneBody(e.requestId)
+    const body = this.paneBody(e.requestId)
     if (body === undefined) return next(e)
     const elements = engine.resolve(e)
     return h(elements.Box, { flexDirection: 'column' }, ...this.#drawingFor(engine, e).nodes(body))
@@ -494,22 +383,53 @@ export class ClaudeCodeRuntime {
     e: Input<'command.run'>,
     next: Next<'command.run'>,
   ): Promise<Result<'command.run'>> {
-    const mounted = this.#mounted
-    const command = mounted?.view().commands.find((one) => one.name === e.command)
-    if (mounted === undefined || command === undefined) return next(e)
-    if (command.pane === undefined) {
-      const said = await this.#answering(engine, async () => mounted.ran(command.name))
-      return { text: said ?? '' }
-    }
-    const id = paneId(command.name)
-    const { title } = command.pane
+    const reply = await this.answerCommand(engine, e.command)
+    return reply === undefined ? next(e) : { text: reply }
+  }
+
+  protected override async adapter(engine: ClaudeEngine): Promise<HarnessAdapter> {
+    return engine.harness()
+  }
+
+  protected override async redraw(engine: ClaudeEngine): Promise<unknown> {
+    return engine.bumpView()
+  }
+
+  protected override async openPane(
+    engine: ClaudeEngine,
+    { id, title, focus }: PaneOpening,
+  ): Promise<PaneOpened> {
+    return engine.open({ id, title, ...(focus && { focus }) })
+  }
+
+  protected override async closePane(engine: ClaudeEngine, id: string): Promise<unknown> {
+    return engine.close({ id })
+  }
+
+  protected override async isPaneShown(engine: ClaudeEngine, id: string): Promise<boolean> {
     const panes = await engine.panes()
-    if (panes.some((pane) => pane.id === id && pane.isShown)) {
-      await engine.close({ id })
-      return { text: `${title} closed.` }
-    }
-    const opened = await engine.open({ id, title, focus: true })
-    return { text: opened.isPlaced ? `${title} opened.` : `${title} waits: ${opened.reason}` }
+    return panes.some((pane) => pane.id === id && pane.isShown)
+  }
+
+  protected override async registerCommand(
+    engine: ClaudeEngine,
+    { name, description }: CommandView,
+  ): Promise<unknown> {
+    return engine.register({ name, description })
+  }
+
+  protected override repeat(engine: ClaudeEngine, { everyMs, tick }: Repeat): void {
+    engine.repeat(everyMs, tick)
+  }
+
+  // A Drawing for the surface `e` renders on, whose buttons press on that hook's `$`.
+  #drawingFor(engine: ClaudeEngine, e: RenderInput): Drawing {
+    return new Drawing({
+      elements: engine.resolve(e),
+      press: (button: ButtonNode): void => {
+        this.press(engine, { button, surface: e.surface })
+      },
+    })
   }
 }
 
