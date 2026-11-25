@@ -48,8 +48,9 @@ export class Queries {
     const registered = new Map<string, QueryRegistration>()
     for (const one of registrations) {
       const earlier = registered.get(one.query.id)
-      if (earlier !== undefined && earlier.key !== one.key)
+      if (earlier !== undefined && earlier.key !== one.key) {
         throw new Error(`${one.query.id} is asked for with two inputs in one render; it holds one`)
+      }
       registered.set(one.query.id, one)
     }
     this.#registered = registered
@@ -59,7 +60,7 @@ export class Queries {
       return
     }
     // After the render that asked, which a fetch must not run inside.
-    for (const id of this.#due()) void Promise.resolve().then(() => this.refresh(id))
+    for (const id of this.#due()) void Promise.resolve().then(async () => this.refresh(id))
   }
 
   async refreshDue(event?: HarnessEvent): Promise<void> {
@@ -68,10 +69,12 @@ export class Queries {
         ? [one.query.id]
         : [],
     )
-    await Promise.all([...new Set([...this.#due(), ...listening])].map((id) => this.refresh(id)))
+    await Promise.all(
+      [...new Set([...this.#due(), ...listening])].map(async (id) => this.refresh(id)),
+    )
   }
 
-  refresh(id: string): Promise<void> {
+  async refresh(id: string): Promise<void> {
     const under = this.#fetching.get(id)
     if (under !== undefined) {
       under.again = true
@@ -86,7 +89,7 @@ export class Queries {
   async settle(): Promise<void> {
     while (this.#fetching.size > 0) {
       // oxlint-disable-next-line no-await-in-loop -- each round waits for fetches the last one started
-      await Promise.all([...this.#fetching.values()].map((one) => one.done))
+      await Promise.all([...this.#fetching.values()].map(async (one) => one.done))
     }
   }
 

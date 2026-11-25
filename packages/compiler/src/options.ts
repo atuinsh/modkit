@@ -52,8 +52,9 @@ function literalOf({ project, node }: { project: Project; node: Node }): Literal
   }
   const type = project.checker.getTypeAtLocation(node)
   if (type === undefined) return undefined
-  if (isStringLiteralType(type) || isNumberLiteralType(type) || isBooleanLiteralType(type))
+  if (isStringLiteralType(type) || isNumberLiteralType(type) || isBooleanLiteralType(type)) {
     return type.value
+  }
   if (!isTypeReference(type) || !isTupleType(type.getTarget())) return undefined
   const items = project.checker
     .getTypeArguments(type)
@@ -139,8 +140,9 @@ function optionOf(context: PropContext): OptionDecl | Diagnostic {
   const { name } = field
   const at = whereOf(context)
   const kind = kindOf(field.shape)
-  if (kind === undefined)
+  if (kind === undefined) {
     return diagnosticAt({ code: 'option-type', message: cantBe({ name }), node: at })
+  }
   const description =
     property === undefined ? '' : project.checker.getDocumentationCommentOfSymbol(property).trim()
   if (description === '') {

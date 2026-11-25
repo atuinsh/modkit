@@ -165,35 +165,35 @@ export type Surface = 'terminal' | 'desktop' | 'vscode' | 'mobile'
 export interface Harness {
   readonly session: { readonly id: string }
   /** Return the session's current working directory (updates if the session changes directory). */
-  cwd(): Promise<string>
+  cwd: () => Promise<string>
   /** Return the session's project root (updates across directory or worktree switches). */
-  root(): Promise<string>
+  root: () => Promise<string>
   /**
    * Read an environment variable, returning `undefined` if unset.
    *
    * `name` must be a string literal so the compiler can statically collect all referenced
    * environment variables at build time.
    */
-  env(name: string): Promise<string | undefined>
+  env: (name: string) => Promise<string | undefined>
   /** Execute `argv` directly without a shell. */
-  run(argv: readonly string[], options?: RunOptions): Promise<RunResult>
+  run: (argv: readonly string[], options?: RunOptions) => Promise<RunResult>
   /** Invoke a tool on an MCP server connected to the harness without prompting the model. */
-  mcp(call: McpCall): Promise<McpResult>
+  mcp: (call: McpCall) => Promise<McpResult>
   /** Request a standalone completion outside the active conversation transcript. */
-  complete(request: CompletionRequest): Promise<Completion>
+  complete: (request: CompletionRequest) => Promise<Completion>
   /**
    * Copy `text` to the user's clipboard.
    *
    * Targets `options.surface` when provided (such as from a button press), or the first active
    * surface otherwise.
    */
-  copy(text: string, options?: { surface?: Surface }): Promise<Copied>
+  copy: (text: string, options?: { surface?: Surface }) => Promise<Copied>
   /** Display a short notification to the user. */
-  notify(text: string): Delivery
+  notify: (text: string) => Delivery
   /** Append `text` to the conversation context read by the model without starting a new turn. */
-  inject(text: string): Promise<Delivery>
+  inject: (text: string) => Promise<Delivery>
   /** Return the current time in milliseconds since the Unix epoch. */
-  now(): number
+  now: () => number
 }
 
 export interface Stored {
@@ -201,8 +201,8 @@ export interface Stored {
 }
 
 export interface Store {
-  get(key: string): Stored | undefined
-  set(key: string, stored: Stored): void
+  get: (key: string) => Stored | undefined
+  set: (key: string, stored: Stored) => void
 }
 
 /** Execution phase reported in a {@link Failure} when a mod callback or render throws. */
@@ -234,5 +234,5 @@ export interface HarnessAdapter extends Harness {
    *
    * By the time `report` is called, the runtime has already failed open so the harness can continue.
    */
-  report(failure: Failure): void
+  report: (failure: Failure) => void
 }

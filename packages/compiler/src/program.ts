@@ -11,11 +11,20 @@
 import { dirname } from 'node:path'
 
 import type { Node, SourceFile } from 'typescript/unstable/ast'
-
-export * as syntax from 'typescript/unstable/ast'
 import {
   API,
   DiagnosticCategory,
+  SymbolFlags,
+  type Checker,
+  type Diagnostic,
+  type Program,
+  type Symbol as TsSymbol,
+  type Type,
+} from 'typescript/unstable/sync'
+
+export * as syntax from 'typescript/unstable/ast'
+export type { Node, SourceFile } from 'typescript/unstable/ast'
+export {
   ElementFlags,
   SignatureKind,
   SymbolFlags,
@@ -34,21 +43,6 @@ import {
   type Type,
 } from 'typescript/unstable/sync'
 
-export {
-  ElementFlags,
-  SignatureKind,
-  SymbolFlags,
-  TypeFlags,
-  isBooleanLiteralType,
-  isIntersectionType,
-  isNumberLiteralType,
-  isStringLiteralType,
-  isTupleType,
-  isTypeReference,
-  isUnionType,
-}
-export type { Checker, Diagnostic, Node, Program, SourceFile, TsSymbol, Type }
-
 /** An open TypeScript project backed by a `tsgo` process. Call {@link close} when finished. */
 export interface Project {
   /** Absolute path to the project's `tsconfig.json`. */
@@ -60,9 +54,9 @@ export interface Project {
   /** The mod's own source files, excluding `node_modules` and TypeScript default libraries. */
   readonly files: readonly SourceFile[]
   /** Return an updated {@link Project} snapshot reflecting on-disk edits to `files`. */
-  refresh(files: readonly string[]): Project
+  refresh: (files: readonly string[]) => Project
   /** Shut down the underlying `tsgo` process. */
-  close(): void
+  close: () => void
 }
 
 function projectOf({

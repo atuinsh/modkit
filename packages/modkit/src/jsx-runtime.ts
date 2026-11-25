@@ -4,9 +4,9 @@
  * @module
  */
 
-import type { ModElement, ModNode, Renderable, Tag } from './runtime/element'
+import type { ModElement, Renderable, Tag } from './runtime/element'
 
-export { Fragment } from './runtime/element'
+export { Fragment, type ModNode } from './runtime/element'
 
 /** Create a {@link ModElement} for a JSX tag expression. */
 // oxlint-disable-next-line eslint/max-params -- the signature the automatic JSX runtime calls
@@ -35,5 +35,3 @@ export declare namespace JSX {
     key?: string | number
   }
 }
-
-export type { ModNode }

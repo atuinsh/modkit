@@ -28,8 +28,9 @@ function returnedIn(node: Node): Node[] {
     syntax.isFunctionDeclaration(node) ||
     syntax.isFunctionExpression(node) ||
     syntax.isArrowFunction(node)
-  )
+  ) {
     return []
+  }
   const found: Node[] = []
   node.forEachChild((child) => {
     found.push(...returnedIn(child))
@@ -66,8 +67,12 @@ export function modCallIn({
   const called = resolvedSymbol({ checker: project.checker, node: call.expression })
   if (mod === undefined || called?.id !== mod.id) return none(exported)
   const [setup] = call.arguments
-  if (setup === undefined || !(syntax.isArrowFunction(setup) || syntax.isFunctionExpression(setup)))
+  if (
+    setup === undefined ||
+    !(syntax.isArrowFunction(setup) || syntax.isFunctionExpression(setup))
+  ) {
     return none(call)
+  }
   const parts = partsOf(setup)
   return Array.isArray(parts) ? { call, setup, parts } : parts
 }

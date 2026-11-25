@@ -91,7 +91,7 @@ class MountedMod implements Mounted {
     return { statuses, commands, panes }
   }
 
-  beforeShell(call: ShellCall): Promise<Verdict> {
+  async beforeShell(call: ShellCall): Promise<Verdict> {
     const handler = this.#rendered.beforeShell
     return this.#answered({ phase: 'beforeShell', answer: verdictOf, handler, input: call })
   }
@@ -108,25 +108,25 @@ class MountedMod implements Mounted {
     return followup
   }
 
-  beforeTool(call: ToolCall): Promise<Verdict> {
+  async beforeTool(call: ToolCall): Promise<Verdict> {
     const handler = this.#rendered.beforeTool.get(call.tool)
     return this.#answered({ phase: 'beforeTool', answer: verdictOf, handler, input: call })
   }
 
-  afterTool(result: ToolResult): Promise<Followup> {
+  async afterTool(result: ToolResult): Promise<Followup> {
     const handler = this.#rendered.afterTool.get(result.tool)
     return this.#answered({ phase: 'afterTool', answer: followupOf, handler, input: result })
   }
 
-  event(event: Exclude<HarnessEvent, 'shell.after'>): Promise<void> {
+  async event(event: Exclude<HarnessEvent, 'shell.after'>): Promise<void> {
     return this.#queries.refreshDue(event)
   }
 
-  tick(): Promise<void> {
+  async tick(): Promise<void> {
     return this.#queries.refreshDue()
   }
 
-  settle(): Promise<void> {
+  async settle(): Promise<void> {
     return this.#queries.settle()
   }
 
@@ -208,7 +208,7 @@ class MountedMod implements Mounted {
       query: (registration) => {
         registrations.push(registration)
       },
-      refresh: (id) => this.#queries.refresh(id),
+      refresh: async (id) => this.#queries.refresh(id),
     }
   }
 

@@ -198,6 +198,15 @@
       "rules": { "import/unambiguous": "off" }
     },
     {
+      // `Mounted` is a class's surface and Claude Code does not document how its objects bind
+      // `this`; a method signature keeps `typescript/unbound-method` guarding a detached call.
+      "files": [
+        "packages/modkit/src/runtime/mount.ts",
+        "packages/targets/claude/src/runtime/claude-code.d.ts"
+      ],
+      "rules": { "typescript/method-signature-style": "off" }
+    },
+    {
       // tsdown loads its config's default export.
       "files": ["tsdown.config.ts"],
       "rules": { "import/no-default-export": "off" }

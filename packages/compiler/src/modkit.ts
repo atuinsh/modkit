@@ -20,9 +20,9 @@ export function modkitExports(project: Project): TsSymbol[] {
         : [],
     ),
   )
-  const exported = specifiers.flatMap((specifier) =>
-    Array.from(checker.getSymbolAtLocation(specifier)?.getExports().values() ?? []),
-  )
+  const exported = specifiers.flatMap((specifier) => [
+    ...(checker.getSymbolAtLocation(specifier)?.getExports().values() ?? []),
+  ])
   const resolved = exported.map((symbol) =>
     (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol),
   )

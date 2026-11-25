@@ -48,7 +48,6 @@ const unrendered = (name: string) => (): ModNode => {
   throw new Error(`<${name}> is read by modkit's render, never called`)
 }
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- P is the tag's props, which JSX checks
 export function primitive<P, Props, K extends Kind>(definition: Primitive<Props, K>): Component<P> {
   const tag = unrendered(definition.name)
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- render hands a definition the props its schema parsed, and textOf the node of its kind
@@ -58,7 +57,6 @@ export function primitive<P, Props, K extends Kind>(definition: Primitive<Props,
   return tag
 }
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- P is the tag's props, which JSX checks
 export function marker<P>(name: string): Component<P> {
   const tag = unrendered(name)
   MARKERS.set(tag, name)

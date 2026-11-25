@@ -63,8 +63,9 @@ async function bundle({
     // A mod's JSX is modkit's whatever its tsconfig says, so the override Rolldown warns of is meant.
     // oxlint-disable-next-line eslint/max-params -- Rolldown's signature
     onLog: (level, log, handler) => {
-      if (log.code === 'CONFIGURATION_FIELD_CONFLICT' && log.message.includes('jsxImportSource'))
+      if (log.code === 'CONFIGURATION_FIELD_CONFLICT' && log.message.includes('jsxImportSource')) {
         return
+      }
       handler(level, log)
     },
     write: true,
