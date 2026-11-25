@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm's version, and Node's, come from package.json's devEngines.
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: astral-sh/setup-uv@v10
+      - name: Dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm fmt:check
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Oxlint
+        run: pnpm lint
+      - name: Knip
+        run: pnpm knip
+      - name: Codespell
+        run: pnpm spell
+
+  # Known vulnerabilities in the locked dependencies. Every run scans, not only one that changes
+  # the lockfile, so an advisory published later still turns a build red.
+  advisories:
+    name: Advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OSV_SCANNER_VERSION: '2.7.1'
+      OSV_SCANNER_SHA256: 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install OSV-Scanner
+        run: |
+          curl -fsSL --retry 3 --retry-all-errors -o /tmp/osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum -c -
+          chmod +x /tmp/osv-scanner
+      - name: OSV-Scanner
+        run: /tmp/osv-scanner scan source --lockfile pnpm-lock.yaml
