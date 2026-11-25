@@ -14,44 +14,29 @@ export type {
   Delivery,
   Deny,
   Effort,
-  Failure,
   Followup,
   Harness,
-  HarnessAdapter,
   McpCall,
   McpResult,
-  Phase,
   RunOptions,
   RunResult,
   ShellCall,
   ShellResult,
-  Store,
   ToolCall,
   ToolResult,
   ToolRow,
   Surface,
-  Stored,
   Verdict,
 } from './harness/index'
-export type { Mounted, View } from './runtime/mount'
-export { mount } from './runtime/mount'
-export type { PaneChange, Shown } from './runtime/panes'
-export { dismissed, nextShown, NOTHING_SHOWN } from './runtime/panes'
-export type { CommandView, PaneView } from './runtime/render'
 export type { Json } from './runtime/schema'
 export type {
   Border,
-  ButtonNode,
   ButtonProps,
   Hex,
-  MarkdownNode,
   MarkdownProps,
   Press,
-  StackNode,
   StackProps,
-  TextNode,
   TextProps,
   Tone,
-  UiNode,
 } from './ui/index'
-export { Button, Column, Markdown, Row, Text, textOf } from './ui/index'
+export { Button, Column, Markdown, Row, Text } from './ui/index'

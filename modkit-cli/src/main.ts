@@ -3,13 +3,13 @@
  * Entry point for the `modkit` CLI.
  *
  * ```text
- * modkit build [dir] [--target claude] [--out <dir>]  Compile and bundle the mod at `dir`
- * modkit dev   [dir] [--target claude] [--out <dir>]  Build, then rebuild on file changes
+ * modkit build [dir] [--out <dir>]  Compile the mod at `dir` and build it for each target it lists
+ * modkit dev   [dir] [--out <dir>]  Build, then rebuild on file changes
  * ```
  *
- * `dir` defaults to the current working directory and `--out` defaults to `<dir>/dist`. Each
- * target emits its plugin into `<out>/<target>` (load Claude Code's with
- * `claude --plugin-dir <out>/claude`).
+ * `dir` defaults to the current working directory and `--out` defaults to `<dir>/dist`. A mod lists
+ * its targets in its package.json, `"modkit": { "targets": ["claude-code"] }`, and installs each
+ * one's package, `@atuin/modkit-claude-code`. Each target writes into `<out>/<target>`.
  *
  * @module
  */
@@ -18,34 +18,19 @@ import { join, relative, resolve } from 'node:path'
 
 import { watch } from 'chokidar'
 import { defineCommand, runMain } from 'citty'
+import { uniqBy } from 'es-toolkit/array'
 import { debounce } from 'es-toolkit/function'
 
-import { buildClaude } from '@atuin/modkit-claude-code/codegen'
 import { formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
+import {
+  gapText,
+  ModPackage,
+  type CompiledMod,
+  type Gap,
+  type ListedTarget,
+} from '@atuin/modkit-target'
 
 const QUIET_MS = 150
-
-type Outcome =
-  | {
-      isOk: true
-      plugin: string
-      leftOut: readonly { modpart: string; count: number; why: string }[]
-      notes: readonly string[]
-    }
-  | { isOk: false; diagnostics: readonly Diagnostic[] }
-
-const TARGETS = {
-  claude: async (paths: { dir: string; out: string }): Promise<Outcome> => {
-    const built = await buildClaude(paths)
-    return built.isOk ? { isOk: true, plugin: built.plugin, leftOut: [], notes: [] } : built
-  },
-} as const
-
-type Target = keyof typeof TARGETS
-
-const isTarget = (name: string): name is Target => Object.hasOwn(TARGETS, name)
-
-const HARNESSES: Target[] = Object.keys(TARGETS).filter((name) => isTarget(name))
 
 function shown(path: string): string {
   const near = relative(process.cwd(), path)
@@ -55,42 +40,59 @@ function shown(path: string): string {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
-/** A build of the mod in `dir` into `out`, for each of `targets`. */
-class Build {
-  readonly #dir: string
-  readonly #out: string
-  readonly #targets: readonly Target[]
+function failed(diagnostics: readonly Diagnostic[]): false {
+  const lines = diagnostics.map((one) => formatDiagnostic({ ...one, file: shown(one.file) }))
+  console.error(lines.join('\n'))
+  return false
+}
 
-  constructor({ dir, out, targets }: { dir: string; out: string; targets: readonly Target[] }) {
-    this.#dir = dir
+const gapNote = (gap: Gap): string => `  ${gapText(gap)} (accepted in package.json)`
+
+/** A compiled mod and the gaps its package.json accepts on one target, ready to build for it. */
+interface Checked {
+  compiled: CompiledMod
+  gaps: readonly Gap[]
+}
+
+/** A build of the mod in `dir` into `out`, for each target the mod's package.json lists. */
+class Build {
+  readonly #package: ModPackage
+  readonly #out: string
+
+  constructor({ modPackage, out }: { modPackage: ModPackage; out: string }) {
+    this.#package = modPackage
     this.#out = out
-    this.#targets = targets
   }
 
   /** The build the `build` and `dev` commands' arguments ask for. */
-  static of({
-    dir: given,
-    out,
-    target,
-  }: {
-    dir: string | undefined
-    out: string | undefined
-    target: Target | undefined
-  }): Build {
+  static of({ dir: given, out }: { dir: string | undefined; out: string | undefined }): Build {
     const dir = resolve(given ?? '.')
-    return new Build({
-      dir,
-      out: resolve(out ?? resolve(dir, 'dist')),
-      targets: target === undefined ? HARNESSES : [target],
-    })
+    return new Build({ modPackage: new ModPackage(dir), out: resolve(out ?? resolve(dir, 'dist')) })
   }
 
-  /** Build for each target in turn, reporting each; true when every one built. */
+  /** Compile once, then build for each target in turn, reporting each; true when every one built. */
   async once(): Promise<boolean> {
+    const targets = await this.#package.targets().catch((error: unknown) => messageOf(error))
+    if (typeof targets === 'string') {
+      console.error(targets)
+      return false
+    }
+    const compiled = this.#package.compile()
+    if (!targets.isOk || !compiled.isOk) {
+      // Both read package.json, so an unreadable one would be reported twice.
+      const all = [
+        ...(compiled.isOk ? [] : compiled.diagnostics),
+        ...(targets.isOk ? [] : targets.diagnostics),
+      ]
+      return failed(uniqBy(all, (one) => formatDiagnostic(one)))
+    }
+    const checks = targets.value.map((target) => ({ target, checked: target.check(compiled) }))
+    const diagnostics = checks.flatMap(({ checked }) => checked.diagnostics)
+    if (diagnostics.length > 0) return failed(diagnostics)
     const builds: boolean[] = []
-    for (const target of this.#targets) {
+    for (const { target, checked } of checks) {
       // oxlint-disable-next-line no-await-in-loop -- one at a time, so their reports don't interleave
-      builds.push(await this.#for(target))
+      builds.push(await this.#for(target, { compiled, gaps: checked.gaps }))
     }
     return builds.every(Boolean)
   }
@@ -98,15 +100,12 @@ class Build {
   /** Build, then build again after each quiet spell of changes under the mod's directory. */
   async watch(): Promise<void> {
     await this.once()
-    const loads = this.#targets.includes('claude')
-      ? `; load it with claude --plugin-dir ${join(this.#out, 'claude')}`
-      : ''
-    console.log(`watching ${shown(this.#dir)}${loads}`)
+    console.log(`watching ${shown(this.#package.dir)}`)
     let last: Promise<unknown> = Promise.resolve()
     const rebuild = debounce(() => {
       last = last.then(async () => this.once())
     }, QUIET_MS)
-    const watcher = watch(this.#dir, {
+    const watcher = watch(this.#package.dir, {
       ignoreInitial: true,
       // The build writes inside `dir` by default; its own output must not start the next build.
       ignored: [{ path: this.#out, recursive: true }, /(?:^|\/)node_modules(?:\/|$)/u],
@@ -117,28 +116,20 @@ class Build {
     })
   }
 
-  async #for(target: Target): Promise<boolean> {
-    const out = join(this.#out, target)
-    const built = await TARGETS[target]({ dir: this.#dir, out }).catch((error: unknown) =>
-      messageOf(error),
-    )
+  async #for(target: ListedTarget, { compiled, gaps }: Checked): Promise<boolean> {
+    const out = join(this.#out, target.name)
+    const built = await target.build(compiled, out).catch((error: unknown) => messageOf(error))
     if (typeof built === 'string') {
       console.error(built)
       return false
     }
-    if (!built.isOk) {
-      const lines = built.diagnostics.map((one) =>
-        formatDiagnostic({ ...one, file: shown(one.file) }),
-      )
-      console.error(lines.join('\n'))
-      return false
-    }
-    const leftOut = built.leftOut.map(
-      ({ modpart, count, why }) => `  leaves out ${count} ${modpart}: ${why}`,
-    )
+    if (!built.isOk) return failed(built.diagnostics)
+    const accepted = gaps.map((gap) => gapNote(gap))
     const notes = built.notes.map((note) => `  ${note}`)
     console.log(
-      [`built ${built.plugin} for ${target} into ${shown(out)}`, ...leftOut, ...notes].join('\n'),
+      [`built ${built.plugin} for ${target.name} into ${shown(out)}`, ...accepted, ...notes].join(
+        '\n',
+      ),
     )
     return true
   }
@@ -150,11 +141,6 @@ const buildArgs = {
     description: 'Mod package directory (defaults to current directory)',
     required: false,
   },
-  target: {
-    type: 'enum',
-    description: 'Build for a single harness target',
-    options: HARNESSES,
-  },
   out: {
     type: 'string',
     description: 'Base output directory (defaults to <dir>/dist)',
@@ -163,7 +149,7 @@ const buildArgs = {
 } as const
 
 const buildCommand = defineCommand({
-  meta: { name: 'build', description: 'Compile and bundle a mod' },
+  meta: { name: 'build', description: 'Compile a mod and build it for each target it lists' },
   args: buildArgs,
   async run({ args }) {
     if (!(await Build.of(args).once())) process.exitCode = 1

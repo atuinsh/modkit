@@ -50,6 +50,18 @@ function partsOf(setup: SetupNode): syntax.ObjectLiteralExpression[] | Diagnosti
   return literals.filter((one) => syntax.isObjectLiteralExpression(one))
 }
 
+// A part the build can't name, so can't read tools from or check against what a target provides: a
+// spread, or a computed key.
+function unnamedIn(parts: readonly syntax.ObjectLiteralExpression[]): Diagnostic | undefined {
+  const unnamed = parts
+    .flatMap((part) => part.properties)
+    .find((property) => nameOf(property) === undefined)
+  if (unnamed === undefined) return undefined
+  const message =
+    "a mod's parts object names each of its parts, which the build reads; write `status: ...`, not a spread or a computed key"
+  return diagnosticAt({ code: 'mod-parts', message, node: unnamed })
+}
+
 const isSetup = (node: Node): node is SetupNode =>
   syntax.isArrowFunction(node) || syntax.isFunctionExpression(node)
 
@@ -80,7 +92,8 @@ export function modCallIn({
   const [setup] = call.arguments
   if (setup === undefined || !isSetup(setup)) return none(call)
   const parts = partsOf(setup)
-  return Array.isArray(parts) ? { call, setup, parts } : parts
+  if (!Array.isArray(parts)) return parts
+  return unnamedIn(parts) ?? { call, setup, parts }
 }
 
 function nameOf(property: syntax.ObjectLiteralElementLike): string | undefined {

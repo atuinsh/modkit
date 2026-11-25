@@ -9,6 +9,7 @@ export default defineConfig([
     cwd: 'modkit',
     entry: {
       index: 'src/index.ts',
+      host: 'src/host.ts',
       'ui/hooks': 'src/ui/hooks/index.ts',
       'jsx-runtime': 'src/jsx-runtime.ts',
     },
@@ -20,6 +21,18 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
     },
+    dts,
+  },
+  {
+    cwd: 'modkit-target',
+    entry: { index: 'src/index.ts' },
+    dts,
+  },
+  {
+    cwd: 'modkit-target',
+    entry: { host: 'src/host/index.ts' },
+    tsconfig: 'tsconfig.host.json',
+    platform: 'neutral',
     dts,
   },
   {

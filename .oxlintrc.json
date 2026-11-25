@@ -114,6 +114,10 @@
     // `typescript/switch-exhaustiveness-check` requires.
     "eslint/complexity": ["error", { "max": 10, "variant": "modified" }],
     "eslint/max-statements": ["error", 15],
+    // An override implements its base class's member, which no subclass can make static.
+    "eslint/class-methods-use-this": ["error", { "ignoreOverrideMethods": true }],
+    // A type-only import couples no code.
+    "import/max-dependencies": ["error", { "max": 10, "ignoreTypeImports": true }],
     "eslint/max-depth": ["error", 3],
     "eslint/max-nested-callbacks": ["error", 3],
     // Props and payloads take one object.
@@ -185,6 +189,20 @@
     // `() => undefined` is how a mod's handler says it has no opinion.
     "unicorn/no-useless-undefined": ["error", { "checkArrowFunctionBody": false }],
 
+    // modkit's engine is reached through `@atuin/modkit-target/host`; the override below lets
+    // modkit-target alone import it.
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@atuin/modkit/host",
+            "message": "Import @atuin/modkit-target/host, which re-exports it for targets."
+          }
+        ]
+      }
+    ],
+
     // A library never prints or exits for its caller; the CLI is the exception below.
     "eslint/no-console": "error",
     "unicorn/no-process-exit": "error"
@@ -221,13 +239,39 @@
       "rules": { "import/no-default-export": "off" }
     },
     {
+      "files": ["modkit-target/src/**"],
+      "rules": { "eslint/no-restricted-imports": "off" }
+    },
+    {
+      // A target builds on modkit-target alone, so the contract is all it can depend on.
+      "files": ["modkit-claude-code/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@atuin/modkit",
+                  "@atuin/modkit/*",
+                  "@atuin/modkit-compiler",
+                  "@atuin/modkit-compiler/*"
+                ],
+                "message": "A target imports @atuin/modkit-target, or /host in its runtime."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["modkit-cli/src/**"],
       "rules": { "eslint/no-console": "off", "unicorn/no-process-exit": "off" }
     },
     {
       // Bundled into Claude Code mods, whose environment has no Node: everything outside the
       // module is reached through `$`.
-      "files": ["modkit/src/**", "modkit-claude-code/src/runtime/**"],
+      "files": ["modkit/src/**", "modkit-target/src/host/**", "modkit-claude-code/src/runtime/**"],
       "rules": { "import/no-nodejs-modules": "error" }
     }
   ]

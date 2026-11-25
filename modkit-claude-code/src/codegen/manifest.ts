@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { ModInfo, OptionDecl } from '@atuin/modkit-compiler'
+import type { ModInfo, OptionDecl } from '@atuin/modkit-target'
 
 interface UserConfigField {
   type: 'string' | 'number' | 'boolean'

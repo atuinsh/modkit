@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { declarationsIn } from './declarations.ts'
 import { fromTypeScript, type Diagnostic } from './diagnostics.ts'
 import { modCallIn } from './entry.ts'
+import { hostImportsIn } from './imports.ts'
 import type { Compiled, ModInfo } from './ir.ts'
 import { literalsIn } from './literals.ts'
 import { modInfo, tsconfigAt } from './manifest.ts'
@@ -61,7 +62,12 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
   const declared = declarationsIn(project)
   const settings = optionsIn({ project, mod: call })
   const literals = literalsIn({ project, mod: call })
-  const diagnostics = [...declared.diagnostics, ...settings.diagnostics, ...literals.diagnostics]
+  const diagnostics = [
+    ...hostImportsIn(project),
+    ...declared.diagnostics,
+    ...settings.diagnostics,
+    ...literals.diagnostics,
+  ]
   if (diagnostics.length > 0) return { isOk: false, diagnostics }
   return {
     isOk: true,

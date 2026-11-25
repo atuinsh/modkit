@@ -6,7 +6,7 @@
 
 import type { ToolCallResult, ToolCheckResult } from 'claude-code'
 
-import type { Verdict } from '@atuin/modkit'
+import type { Verdict } from '@atuin/modkit-target/host'
 
 /**
  * Parse a Bash call's exit code from Claude Code's {@link ToolCallResult}.
