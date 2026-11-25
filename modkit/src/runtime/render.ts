@@ -46,59 +46,8 @@ function partsOf(node: unknown): unknown[] {
   return [node]
 }
 
-const called = ({ scope, element }: { scope: RenderScope; element: ModElement }): unknown =>
-  withFrame({ scope, component: nameOf(element) }, () => element.type(element.props))
-
-function walkUi({ scope, node }: { scope: RenderScope; node: unknown }): UiNode[] {
-  return partsOf(node).flatMap((part): UiNode[] => {
-    if (typeof part === 'string' || typeof part === 'number') return [String(part)]
-    if (!isElement(part)) throw new TypeError(`a component returned ${describe(part)}`)
-    if (isTag({ element: part, tag: Status }) || isTag({ element: part, tag: Pane })) {
-      const name = nameOf(part)
-      throw new Error(`<${name}> is what a mod's status or panes return, not what goes inside one`)
-    }
-    if (isTag({ element: part, tag: Fragment })) return walkUi({ scope, node: childrenOf(part) })
-    const drawn = primitiveOf(part.type)
-    if (drawn === undefined) return walkUi({ scope, node: called({ scope, element: part }) })
-    return [
-      drawn.node({
-        props: checked({ holder: `<${nameOf(part)}>`, schema: drawn.schema, value: part.props }),
-        key: part.key,
-        children: walkUi({ scope, node: childrenOf(part) }),
-        scope,
-      }),
-    ]
-  })
-}
-
 const SHELLS = { Status, Pane } as const
 const OTHER = { Status: 'Pane', Pane: 'Status' } as const
-
-function shellsIn({
-  scope,
-  node,
-  shell,
-  part,
-}: {
-  scope: RenderScope
-  node: unknown
-  shell: 'Status' | 'Pane'
-  part: string
-}): ModElement[] {
-  return partsOf(node).flatMap((one): ModElement[] => {
-    const wrong = (): TypeError =>
-      new TypeError(`${part} returns a <${shell}>, not ${describe(one)}`)
-    if (!isElement(one)) throw wrong()
-    if (isTag({ element: one, tag: SHELLS[shell] })) return [one]
-    if (isTag({ element: one, tag: Fragment })) {
-      return shellsIn({ scope, node: childrenOf(one), shell, part })
-    }
-    if (primitiveOf(one.type) !== undefined || isTag({ element: one, tag: SHELLS[OTHER[shell]] })) {
-      throw new TypeError(`${part} returns a <${shell}>, not a <${nameOf(one)}>`)
-    }
-    return shellsIn({ scope, node: called({ scope, element: one }), shell, part })
-  })
-}
 
 const componentOf = (part: Callback): ModElement => ({
   type: part,
@@ -134,41 +83,6 @@ function checkedParts(parts: unknown): Checked {
   throw new TypeError(`a mod's ${path === '' ? 'parts' : path}: ${issue.message}`)
 }
 
-function commandOf({
-  scope,
-  name,
-  command,
-}: {
-  scope: RenderScope
-  name: string
-  command: NonNullable<Checked['commands']>[string]
-}): CommandView {
-  const { description, skill, run, pane } = command
-  if ((run === undefined) === (pane === undefined)) {
-    throw new Error(`/${name} runs its \`run\` or toggles its \`pane\`: one of them, not both`)
-  }
-  if (pane === undefined) return { name, description, skill, pane: undefined }
-  const part = `/${name}'s pane`
-  const [element, ...rest] = shellsIn({ scope, node: componentOf(pane), shell: 'Pane', part })
-  if (element === undefined || rest.length > 0) {
-    throw new Error(`${part} returns exactly one <Pane>`)
-  }
-  if (element.props['id'] !== undefined || element.props['onClose'] !== undefined) {
-    throw new Error(`${part} is named by the command, and takes no id or onClose`)
-  }
-  const { title } = checked({
-    holder: `<${nameOf(element)}>`,
-    schema: CommandPanePropsSchema,
-    value: element.props,
-  })
-  return {
-    name,
-    description,
-    skill,
-    pane: { title, body: walkUi({ scope, node: childrenOf(element) }) },
-  }
-}
-
 const byTool = (handlers: Readonly<Record<string, Callback>> | undefined): Map<string, Callback> =>
   new Map(Object.entries(handlers ?? {}))
 
@@ -186,84 +100,165 @@ function exceptBash({
   return byTool(handlers)
 }
 
-function panesOf({ scope, panes }: { scope: RenderScope; panes: readonly Callback[] }): {
-  views: PaneView[]
-  onClose: Map<string, Callback>
-} {
-  const elements = panes.flatMap((pane) =>
-    shellsIn({ scope, node: componentOf(pane), shell: 'Pane', part: 'a pane' }),
-  )
-  const onClose = new Map<string, Callback>()
-  const views = elements.map((element): PaneView => {
-    const props = checked({
-      holder: `<${nameOf(element)}>`,
-      schema: PanePropsSchema,
-      value: element.props,
-    })
-    if (props.onClose !== undefined) onClose.set(props.id, props.onClose)
-    return { id: props.id, title: props.title, body: walkUi({ scope, node: childrenOf(element) }) }
-  })
-  const twice = views.find((one, index) => views.findIndex((pane) => pane.id === one.id) < index)
-  if (twice !== undefined) throw new Error(`two <Pane>s have the id ${twice.id}`)
-  return { views, onClose }
-}
+/**
+ * One render of a mod, inside the {@link RenderScope} its hooks read and write through.
+ *
+ * A render calls the mod's components and walks what they return into the {@link UiNode} trees a
+ * target draws, checking each modpart's props on the way.
+ */
+export class Render {
+  readonly #scope: RenderScope
 
-export function render({
-  setup,
-  settings,
-  scope,
-}: {
-  setup: (settings: never) => Parts
-  settings: object
-  scope: RenderScope
-}): Rendered {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- mount matched the settings to the mod's
-  const root = componentOf(setup as unknown as Callback)
-  const parts = checkedParts(
-    withFrame({ scope, component: 'mod' }, () => root.type({ ...settings })),
-  )
-  const statuses =
-    parts.status === undefined
-      ? []
-      : shellsIn({ scope, node: componentOf(parts.status), shell: 'Status', part: 'status' })
-  const commands = Object.entries(parts.commands ?? {}).map(([name, command]) =>
-    commandOf({ scope, name, command }),
-  )
-  const panes = panesOf({ scope, panes: parts.panes ?? [] })
-  const toggled = new Set(commands.flatMap((one) => (one.pane === undefined ? [] : [one.name])))
-  const shared = panes.views.find((pane) => toggled.has(pane.id))
-  if (shared !== undefined) {
-    throw new Error(
-      `the <Pane> id ${shared.id} names /${shared.id}'s pane already; give it another`,
+  constructor(scope: RenderScope) {
+    this.#scope = scope
+  }
+
+  /** Render the mod's `setup` with `settings` into everything its modparts show and handle. */
+  mod({ setup, settings }: { setup: (settings: never) => Parts; settings: object }): Rendered {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- mount matched the settings to the mod's
+    const root = componentOf(setup as unknown as Callback)
+    const parts = checkedParts(
+      withFrame({ scope: this.#scope, component: 'mod' }, () => root.type({ ...settings })),
+    )
+    const statuses =
+      parts.status === undefined
+        ? []
+        : this.#shells({ node: componentOf(parts.status), shell: 'Status', part: 'status' })
+    const commands = Object.entries(parts.commands ?? {}).map(([name, command]) =>
+      this.#command(name, command),
+    )
+    const panes = this.#panes(parts.panes ?? [])
+    const toggled = new Set(commands.flatMap((one) => (one.pane === undefined ? [] : [one.name])))
+    const shared = panes.views.find((pane) => toggled.has(pane.id))
+    if (shared !== undefined) {
+      throw new Error(
+        `the <Pane> id ${shared.id} names /${shared.id}'s pane already; give it another`,
+      )
+    }
+    return {
+      statuses: statuses.map((status) => this.#walk(childrenOf(status))),
+      commands,
+      panes: panes.views,
+      onClose: panes.onClose,
+      onRun: new Map(
+        Object.entries(parts.commands ?? {}).flatMap(([name, { run }]) =>
+          run === undefined ? [] : [[name, run] as const],
+        ),
+      ),
+      beforeShell: parts.beforeShell,
+      afterShell: parts.afterShell,
+      beforeTool: exceptBash({ handlers: parts.beforeTool, part: 'beforeTool' }),
+      afterTool: exceptBash({ handlers: parts.afterTool, part: 'afterTool' }),
+      cards: byTool(parts.toolCards),
+    }
+  }
+
+  /** Render the tool card `card` draws for `row`. */
+  card(card: Callback, row: ToolRow): UiNode[] {
+    return this.#walk(withFrame({ scope: this.#scope, component: 'toolCards' }, () => card(row)))
+  }
+
+  #call(element: ModElement): unknown {
+    return withFrame({ scope: this.#scope, component: nameOf(element) }, () =>
+      element.type(element.props),
     )
   }
-  return {
-    statuses: statuses.map((status) => walkUi({ scope, node: childrenOf(status) })),
-    commands,
-    panes: panes.views,
-    onClose: panes.onClose,
-    onRun: new Map(
-      Object.entries(parts.commands ?? {}).flatMap(([name, { run }]) =>
-        run === undefined ? [] : [[name, run] as const],
-      ),
-    ),
-    beforeShell: parts.beforeShell,
-    afterShell: parts.afterShell,
-    beforeTool: exceptBash({ handlers: parts.beforeTool, part: 'beforeTool' }),
-    afterTool: exceptBash({ handlers: parts.afterTool, part: 'afterTool' }),
-    cards: byTool(parts.toolCards),
-  }
-}
 
-export function renderCard({
-  render: card,
-  row,
-  scope,
-}: {
-  render: Callback
-  row: ToolRow
-  scope: RenderScope
-}): UiNode[] {
-  const node = withFrame({ scope, component: 'toolCards' }, () => card(row))
-  return walkUi({ scope, node })
+  #walk(node: unknown): UiNode[] {
+    return partsOf(node).flatMap((part): UiNode[] => {
+      if (typeof part === 'string' || typeof part === 'number') return [String(part)]
+      if (!isElement(part)) throw new TypeError(`a component returned ${describe(part)}`)
+      if (isTag({ element: part, tag: Status }) || isTag({ element: part, tag: Pane })) {
+        const name = nameOf(part)
+        throw new Error(
+          `<${name}> is what a mod's status or panes return, not what goes inside one`,
+        )
+      }
+      if (isTag({ element: part, tag: Fragment })) return this.#walk(childrenOf(part))
+      const drawn = primitiveOf(part.type)
+      if (drawn === undefined) return this.#walk(this.#call(part))
+      return [
+        drawn.node({
+          props: checked({ holder: `<${nameOf(part)}>`, schema: drawn.schema, value: part.props }),
+          key: part.key,
+          children: this.#walk(childrenOf(part)),
+          scope: this.#scope,
+        }),
+      ]
+    })
+  }
+
+  // The <Status> or <Pane> elements `node` renders to, which `part` names in an error.
+  #shells({
+    node,
+    shell,
+    part,
+  }: {
+    node: unknown
+    shell: 'Status' | 'Pane'
+    part: string
+  }): ModElement[] {
+    return partsOf(node).flatMap((one): ModElement[] => {
+      const wrong = (): TypeError =>
+        new TypeError(`${part} returns a <${shell}>, not ${describe(one)}`)
+      if (!isElement(one)) throw wrong()
+      if (isTag({ element: one, tag: SHELLS[shell] })) return [one]
+      if (isTag({ element: one, tag: Fragment })) {
+        return this.#shells({ node: childrenOf(one), shell, part })
+      }
+      if (
+        primitiveOf(one.type) !== undefined ||
+        isTag({ element: one, tag: SHELLS[OTHER[shell]] })
+      ) {
+        throw new TypeError(`${part} returns a <${shell}>, not a <${nameOf(one)}>`)
+      }
+      return this.#shells({ node: this.#call(one), shell, part })
+    })
+  }
+
+  #command(name: string, command: NonNullable<Checked['commands']>[string]): CommandView {
+    const { description, skill, run, pane } = command
+    if ((run === undefined) === (pane === undefined)) {
+      throw new Error(`/${name} runs its \`run\` or toggles its \`pane\`: one of them, not both`)
+    }
+    if (pane === undefined) return { name, description, skill, pane: undefined }
+    const part = `/${name}'s pane`
+    const [element, ...rest] = this.#shells({ node: componentOf(pane), shell: 'Pane', part })
+    if (element === undefined || rest.length > 0) {
+      throw new Error(`${part} returns exactly one <Pane>`)
+    }
+    if (element.props['id'] !== undefined || element.props['onClose'] !== undefined) {
+      throw new Error(`${part} is named by the command, and takes no id or onClose`)
+    }
+    const { title } = checked({
+      holder: `<${nameOf(element)}>`,
+      schema: CommandPanePropsSchema,
+      value: element.props,
+    })
+    return {
+      name,
+      description,
+      skill,
+      pane: { title, body: this.#walk(childrenOf(element)) },
+    }
+  }
+
+  #panes(panes: readonly Callback[]): { views: PaneView[]; onClose: Map<string, Callback> } {
+    const elements = panes.flatMap((pane) =>
+      this.#shells({ node: componentOf(pane), shell: 'Pane', part: 'a pane' }),
+    )
+    const onClose = new Map<string, Callback>()
+    const views = elements.map((element): PaneView => {
+      const props = checked({
+        holder: `<${nameOf(element)}>`,
+        schema: PanePropsSchema,
+        value: element.props,
+      })
+      if (props.onClose !== undefined) onClose.set(props.id, props.onClose)
+      return { id: props.id, title: props.title, body: this.#walk(childrenOf(element)) }
+    })
+    const twice = views.find((one, index) => views.findIndex((pane) => pane.id === one.id) < index)
+    if (twice !== undefined) throw new Error(`two <Pane>s have the id ${twice.id}`)
+    return { views, onClose }
+  }
 }

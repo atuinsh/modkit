@@ -9,6 +9,7 @@ import {
   resolvedSymbol,
   syntax,
   type Project,
+  type Type,
 } from './program.ts'
 import { canonical, tagOf } from './shape.ts'
 import { shapeOf } from './types.ts'
@@ -27,63 +28,84 @@ type Found =
   | { isDeclared: true; declared: Declared }
   | { isDeclared: false; diagnostic: Diagnostic }
 
-function idOf({
-  project,
-  call,
-}: {
-  project: Project
-  call: syntax.CallExpression
-}): string | undefined {
-  const [declaration] = call.arguments
-  if (declaration === undefined || !syntax.isObjectLiteralExpression(declaration)) return undefined
-  const id = declaration.properties.find(
-    (property): property is syntax.PropertyAssignment =>
-      syntax.isPropertyAssignment(property) &&
-      syntax.isIdentifier(property.name) &&
-      property.name.text === 'id',
-  )
-  if (id === undefined) return undefined
-  const type = project.checker.getTypeAtLocation(id.initializer)
-  return type !== undefined && isStringLiteralType(type) ? type.value : undefined
-}
+/** A `state()` or `query()` call in the mod, which declares one value the mod keeps. */
+class StateCall {
+  readonly #project: Project
+  readonly #call: syntax.CallExpression
+  readonly #kind: StateKind
 
-function declaredBy({
-  project,
-  call,
-  kind,
-}: {
-  project: Project
-  call: syntax.CallExpression
-  kind: StateKind
-}): Found {
-  const fail = (code: Diagnostic['code'], message: string): Found => ({
-    isDeclared: false,
-    diagnostic: diagnosticAt({ code, message, node: call }),
-  })
-  const id = idOf({ project, call })
-  if (id === undefined) {
-    return fail(
-      'state-id',
-      `${kind}() takes an object literal whose id is a string literal: its value is stored under it`,
-    )
+  constructor({
+    project,
+    call,
+    kind,
+  }: {
+    project: Project
+    call: syntax.CallExpression
+    kind: StateKind
+  }) {
+    this.#project = project
+    this.#call = call
+    this.#kind = kind
   }
-  const returned = project.checker.getTypeAtLocation(call)
-  const held =
-    returned !== undefined && isTypeReference(returned)
-      ? project.checker.getTypeArguments(returned)[VALUE_ARGUMENT[kind]]
+
+  /** The declaration the call makes, or the diagnostic saying why it makes none. */
+  declared(): Found {
+    const kind = this.#kind
+    const id = this.#id()
+    if (id === undefined) {
+      return this.#fail(
+        'state-id',
+        `${kind}() takes an object literal whose id is a string literal: its value is stored under it`,
+      )
+    }
+    const held = this.#held()
+    if (held === undefined) {
+      return this.#fail('state-not-json', `TypeScript gives ${id} no value type`)
+    }
+    const { checker, program } = this.#project
+    const shaped = shapeOf({ checker, program, type: held })
+    if (!shaped.isJson) {
+      const where = shaped.notJson.path === '' ? 'as its value' : `at ${shaped.notJson.path}`
+      return this.#fail(
+        'state-not-json',
+        `${id} can't hold ${shaped.notJson.found} ${where}: a mod's state is JSON`,
+      )
+    }
+    const shape = canonical(shaped.shape)
+    return {
+      isDeclared: true,
+      declared: { id, kind, shape, tag: tagOf(shaped.shape), call: this.#call },
+    }
+  }
+
+  // The id the call's object literal names, if it is a string literal.
+  #id(): string | undefined {
+    const [declaration] = this.#call.arguments
+    if (declaration === undefined || !syntax.isObjectLiteralExpression(declaration)) {
+      return undefined
+    }
+    const id = declaration.properties.find(
+      (property): property is syntax.PropertyAssignment =>
+        syntax.isPropertyAssignment(property) &&
+        syntax.isIdentifier(property.name) &&
+        property.name.text === 'id',
+    )
+    if (id === undefined) return undefined
+    const type = this.#project.checker.getTypeAtLocation(id.initializer)
+    return type !== undefined && isStringLiteralType(type) ? type.value : undefined
+  }
+
+  // The value type the call's return type holds: `T` of `State<T>`, or of `Query<I, T>`.
+  #held(): Type | undefined {
+    const { checker } = this.#project
+    const returned = checker.getTypeAtLocation(this.#call)
+    return returned !== undefined && isTypeReference(returned)
+      ? checker.getTypeArguments(returned)[VALUE_ARGUMENT[this.#kind]]
       : undefined
-  if (held === undefined) return fail('state-not-json', `TypeScript gives ${id} no value type`)
-  const shaped = shapeOf({ checker: project.checker, program: project.program, type: held })
-  if (!shaped.isJson) {
-    const where = shaped.notJson.path === '' ? 'as its value' : `at ${shaped.notJson.path}`
-    return fail(
-      'state-not-json',
-      `${id} can't hold ${shaped.notJson.found} ${where}: a mod's state is JSON`,
-    )
   }
-  return {
-    isDeclared: true,
-    declared: { id, kind, shape: canonical(shaped.shape), tag: tagOf(shaped.shape), call },
+
+  #fail(code: Diagnostic['code'], message: string): Found {
+    return { isDeclared: false, diagnostic: diagnosticAt({ code, message, node: this.#call }) }
   }
 }
 
@@ -122,7 +144,7 @@ export function declarationsIn(project: Project): {
     callsIn(file).flatMap((call): Found[] => {
       const symbol = resolvedSymbol({ checker: project.checker, node: call.expression })
       const kind = symbol === undefined ? undefined : kinds.get(symbol.id)
-      return kind === undefined ? [] : [declaredBy({ project, call, kind })]
+      return kind === undefined ? [] : [new StateCall({ project, call, kind }).declared()]
     }),
   )
   const declared = found.flatMap((one) => (one.isDeclared ? [one.declared] : []))

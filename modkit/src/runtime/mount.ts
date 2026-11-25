@@ -14,7 +14,7 @@ import type { HarnessEvent } from '../ui/hooks/query'
 import type { UiNode } from '../ui/node'
 import { isRendering, type QueryRegistration, type RenderScope } from './frame'
 import { Queries } from './queries'
-import { render, renderCard, type CommandView, type PaneView, type Rendered } from './render'
+import { Render, type CommandView, type PaneView, type Rendered } from './render'
 import { JsonSchema, checked, type Callback } from './schema'
 
 /** Snapshot of the UI modparts produced by the mod's latest successful render. */
@@ -184,7 +184,7 @@ class MountedMod implements Mounted {
     const card = this.#rendered.cards.get(row.tool)
     if (card === undefined) return []
     try {
-      return renderCard({ render: card, row, scope })
+      return new Render(scope).card(card, row)
     } catch (error) {
       this.#adapter.report({ phase: 'render', error })
       return []
@@ -216,7 +216,7 @@ class MountedMod implements Mounted {
     const registrations: QueryRegistration[] = []
     const scope = this.#scope(registrations)
     try {
-      const rendered = render({ setup: this.#setup, settings: this.#options, scope })
+      const rendered = new Render(scope).mod({ setup: this.#setup, settings: this.#options })
       this.#queries.register(registrations)
       this.#rendered = rendered
     } catch (error) {
