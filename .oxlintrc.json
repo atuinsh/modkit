@@ -247,6 +247,7 @@
       "files": [
         "modkit-claude-code/src/**",
         "modkit-codex/src/**",
+        "modkit-opencode/src/**",
         "modkit-pi/src/**",
         "modkit-target-node/src/**"
       ],
@@ -275,10 +276,27 @@
       // in hand.
       "files": [
         "modkit-codex/src/runtime/**",
+        "modkit-opencode/src/server/**",
         "modkit-pi/src/runtime/**",
         "modkit-target-node/src/runtime/**"
       ],
       "rules": { "node/no-process-env": "off", "typescript/require-await": "off" }
+    },
+    {
+      // Opencode compiles its TUI part with Solid onto OpenTUI, whose elements and props are not
+      // React's, and loads the part's default export. Its client's and its props' types are
+      // opencode's to infer.
+      "files": ["modkit-opencode/src/tui/**"],
+      "rules": {
+        "react/no-unknown-property": "off",
+        "react/jsx-props-no-spreading": "off",
+        "react/only-export-components": "off",
+        "react/no-multi-comp": "off",
+        "react/jsx-max-depth": "off",
+        "react/jsx-filename-extension": "off",
+        "import/no-default-export": "off",
+        "typescript/explicit-function-return-type": "off"
+      }
     },
     {
       "files": ["modkit-cli/src/**"],

@@ -88,6 +88,18 @@ export default defineConfig([
     dts,
   },
   {
+    cwd: 'modkit-opencode',
+    entry: { 'codegen/index': 'src/codegen/index.ts' },
+    tsconfig: 'src/codegen/tsconfig.json',
+    dts,
+  },
+  {
+    cwd: 'modkit-opencode',
+    entry: { 'server/index': 'src/server/index.ts' },
+    tsconfig: 'src/server/tsconfig.json',
+    dts,
+  },
+  {
     cwd: 'modkit-cli',
     entry: { main: 'src/main.ts' },
   },
