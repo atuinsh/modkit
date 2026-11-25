@@ -3,7 +3,7 @@ import { Markdown, parseColor } from '@earendil-works/pi-tui'
 
 import type { Hex, Tone } from '@atuin/modkit-target/host'
 
-import type { Paint } from './lines'
+import { PICK_MARK, type Paint } from './lines'
 
 const TONE_COLORS: Readonly<Record<Tone, ThemeColor>> = {
   plain: 'text',
@@ -39,7 +39,7 @@ export function paintOf({ theme, hasKeys }: { theme: Theme; hasKeys: boolean }):
     },
     border: ({ tone, text }) => theme.fg(borderColor(tone), text),
     button: ({ label, hotkey, isPicked }) => {
-      const name = theme.fg('accent', isPicked ? theme.bold(`› ${label}`) : label)
+      const name = theme.fg('accent', isPicked ? theme.bold(`${PICK_MARK} ${label}`) : label)
       return hasKeys && hotkey !== undefined
         ? `${theme.fg('accent', theme.bold(hotkey))} ${name}`
         : name

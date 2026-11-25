@@ -10,6 +10,9 @@ import {
   type UiNode,
 } from '@atuin/modkit-target/host'
 
+// Drawn before the button the keyboard is on.
+export const PICK_MARK = '›'
+
 export interface Paint {
   text: (span: Span) => string
   border: (border: { tone: Tone | undefined; text: string }) => string

@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import { modelFor } from '@atuin/modkit-target-node/runtime/models'
-import { run } from '@atuin/modkit-target-node/runtime/run'
+import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import type {
   Completion,
@@ -136,8 +136,8 @@ export function harnessFor({
   return {
     session: { id: ctx.sessionManager.getSessionId() },
     cwd: async () => cwd,
-    // The session's directory is its project for its whole life: pi has no `/cd`.
-    root: async () => cwd,
+    // The session's directory is the same for its whole life: pi has no `/cd`.
+    root: async () => projectRootOf(cwd),
     env: async (name) => process.env[name],
     run: async (argv, options) => run({ argv, options, cwd }),
     mcp: async (call) => servers.call(call),

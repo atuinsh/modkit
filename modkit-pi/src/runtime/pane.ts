@@ -8,7 +8,7 @@ import {
 
 import type { ButtonNode, UiNode } from '@atuin/modkit-target/host'
 
-import { linesOf, type Paint } from './lines'
+import { linesOf, PICK_MARK, type Paint } from './lines'
 
 export const FOCUS_KEY = 'alt+m'
 
@@ -65,6 +65,21 @@ function edged({
   return isAfter ? `${kept}${run}` : `${run}${kept}`
 }
 
+// The scroll that brings the picked button's line into view, or `scroll` when it shows already.
+function revealing({
+  scroll,
+  body,
+  room,
+}: {
+  scroll: number
+  body: readonly string[]
+  room: number
+}): number {
+  const at = body.findIndex((line) => line.includes(PICK_MARK))
+  if (at === -1 || (at >= scroll && at < scroll + room)) return scroll
+  return at < scroll ? at : at - room + 1
+}
+
 interface DrawnPane {
   lines: string[]
   scroll: number
@@ -77,6 +92,7 @@ function paneLines({
   width,
   height,
   scroll = 0,
+  isRevealing = false,
   paint,
 }: {
   pane: PaneState
@@ -84,6 +100,7 @@ function paneLines({
   width: number
   height?: number | undefined
   scroll?: number
+  isRevealing?: boolean
   paint: (hasKeys: boolean) => Paint
 }): DrawnPane {
   if (width < FRAME_COLUMNS) return { lines: [], scroll: 0, room: 0 }
@@ -91,7 +108,10 @@ function paneLines({
   const look = paint(isFocused)
   const body = linesOf({ nodes: pane.body, width: inner, paint: look })
   const room = height === undefined ? body.length : Math.max(1, height - FRAME_ROWS)
-  const from = Math.max(0, Math.min(scroll, body.length - room))
+  const from = Math.max(
+    0,
+    Math.min(isRevealing ? revealing({ scroll, body, room }) : scroll, body.length - room),
+  )
   const hasButtons = buttonsIn(pane.body).length > 0
   const hint = hintOf({ isFocused, canScroll: body.length > room, hasButtons })
   const top = `╭─${edged({ text: ` ${pane.title} `, width, end: '…', isAfter: true })}╮`
@@ -128,6 +148,8 @@ export class PaneComponent implements Component {
   #scroll = 0
   #room = 0
   #picked: number | undefined = undefined
+  // True from a move of the keyboard to the render that scrolls its button into view.
+  #isRevealing = false
 
   constructor({
     pane,
@@ -162,12 +184,14 @@ export class PaneComponent implements Component {
       width,
       height: this.#height(),
       scroll: this.#scroll,
+      isRevealing: this.#isRevealing,
       paint: (hasKeys) => ({
         ...this.#paint(hasKeys),
         ...(hasKeys && { picked: this.#pickedButton() }),
       }),
     })
     this.#scroll = drawn.scroll
+    this.#isRevealing = false
     this.#room = drawn.room
     return drawn.lines
   }
@@ -211,6 +235,7 @@ export class PaneComponent implements Component {
     if (step === undefined || count === 0) return false
     const from = this.#picked ?? (step > 0 ? -1 : 0)
     this.#picked = (from + step + count) % count
+    this.#isRevealing = true
     return true
   }
 
