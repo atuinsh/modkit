@@ -82,7 +82,7 @@ export function useQuery<I, T>(declared: Query<I, T>, input?: I | null): Fetched
   const { scope } = activeFrame('useQuery')
   const { id, schema, initial } = declared
   const key = input === null ? undefined : inputKey(input)
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the scheduler hands `fetch` back the input it was registered with
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- the scheduler hands `fetch` back the input it was registered with
   scope.query({ query: declared as Query<unknown, unknown>, key, input })
   const record = recordOf(scope.store.get(id))
   const held =

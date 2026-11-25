@@ -31,7 +31,7 @@ import {
 } from './program.ts'
 import type { Field, Item, Shape } from './shape.ts'
 
-interface NotJson {
+export interface NotJson {
   path: string
   found: string
 }
@@ -40,6 +40,7 @@ interface NotJson {
 export type ShapeResult = { isJson: true; shape: Shape } | { isJson: false; notJson: NotJson }
 
 class NotJsonError extends Error {
+  override readonly name = 'NotJsonError'
   readonly notJson: NotJson
 
   constructor(notJson: NotJson) {
@@ -199,6 +200,10 @@ function shapeIn(walk: Walk, type: Type): Shape {
   if (!hasAnyFlag({ type, flags: TypeFlags.Object })) {
     return refuse({ walk, found: walk.checker.typeToString(type) })
   }
+  return containerShape(walk, type)
+}
+
+function containerShape(walk: Walk, type: Type): Shape {
   if (isTypeReference(type) && walk.checker.isArrayType(type)) {
     const [element] = walk.checker.getTypeArguments(type)
     if (element === undefined) return refuse({ walk, found: 'an array of no element type' })

@@ -61,7 +61,7 @@ function canonicalUnion(members: readonly Shape[]): Shape {
       ]
     : flat
   const unique = [...new Map(merged.map((one) => [keyOf(one), one])).entries()]
-    .toSorted(([a], [b]) => (a < b ? -1 : Number(a > b)))
+    .toSorted(([left], [right]) => (left < right ? -1 : Number(left > right)))
     .map(([, one]) => one)
   const [only, ...rest] = unique
   if (only === undefined) throw new Error('a union has no members')
@@ -88,7 +88,9 @@ export function canonical(shape: Shape): Shape {
         kind: 'object',
         fields: shape.fields
           .map((field) => ({ ...field, shape: canonical(field.shape) }))
-          .toSorted((a, b) => (a.name < b.name ? -1 : Number(a.name > b.name))),
+          .toSorted((left, right) =>
+            left.name < right.name ? -1 : Number(left.name > right.name),
+          ),
         index: shape.index === undefined ? undefined : canonical(shape.index),
       }
     case 'union':

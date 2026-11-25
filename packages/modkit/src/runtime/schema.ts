@@ -36,7 +36,7 @@ export const JsonSchema: v.GenericSchema<unknown, Json> = v.lazy(() =>
 export type Callback = (input?: unknown) => unknown
 
 /** Schema validating an untyped runtime callback prop. */
-export const CallbackSchema = v.custom<Callback>(
+export const CallbackSchema: v.GenericSchema<Callback> = v.custom<Callback>(
   (value) => typeof value === 'function',
   'expected a function',
 )

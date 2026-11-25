@@ -23,10 +23,14 @@ const BORDERS = ['single', 'round', 'double', 'bold', 'dashed'] as const
 /** Border line style drawn around a stack container. */
 export type Border = (typeof BORDERS)[number]
 
-export const ToneSchema = v.picklist(TONES)
-export const BorderSchema = v.picklist(BORDERS)
-export const NonNegIntSchema = v.pipe(v.number(), v.integer(), v.minValue(0))
-export const HexSchema = v.custom<Hex>(
+export const ToneSchema: v.GenericSchema<Tone> = v.picklist(TONES)
+export const BorderSchema: v.GenericSchema<Border> = v.picklist(BORDERS)
+export const NonNegIntSchema: v.GenericSchema<number> = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(0),
+)
+export const HexSchema: v.GenericSchema<Hex> = v.custom<Hex>(
   (value): value is Hex => typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value),
   'expected a #rrggbb hex color',
 )

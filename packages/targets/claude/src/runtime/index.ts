@@ -48,6 +48,7 @@ import {
   type Surface,
   type ToolResult,
   type ToolRow,
+  type UiNode,
   type Verdict,
 } from '@atuin/modkit'
 
@@ -171,7 +172,7 @@ function syncPanes($: EngineInterface, isPress: boolean): void {
   const { shown, changes } = nextShown({ shown: live.shown, rendered: mounted.view().panes })
   // Kept before any call goes out, so a render while they're under way sees them made.
   live.shown = shown
-  const fail = (error: unknown) => {
+  const fail = (error: unknown): void => {
     live.report({ phase: 'render', error })
   }
   for (const change of changes) {
@@ -229,6 +230,7 @@ function registerSession(on: On, { mod, options }: { mod: Root; options: Options
       // oxlint-disable-next-line no-await-in-loop -- the engine takes registrations one at a time
       await $.command.register({ name: command.name, description: command.description })
     }
+    // oxlint-disable-next-line unicorn/no-array-method-this-argument -- $.clock.every schedules a tick; it is no array's every
     $.clock.every(TICK_MS, () => {
       void mounted.tick()
     })
@@ -362,14 +364,14 @@ export async function drawCards(
   if (cards.length === 0) return next(e)
   const elements = $.ui.resolve(e)
   const drawn = await next(e)
-  const press = (button: ButtonNode) => {
+  const press = (button: ButtonNode): void => {
     pressOn($, button, e.surface)
   }
   const under = draw({ elements, nodes: cards, press, at: 'card' })
   return h(elements.Box, { flexDirection: 'column' }, drawn, ...under)
 }
 
-function paneBody(id: string) {
+function paneBody(id: string): readonly UiNode[] | undefined {
   const view = live.mounted?.view()
   const command = view?.commands.find((one) => paneId(one.name) === id)
   return command?.pane?.body ?? view?.panes.find((pane) => pane.id === id)?.body
@@ -382,7 +384,7 @@ function registerDrawing(on: On): void {
     if (statuses.length === 0) return next(e)
     const elements = $.ui.resolve(e)
     const modes = await next(e)
-    const press = (button: ButtonNode) => {
+    const press = (button: ButtonNode): void => {
       pressOn($, button, e.surface)
     }
     const drawn = statuses.map((status, index) => {
@@ -403,7 +405,7 @@ function registerDrawing(on: On): void {
     const body = paneBody(e.requestId)
     if (body === undefined) return next(e)
     const elements = $.ui.resolve(e)
-    const press = (button: ButtonNode) => {
+    const press = (button: ButtonNode): void => {
       pressOn($, button, e.surface)
     }
     return h(elements.Box, { flexDirection: 'column' }, ...draw({ elements, nodes: body, press }))
@@ -421,7 +423,8 @@ function registerCommands(on: On): void {
     }
     const id = paneId(command.name)
     const { title } = command.pane
-    if ((await $.ui.panes()).some((pane) => pane.id === id && pane.isShown)) {
+    const panes = await $.ui.panes()
+    if (panes.some((pane) => pane.id === id && pane.isShown)) {
       await $.ui.close({ id })
       return { text: `${title} closed.` }
     }

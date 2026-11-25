@@ -3,12 +3,12 @@ import { resolve } from 'node:path'
 import { declarationsIn } from './declarations.ts'
 import { fromTypeScript, type Diagnostic } from './diagnostics.ts'
 import { modCallIn } from './entry.ts'
-import type { Compiled } from './ir.ts'
+import type { Compiled, ModInfo } from './ir.ts'
 import { literalsIn } from './literals.ts'
 import { modInfo, tsconfigAt } from './manifest.ts'
 import { modpartsIn } from './modparts.ts'
 import { optionsIn } from './options.ts'
-import { errorsIn, openProject, projectErrorsIn, type Project } from './program.ts'
+import { errorsIn, openProject, projectErrorsIn, type Project, type SourceFile } from './program.ts'
 
 // TypeScript's own errors, which stop the build before modkit reads an ill-typed program.
 function typeErrorsIn(project: Project): Diagnostic[] {
@@ -27,19 +27,34 @@ function typeErrorsIn(project: Project): Diagnostic[] {
 
 const isDiagnostic = (value: object): value is Diagnostic => 'code' in value
 
+// The manifest, TypeScript or a missing entry, any of which keeps modkit from reading the mod.
+function unreadable({
+  mod,
+  typeErrors,
+  entry,
+  path,
+}: {
+  mod: ModInfo | Diagnostic
+  typeErrors: readonly Diagnostic[]
+  entry: SourceFile | undefined
+  path: string
+}): Compiled {
+  const message = "a mod's entry is mod.tsx, beside its package.json"
+  const missing: Diagnostic[] =
+    entry === undefined ? [{ code: 'no-mod', message, file: path, line: 1, column: 1 }] : []
+  return {
+    isOk: false,
+    diagnostics: [...(isDiagnostic(mod) ? [mod] : []), ...typeErrors, ...missing],
+  }
+}
+
 function compiledIn({ project, dir }: { project: Project; dir: string }): Compiled {
   const mod = modInfo(dir)
   const typeErrors = typeErrorsIn(project)
   const path = resolve(dir, 'mod.tsx')
   const entry = project.files.find((file) => resolve(file.fileName) === path)
   if (isDiagnostic(mod) || typeErrors.length > 0 || entry === undefined) {
-    const message = "a mod's entry is mod.tsx, beside its package.json"
-    const missing: Diagnostic[] =
-      entry === undefined ? [{ code: 'no-mod', message, file: path, line: 1, column: 1 }] : []
-    return {
-      isOk: false,
-      diagnostics: [...(isDiagnostic(mod) ? [mod] : []), ...typeErrors, ...missing],
-    }
+    return unreadable({ mod, typeErrors, entry, path })
   }
   const call = modCallIn({ project, entry })
   if (isDiagnostic(call)) return { isOk: false, diagnostics: [call] }

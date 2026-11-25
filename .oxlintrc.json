@@ -110,7 +110,9 @@
     ],
     // A wrapped comment continues in lowercase.
     "eslint/capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
-    "eslint/complexity": ["error", 10],
+    // A switch counts once: an exhaustive switch over a ten-member union names every member, which
+    // `typescript/switch-exhaustiveness-check` requires.
+    "eslint/complexity": ["error", { "max": 10, "variant": "modified" }],
     "eslint/max-statements": ["error", 15],
     "eslint/max-depth": ["error", 3],
     "eslint/max-nested-callbacks": ["error", 3],
@@ -122,6 +124,11 @@
     "eslint/no-void": ["error", { "allowAsStatement": true }],
     // A function declaration hoists, so a helper may sit below its caller.
     "eslint/no-use-before-define": ["error", { "functions": false }],
+    // Node's path helpers import by name: `import { join } from 'node:path'`.
+    "unicorn/import-style": [
+      "error",
+      { "styles": { "node:path": { "named": true, "default": false } } }
+    ],
     // Valibot's documented import is `import * as v`.
     "import/no-namespace": ["error", { "ignore": ["valibot"] }],
     // The automatic JSX runtime exports its `JSX` namespace as a declaration.
@@ -131,6 +138,11 @@
     // A method signature is checked bivariantly even under `strictFunctionTypes`; a property
     // signature is not.
     "typescript/method-signature-style": ["error", "property"],
+    // Every named function states its return type; a callback takes its type from where it goes.
+    "typescript/explicit-function-return-type": [
+      "error",
+      { "allowExpressions": true, "allowIIFEs": true }
+    ],
     "typescript/consistent-type-imports": ["error", { "fixStyle": "inline-type-imports" }],
     // An assertion is an unchecked claim: annotate, narrow or parse instead. `as const` stays.
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],

@@ -46,7 +46,18 @@ const TOOL_PARTS = [
   ['toolCards', 'cards'],
 ] as const
 
-function toolsOf({ mod, part }: { mod: ModCall; part: (typeof TOOL_PARTS)[number][0] }) {
+interface ToolsRead {
+  names: string[]
+  diagnostics: Diagnostic[]
+}
+
+function toolsOf({
+  mod,
+  part,
+}: {
+  mod: ModCall
+  part: (typeof TOOL_PARTS)[number][0]
+}): ToolsRead[] {
   return partsNamed({ mod, name: part }).map((written) => {
     const names = keysOf(written)
     if (names === undefined) {
@@ -67,11 +78,13 @@ const sorted = (names: readonly string[]): string[] => [...new Set(names)].toSor
 
 function toolsIn(mod: ModCall): { tools: ToolNames; diagnostics: Diagnostic[] } {
   const found = TOOL_PARTS.map(([part, side]) => ({ side, read: toolsOf({ mod, part }) }))
-  const namesFor = (side: keyof ToolNames) =>
-    sorted(found.flatMap((one) => (one.side === side ? one.read.flatMap((r) => r.names) : [])))
+  const namesFor = (side: keyof ToolNames): string[] =>
+    sorted(
+      found.flatMap((one) => (one.side === side ? one.read.flatMap((read) => read.names) : [])),
+    )
   return {
     tools: { before: namesFor('before'), after: namesFor('after'), cards: namesFor('cards') },
-    diagnostics: found.flatMap((one) => one.read.flatMap((r) => r.diagnostics)),
+    diagnostics: found.flatMap((one) => one.read.flatMap((read) => read.diagnostics)),
   }
 }
 

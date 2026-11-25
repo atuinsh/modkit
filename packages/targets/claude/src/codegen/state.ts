@@ -69,6 +69,7 @@ export function stateSource({
     '  switch (key) {',
     ...savesOf(state),
     '  }',
+    // oxlint-disable-next-line eslint/no-template-curly-in-string -- emitted source, interpolated where it runs
     '  return Promise.reject(new Error(`${key} has no atom: declare it with state() or query() where the build reads it`))',
     '}',
     '',

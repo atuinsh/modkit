@@ -77,7 +77,7 @@ const FollowupSchema = v.optional(
 /**
  * Validate a handler's untyped return value as a {@link Verdict}.
  *
- * @throws TypeError if `value` is not `undefined`, `{ deny: string }`, or
+ * @throws {TypeError} If `value` is not `undefined`, `{ deny: string }`, or
  *     `{ ask: string, otherwise: 'allow' | 'deny' }`.
  */
 export function verdictOf(value: unknown): Verdict {
@@ -91,7 +91,7 @@ export function verdictOf(value: unknown): Verdict {
 /**
  * Validate a handler's untyped return value as a {@link Followup}.
  *
- * @throws TypeError if `value` is not `undefined` or an object with optional string `note` and
+ * @throws {TypeError} If `value` is not `undefined` or an object with optional string `note` and
  *     `context`.
  */
 export function followupOf(value: unknown): Followup {

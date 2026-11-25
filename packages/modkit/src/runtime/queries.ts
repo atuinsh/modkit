@@ -107,6 +107,7 @@ export class Queries {
   async #fetchWhileAsked({ id, fetching }: { id: string; fetching: Fetching }): Promise<void> {
     try {
       do {
+        // oxlint-disable-next-line eslint/no-param-reassign -- refresh asks for one more round through this same record
         fetching.again = false
         // oxlint-disable-next-line no-await-in-loop -- the next fetch is the one asked for during this
         await this.#fetchOnce(id)

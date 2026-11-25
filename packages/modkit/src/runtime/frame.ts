@@ -42,7 +42,7 @@ export function withFrame<T>(frame: Frame, fn: () => T): T {
 /**
  * Return the innermost active render {@link Frame}.
  *
- * @throws If called outside of a component render (`hook` names the caller in the error).
+ * @throws {Error} If called outside of a component render (`hook` names the caller in the error).
  */
 export function activeFrame(hook: string): Frame {
   const frame = frames.at(-1)

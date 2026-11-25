@@ -16,7 +16,7 @@ import type { Verdict } from '@atuin/modkit'
  */
 export function exitCodeOf(ran: ToolCallResult): number | null {
   if (ran.isError !== true) return 0
-  const code = /^Exit code (\d+)/u.exec(ran.text ?? '')?.[1]
+  const code = /^Exit code (?<code>\d+)/u.exec(ran.text ?? '')?.groups?.['code']
   return code === undefined ? null : Number(code)
 }
 

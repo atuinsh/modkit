@@ -108,16 +108,14 @@ async function dev(paths: Paths): Promise<void> {
     ? `; load it with claude --plugin-dir ${join(out, 'claude')}`
     : ''
   console.log(`watching ${shown(dir)}${loads}`)
-  let last = Promise.resolve()
+  let last: Promise<unknown> = Promise.resolve()
   const rebuild = debounce(() => {
-    last = last.then(async () => {
-      await buildOnce(paths)
-    })
+    last = last.then(async () => buildOnce(paths))
   }, QUIET_MS)
   const watcher = watch(dir, {
     ignoreInitial: true,
     // The build writes inside `dir` by default; its own output must not start the next build.
-    ignored: [{ path: out, recursive: true }, /(^|\/)node_modules(\/|$)/u],
+    ignored: [{ path: out, recursive: true }, /(?:^|\/)node_modules(?:\/|$)/u],
   })
   watcher.on('all', rebuild)
   watcher.on('error', (error: unknown) => {

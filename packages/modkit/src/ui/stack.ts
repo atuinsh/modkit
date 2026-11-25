@@ -66,7 +66,13 @@ const stack = ({
   })
 
 /** Vertical flex container that stacks children top to bottom. */
-export const Column = stack({ kind: 'Column', between: (gap) => '\n'.repeat(gap + 1) })
+export const Column: Component<StackProps> = stack({
+  kind: 'Column',
+  between: (gap) => '\n'.repeat(gap + 1),
+})
 
 /** Horizontal flex container that arranges children left to right. */
-export const Row = stack({ kind: 'Row', between: (gap) => ' '.repeat(Math.max(1, gap)) })
+export const Row: Component<StackProps> = stack({
+  kind: 'Row',
+  between: (gap) => ' '.repeat(Math.max(1, gap)),
+})

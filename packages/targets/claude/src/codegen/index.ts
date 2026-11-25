@@ -36,7 +36,9 @@ export type Built =
   | { isOk: true; out: string; plugin: string }
   | { isOk: false; diagnostics: Diagnostic[] }
 
-const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+const JSON_INDENT_SPACES = 2
+
+const json = (value: unknown): string => `${JSON.stringify(value, null, JSON_INDENT_SPACES)}\n`
 
 async function bundle({
   dir,

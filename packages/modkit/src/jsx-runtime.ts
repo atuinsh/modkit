@@ -16,7 +16,7 @@ export function jsx(
   key?: string | number,
 ): ModElement {
   return {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- JSX checked `props` against the tag's own props type
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- JSX checked `props` against the tag's own props type
     type: type as unknown as Renderable,
     props,
     key: key === undefined ? undefined : String(key),

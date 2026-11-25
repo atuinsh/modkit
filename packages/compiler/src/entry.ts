@@ -13,7 +13,7 @@ export interface ModCall {
 const NO_MOD =
   "a mod is mod.tsx's default export, written `export default mod((settings) => ({ ... }))`"
 
-const none = (node: Node) => diagnosticAt({ code: 'no-mod', message: NO_MOD, node })
+const none = (node: Node): Diagnostic => diagnosticAt({ code: 'no-mod', message: NO_MOD, node })
 
 const unwrapped = (node: Node): Node =>
   syntax.isParenthesizedExpression(node) ||
@@ -50,6 +50,20 @@ function partsOf(setup: SetupNode): syntax.ObjectLiteralExpression[] | Diagnosti
   return literals.filter((one) => syntax.isObjectLiteralExpression(one))
 }
 
+const isSetup = (node: Node): node is SetupNode =>
+  syntax.isArrowFunction(node) || syntax.isFunctionExpression(node)
+
+function defaultCallIn(
+  entry: SourceFile,
+): { exported: Node; call: syntax.CallExpression } | Diagnostic {
+  const exported = entry.statements.find(
+    (statement) => syntax.isExportAssignment(statement) && !statement.isExportEquals,
+  )
+  if (exported === undefined || !syntax.isExportAssignment(exported)) return none(entry)
+  const call = unwrapped(exported.expression)
+  return syntax.isCallExpression(call) ? { exported, call } : none(exported)
+}
+
 export function modCallIn({
   project,
   entry,
@@ -57,22 +71,14 @@ export function modCallIn({
   project: Project
   entry: SourceFile
 }): ModCall | Diagnostic {
-  const exported = entry.statements.find(
-    (statement) => syntax.isExportAssignment(statement) && !statement.isExportEquals,
-  )
-  if (exported === undefined || !syntax.isExportAssignment(exported)) return none(entry)
-  const call = unwrapped(exported.expression)
-  if (!syntax.isCallExpression(call)) return none(exported)
+  const found = defaultCallIn(entry)
+  if ('code' in found) return found
+  const { exported, call } = found
   const mod = modkitExports(project).find((symbol) => symbol.name === 'mod')
   const called = resolvedSymbol({ checker: project.checker, node: call.expression })
   if (mod === undefined || called?.id !== mod.id) return none(exported)
   const [setup] = call.arguments
-  if (
-    setup === undefined ||
-    !(syntax.isArrowFunction(setup) || syntax.isFunctionExpression(setup))
-  ) {
-    return none(call)
-  }
+  if (setup === undefined || !isSetup(setup)) return none(call)
   const parts = partsOf(setup)
   return Array.isArray(parts) ? { call, setup, parts } : parts
 }
