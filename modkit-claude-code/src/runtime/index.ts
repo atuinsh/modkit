@@ -50,7 +50,7 @@ import {
   type ToolRow,
   type UiNode,
   type Verdict,
-} from '@atuin/modkit'
+} from '@atuin/modkit-target/host'
 
 import { completionOf, mcpResultOf } from './answers'
 import { decide, exitCodeOf } from './decide'

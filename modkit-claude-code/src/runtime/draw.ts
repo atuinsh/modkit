@@ -18,7 +18,7 @@ import {
   type TextNode,
   type Tone,
   type UiNode,
-} from '@atuin/modkit'
+} from '@atuin/modkit-target/host'
 
 function toneProps(tone: Tone): Readonly<Record<string, unknown>> {
   switch (tone) {

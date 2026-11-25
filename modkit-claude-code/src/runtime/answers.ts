@@ -6,7 +6,7 @@
 
 import type { McpToolResult, ModelCompleteResult } from 'claude-code'
 
-import type { Completion, McpResult } from '@atuin/modkit'
+import type { Completion, McpResult } from '@atuin/modkit-target/host'
 
 const textOf = (result: McpToolResult): string =>
   result.content.flatMap((block) => (block.type === 'text' ? [block.text ?? ''] : [])).join('\n')

@@ -202,7 +202,7 @@ declare const h: (
 declare module 'modkit-claude:state' {
   import type { EngineInterface } from 'claude-code'
 
-  import type { Stored } from '@atuin/modkit'
+  import type { Stored } from '@atuin/modkit-target/host'
 
   /** Normalized plugin identifier used as the atom and pane namespace. */
   export const plugin: string

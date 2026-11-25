@@ -12,7 +12,7 @@
 import { genAugmentation, genImport, genObjectFromValues, genString } from 'knitwork'
 import { pascalCase } from 'scule'
 
-import type { Shape, StateDecl } from '@atuin/modkit-compiler'
+import type { Shape, StateDecl } from '@atuin/modkit-target'
 
 // Atom bumped on every render so Claude Code's `ui.render` hooks re-evaluate.
 const VIEW_KEY = 'modkit.view'

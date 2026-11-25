@@ -1,0 +1,22 @@
+{
+  "name": "@atuin/modkit-target",
+  "private": true,
+  "description": "The contract every harness target implements: its build, the modparts it provides, and the host it runs a mod on",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host": "./src/host.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p . && tsc -p tsconfig.host.json"
+  },
+  "dependencies": {
+    "@atuin/modkit": "workspace:*",
+    "@atuin/modkit-compiler": "workspace:*",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -227,12 +227,9 @@ importers:
 
   modkit-claude-code:
     dependencies:
-      '@atuin/modkit':
+      '@atuin/modkit-target':
         specifier: workspace:*
-        version: link:../modkit
-      '@atuin/modkit-compiler':
-        specifier: workspace:*
-        version: link:../modkit-compiler
+        version: link:../modkit-target
       es-toolkit:
         specifier: 'catalog:'
         version: 1.53.2
@@ -245,6 +242,9 @@ importers:
       scule:
         specifier: 'catalog:'
         version: 1.3.0
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -255,12 +255,12 @@ importers:
 
   modkit-cli:
     dependencies:
-      '@atuin/modkit-claude-code':
-        specifier: workspace:*
-        version: link:../modkit-claude-code
       '@atuin/modkit-compiler':
         specifier: workspace:*
         version: link:../modkit-compiler
+      '@atuin/modkit-target':
+        specifier: workspace:*
+        version: link:../modkit-target
       chokidar:
         specifier: ^6.0.0
         version: 6.0.0
@@ -299,6 +299,25 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+
+  modkit-target:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../modkit
+      '@atuin/modkit-compiler':
+        specifier: workspace:*
+        version: link:../modkit-compiler
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
 packages:
 

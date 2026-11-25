@@ -1,7 +1,7 @@
 {
   "name": "@atuin/modkit-cli",
   "private": true,
-  "description": "The modkit command: build a mod into a Claude Code plugin and a Codex plugin, once or on every save",
+  "description": "The modkit command: build a mod for each harness it targets, once or on every save",
   "bin": {
     "modkit": "./src/main.ts"
   },
@@ -10,8 +10,8 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@atuin/modkit-claude-code": "workspace:*",
     "@atuin/modkit-compiler": "workspace:*",
+    "@atuin/modkit-target": "workspace:*",
     "chokidar": "^6.0.0",
     "citty": "^0.2.2",
     "es-toolkit": "catalog:"

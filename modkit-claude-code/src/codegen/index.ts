@@ -15,12 +15,19 @@
  */
 
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { build } from 'rolldown'
+import * as v from 'valibot'
 
-import { compile, pluginNameOf, type Diagnostic } from '@atuin/modkit-compiler'
+import {
+  NATIVE,
+  pluginNameOf,
+  type BuildInput,
+  type Built,
+  type Target,
+} from '@atuin/modkit-target'
 
 import { envSource } from './env.ts'
 import { manifestOf } from './manifest.ts'
@@ -30,11 +37,6 @@ const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 const ENTRY = '\0modkit-claude-entry'
 const STATE = 'modkit-claude:state'
 const ENV = 'modkit-claude:env'
-
-/** Result of {@link buildClaude}: the built plugin path and name, or compiler diagnostics. */
-export type Built =
-  | { isOk: true; out: string; plugin: string }
-  | { isOk: false; diagnostics: Diagnostic[] }
 
 const JSON_INDENT_SPACES = 2
 
@@ -75,22 +77,7 @@ async function bundle({
   })
 }
 
-/**
- * Compile the mod at `dir` and emit a Claude Code plugin into `out`.
- *
- * Returns compiler diagnostics without writing output if compilation fails.
- */
-export async function buildClaude({
-  dir: given,
-  out: into,
-}: {
-  dir: string
-  out: string
-}): Promise<Built> {
-  const dir = resolve(given)
-  const out = resolve(into)
-  const compiled = compile({ dir })
-  if (!compiled.isOk) return compiled
+async function built({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
   const { mod, entry, state, options, env, tools } = compiled
   const plugin = pluginNameOf(mod.name)
   await bundle({
@@ -108,5 +95,28 @@ export async function buildClaude({
   await writeFile(join(out, '.claude-plugin', 'plugin.json'), json(manifest))
   await writeFile(join(out, 'hooks', 'hooks.json'), json({ modules: ['./register.js'] }))
   await writeFile(join(out, 'types', 'index.d.ts'), new StateModule({ plugin, state }).contract())
-  return { isOk: true, out, plugin }
+  return { isOk: true, plugin, notes: [`load it with claude --plugin-dir ${out}`] }
+}
+
+// Claude Code takes no options of a mod yet, so its section holds only the gaps it accepts.
+const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
+  v.strictObject({}),
+  v.transform(() => undefined),
+)
+
+/** Build a mod into a Claude Code plugin: `plugin.json`, `hooks.json`, `register.js` and its types. */
+export const target: Target<undefined> = {
+  name: 'claude-code',
+  capabilities: {
+    status: NATIVE,
+    commands: NATIVE,
+    panes: NATIVE,
+    beforeShell: NATIVE,
+    afterShell: NATIVE,
+    beforeTool: NATIVE,
+    afterTool: NATIVE,
+    toolCards: NATIVE,
+  },
+  options: OptionsSchema,
+  build: built,
 }
