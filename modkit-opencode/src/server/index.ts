@@ -117,6 +117,7 @@ function sessionsOf({
     ports: {
       reached: { ctx, plugin, cwd: ctx.location.directory, servers },
       dir: sessionsDirOf({ data: dataDir(), plugin }),
+      tags: served.state,
       changed: (id) => {
         void outbox.emit?.('changed', { sessionID: id })
       },

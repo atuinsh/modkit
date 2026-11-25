@@ -14,7 +14,7 @@ import {
   type Capabilities,
   type ModInfo,
 } from '@atuin/modkit-target'
-import { bundle, missingToolNotes, settingOf } from '@atuin/modkit-target-node/codegen'
+import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
 
 const SERVER = fileURLToPath(new URL('../server/index.ts', import.meta.url))
 const CONTRACT = fileURLToPath(new URL('../contract.ts', import.meta.url))
@@ -99,9 +99,15 @@ const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
 class OpencodeTarget extends ModkitTarget<undefined> {
   override readonly name = 'opencode'
   override readonly capabilities: Capabilities = {
-    status: NATIVE,
+    status: {
+      kind: 'lowered',
+      why: "opencode's footer draws a button as text, which can't be pressed",
+    },
     commands: NATIVE,
-    panes: { kind: 'lowered', why: 'opencode shows one pane at a time, the newest' },
+    panes: {
+      kind: 'lowered',
+      why: 'opencode shows one pane at a time, the newest, and presses a button only by its hotkey',
+    },
     beforeShell: NATIVE,
     afterShell: NATIVE,
     beforeTool: NATIVE,
@@ -111,9 +117,13 @@ class OpencodeTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, options, tools } = compiled
+    const { mod, entry, state, options, tools } = compiled
     const plugin = pluginNameOf(mod.name)
-    const served = { plugin, settings: options.map((option) => settingOf(option)) }
+    const served = {
+      plugin,
+      settings: options.map((option) => settingOf(option)),
+      state: tagsOf(state),
+    }
     await mkdir(out, { recursive: true })
     const server = source([
       genImport(SERVER, ['serverOf']),

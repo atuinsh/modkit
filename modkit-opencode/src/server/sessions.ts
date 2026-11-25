@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { fileStore } from '@atuin/modkit-target-node/runtime/store'
+import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { Ask, Failure, Mod, Options } from '@atuin/modkit-target/host'
 
 import { harnessFor, type Reached } from './harness'
@@ -16,6 +16,7 @@ export interface Live {
 export interface Ports {
   reached: Reached
   dir: string
+  tags: Tags
   changed: (id: string) => void
   notified: (notice: { id: string; text: string }) => void
 }
@@ -94,7 +95,7 @@ export class Sessions {
   }
 
   #harnessFor(id: string): OpencodeSession['harness'] {
-    const { reached, dir } = this.#ports
+    const { reached, dir, tags } = this.#ports
     const told = new Set<string>()
     const report = ({ phase, error }: Failure): void => {
       const text = `${reached.plugin}: ${phase} failed: ${messageOf(error)}`
@@ -105,7 +106,7 @@ export class Sessions {
     return harnessFor({
       reached,
       id,
-      store: fileStore({ dir, session: id, report }),
+      store: fileStore({ dir, session: id, tags, report }),
       notify: (text) => {
         this.notify({ id, text })
       },

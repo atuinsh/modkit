@@ -1,7 +1,16 @@
 import { Plugin, usePlugin } from '@opencode/plugin/tui'
 import type { PanelInput } from '@opencode/plugin/tui/context'
 import { SyntaxStyle, type RGBA } from '@opentui/core'
-import { createEffect, createSignal, For, onCleanup, Show, type Accessor, type JSX } from 'solid-js'
+import {
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+  untrack,
+  type Accessor,
+  type JSX,
+} from 'solid-js'
 
 import type { ViewJson } from '../contract'
 import { EMPTY_VIEW, hotkeysIn, specsOf, viewOf, type Paint, type Span, type Spec } from './draw.js'
@@ -189,11 +198,15 @@ function commandKeys(shared: Shared): void {
 
 function followPanes(shared: Shared): void {
   const { ui } = shared.ctx
+  // The panel opens when a pane newly becomes the newest, and not again when the person moves to
+  // another panel while it shows.
+  let shown = ''
   createEffect(() => {
-    const isOurs = ui.panel.current()?.name === PANEL
-    const hasPane = shared.view().panes.length > 0
-    if (hasPane && !isOurs) ui.panel.open(PANEL)
-    if (!hasPane && isOurs) ui.panel.close()
+    const latest = shared.view().panes.at(-1)?.id ?? ''
+    const isOurs = untrack(() => ui.panel.current()?.name === PANEL)
+    if (latest !== '' && latest !== shown && !isOurs) ui.panel.open(PANEL)
+    if (latest === '' && isOurs) ui.panel.close()
+    shown = latest
   })
 }
 
@@ -224,9 +237,15 @@ export default Plugin.define({
       color: colorOf(ctx),
       syntax: SyntaxStyle.create(ctx.renderer.nativeScene),
     }
+    // Only the newest request's reply is drawn: an older one may be another session's, or stale.
+    let asked = 0
     const refresh = async () => {
+      asked += 1
+      const mine = asked
       const id = session()
-      setView(id === undefined ? EMPTY_VIEW : viewOf(await clientOf(ctx).view({ sessionID: id })))
+      const next =
+        id === undefined ? EMPTY_VIEW : viewOf(await clientOf(ctx).view({ sessionID: id }))
+      if (mine === asked) setView(next)
     }
     listen({ shared, refresh })
     ctx.ui.slot({ append: 'prompt.footer.status', render: () => <Statuses shared={shared} /> })
