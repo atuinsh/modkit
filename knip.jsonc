@@ -6,6 +6,6 @@
       "ignoreDependencies": ["claude-code", "modkit-claude"],
     },
   },
-  // codespell is a Python tool; `pnpm spell` runs it pinned through uv.
+  // codespell, actionlint and zizmor are Python packages; their scripts run them pinned through uvx.
   "ignoreBinaries": ["uvx"],
 }

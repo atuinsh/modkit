@@ -18,13 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # pnpm's version, and Node's, come from package.json's devEngines.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           cache: true
-      # codespell is a Python tool; `pnpm spell` runs it pinned through uvx.
-      - uses: astral-sh/setup-uv@v10.4.0
+      # codespell, actionlint and zizmor are Python packages, run pinned through uvx.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Dependencies
         run: pnpm install --frozen-lockfile
       - name: Format
@@ -37,6 +39,13 @@ jobs:
         run: pnpm knip
       - name: Codespell
         run: pnpm spell
+      - name: Actionlint
+        run: pnpm actionlint
+      - name: Zizmor
+        run: pnpm zizmor
+        env:
+          # Online audits, such as impostor commits and known-vulnerable actions, read the GitHub API.
+          GH_TOKEN: ${{ github.token }}
 
   # Known vulnerabilities in the locked dependencies. Every run scans, not only one that changes
   # the lockfile, so an advisory published later still turns a build red.
@@ -48,7 +57,9 @@ jobs:
       OSV_SCANNER_VERSION: '2.7.1'
       OSV_SCANNER_SHA256: 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install OSV-Scanner
         run: |
           curl -fsSL --retry 3 --retry-all-errors -o /tmp/osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
