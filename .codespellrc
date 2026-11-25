@@ -1,0 +1,3 @@
+[codespell]
+skip = .git,node_modules,dist,pnpm-lock.yaml
+check-hidden = true

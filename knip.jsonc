@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "workspaces": {
+    "packages/targets/claude": {
+      // Claude Code provides `claude-code` to a mod, and the codegen writes `modkit-claude:state`.
+      "ignoreDependencies": ["claude-code", "modkit-claude"],
+    },
+  },
+  // codespell is a Python tool; `pnpm spell` runs it pinned through uv.
+  "ignoreBinaries": ["uvx"],
+}
