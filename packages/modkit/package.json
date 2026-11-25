@@ -1,0 +1,23 @@
+{
+  "name": "@atuin/modkit",
+  "private": true,
+  "description": "What a mod imports: its modparts, hooks and UI nodes, and the runtime every target bundles",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui/hooks": "./src/ui/hooks/index.ts",
+    "./jsx-runtime": "./src/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/jsx-runtime.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "canonicalize": "^5.1.0",
+    "es-toolkit": "catalog:",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@atuin/modkit-compiler",
+  "private": true,
+  "description": "Reads a mod with the TypeScript checker into the IR the targets consume",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@sindresorhus/slugify": "^4.0.1",
+    "canonicalize": "^5.1.0",
+    "scule": "catalog:",
+    "typescript": "7.0.2",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}
