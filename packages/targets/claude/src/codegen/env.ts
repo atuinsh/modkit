@@ -20,6 +20,7 @@ export function envSource(names: readonly string[]): string {
     ),
     '  }',
     '  return Promise.reject(',
+    // oxlint-disable-next-line eslint/no-template-curly-in-string -- emitted source, interpolated where it runs
     "    new Error(`the mod reads ${name} through no harness.env('${name}') the compiler could see, and Claude Code lets a mod read only the variables it names`),",
     '  )',
     '}',

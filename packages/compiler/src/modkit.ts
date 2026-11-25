@@ -20,9 +20,10 @@ export function modkitExports(project: Project): TsSymbol[] {
         : [],
     ),
   )
-  const exported = specifiers.flatMap((specifier) =>
-    Array.from(checker.getSymbolAtLocation(specifier)?.getExports().values() ?? []),
-  )
+  // oxlint-disable-next-line oxc/no-map-spread -- the spread turns an exports iterator into the array flatMap flattens
+  const exported = specifiers.flatMap((specifier) => [
+    ...(checker.getSymbolAtLocation(specifier)?.getExports().values() ?? []),
+  ])
   const resolved = exported.map((symbol) =>
     (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol),
   )

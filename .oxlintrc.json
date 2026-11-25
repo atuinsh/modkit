@@ -1,41 +1,187 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
-  "options": { "typeAware": true },
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "promise", "node", "jsdoc"],
+  "options": { "typeAware": true, "reportUnusedDisableDirectives": "error" },
   "ignorePatterns": [
     // Oxlint has no built-in node_modules skip; without these it lints every dependency.
     "**/node_modules/**",
     "**/dist/**"
   ],
+  // Every category, nursery included. A rule that does not fit is turned off below with its reason;
+  // one that fits with other options is configured below.
   "categories": {
     "correctness": "error",
     "suspicious": "error",
     "pedantic": "error",
-    "perf": "error"
+    "perf": "error",
+    "style": "error",
+    "restriction": "error",
+    "nursery": "error"
   },
   "rules": {
     // Flags `TODO(markovejnovic): ...`, the convention for owned debt.
     "eslint/no-warning-comments": "off",
+    // Demands deep `readonly` on every parameter, which the TypeScript compiler API's node and
+    // checker types cannot meet (354 findings).
     "typescript/prefer-readonly-parameter-types": "off",
     // Only applies to the classic JSX runtime; mods compile against modkit's automatic one.
     "react/react-in-jsx-scope": "off",
 
-    // In typescript-eslint's strict-type-checked, but still nursery in Oxlint.
-    "typescript/no-unnecessary-condition": "error",
-    "typescript/prefer-optional-chain": "error",
+    // Exports are named and sit beside what they export; `import/no-default-export` is the half
+    // kept.
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    "import/group-exports": "off",
+    "import/exports-last": "off",
+    // Type-only imports use `import type` (`typescript/no-import-type-side-effects`) and mixed ones
+    // mark specifiers inline (`typescript/consistent-type-imports`); this rule takes one style only.
+    "import/consistent-type-specifier-style": "off",
+    // A package imports its own files relatively; each package.json bounds what crosses packages.
+    "import/no-relative-parent-imports": "off",
+    // The compiler and the CLI run on Node; an override below denies it where code ships in a mod.
+    "import/no-nodejs-modules": "off",
+    // Keys follow meaning (manifest and schema order), not the alphabet.
+    "eslint/sort-keys": "off",
+    // oxfmt's `sortImports` owns import order.
+    "eslint/sort-imports": "off",
 
-    "typescript/no-explicit-any": "error",
-    "typescript/no-non-null-assertion": "error",
-    "eslint/prefer-template": "error",
-    "eslint/prefer-const": "error",
+    // `() => undefined` is how a mod's handler says it has no opinion, and
+    // `exactOptionalPropertyTypes` makes `undefined` explicit.
+    "eslint/no-undefined": "off",
+    // A ternary computes into a `const`; `eslint/no-nested-ternary` keeps it flat.
+    "eslint/no-ternary": "off",
+    // `continue` is a loop body's guard clause.
+    "eslint/no-continue": "off",
+    // `typescript/switch-exhaustiveness-check` requires every member instead, and rejects the
+    // `default` that would absorb a new one.
+    "eslint/default-case": "off",
+    // TypeScript resolves names, including the host's globals (`h`) from their declarations.
+    "eslint/no-undef": "off",
+    // `typescript/require-await` replaces it and accepts an `async` function that returns a
+    // promise, which `typescript/promise-function-async` asks for.
+    "eslint/require-await": "off",
+    // The TypeScript compiler API reports `TypeFlags` and `SymbolFlags` as bit sets.
+    "eslint/no-bitwise": "off",
+    // `null` is JSON's absent value, and the host API's.
+    "unicorn/no-null": "off",
+    // Valibot schemas compose by nesting calls: `v.pipe(v.array(v.object(...)))`.
+    "unicorn/max-nested-calls": "off",
+    // For runtimes below ES2017-ES2020; every package targets ES2023.
+    "oxc/no-async-await": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
+    // A `.then` or `.catch` here defers or reports a call deliberately left running; awaiting it
+    // would serialize the caller.
+    "promise/prefer-await-to-then": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    // Keys on parameter names such as `next`, which here are a state updater and Claude Code's
+    // hook chain, not Node callbacks.
+    "node/callback-return": "off",
+    // The compiler is a build step; no server shares its event loop.
+    "node/no-sync": "off",
+    // Contradicts `unicorn/prefer-top-level-await`; every package is ESM.
+    "node/no-top-level-await": "off",
+    // A docblock is one line unless the signature leaves something out, and TypeScript carries the
+    // types a JSDoc tag would repeat.
+    "jsdoc/require-param": "off",
+    "jsdoc/require-returns": "off",
+    "jsdoc/require-param-type": "off",
+    "jsdoc/require-returns-type": "off",
+    "jsdoc/require-property-type": "off",
+    "jsdoc/require-yields-type": "off",
+
+    // A body that spans lines takes braces; a one-line guard clause (`if (!x) return`) does not.
+    "eslint/curly": ["error", "multi-line"],
+    "eslint/func-style": ["error", "declaration", { "allowArrowFunctions": true }],
+    "eslint/one-var": ["error", "never"],
+    // `v` is Valibot's namespace and a single capital is a type parameter.
+    "eslint/id-length": ["error", { "exceptions": ["v", "_"], "exceptionPatterns": ["^[A-Z]$"] }],
+    "eslint/no-magic-numbers": [
+      "error",
+      {
+        "ignore": [-1, 0, 1],
+        "ignoreArrayIndexes": true,
+        "ignoreDefaultValues": true,
+        "ignoreTypeIndexes": true,
+        "ignoreEnums": true,
+        "ignoreNumericLiteralTypes": true,
+        "ignoreReadonlyClassProperties": true
+      }
+    ],
+    // A wrapped comment continues in lowercase.
+    "eslint/capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
+    // A switch counts once: an exhaustive switch over a ten-member union names every member, which
+    // `typescript/switch-exhaustiveness-check` requires.
+    "eslint/complexity": ["error", { "max": 10, "variant": "modified" }],
+    "eslint/max-statements": ["error", 15],
+    "eslint/max-depth": ["error", 3],
+    "eslint/max-nested-callbacks": ["error", 3],
     // Props and payloads take one object.
     "eslint/max-params": ["error", { "max": 2 }],
     "eslint/max-lines": ["error", { "max": 900 }],
-    "eslint/no-nested-ternary": "error",
+    "eslint/no-param-reassign": ["error", { "props": true }],
+    // `void promise` marks a promise deliberately left running (`typescript/no-floating-promises`).
+    "eslint/no-void": ["error", { "allowAsStatement": true }],
+    // A function declaration hoists, so a helper may sit below its caller.
+    "eslint/no-use-before-define": ["error", { "functions": false }],
+    // Node's path helpers import by name: `import { join } from 'node:path'`.
+    "unicorn/import-style": [
+      "error",
+      { "styles": { "node:path": { "named": true, "default": false } } }
+    ],
+    // Valibot's documented import is `import * as v`.
+    "import/no-namespace": ["error", { "ignore": ["valibot"] }],
+    // The automatic JSX runtime exports its `JSX` namespace as a declaration.
+    "typescript/no-namespace": ["error", { "allowDeclarations": true }],
+    // `#private` marks the rest.
+    "typescript/explicit-member-accessibility": ["error", { "accessibility": "no-public" }],
+    // A method signature is checked bivariantly even under `strictFunctionTypes`; a property
+    // signature is not.
+    "typescript/method-signature-style": ["error", "property"],
+    // Every named function states its return type; a callback takes its type from where it goes.
+    "typescript/explicit-function-return-type": [
+      "error",
+      { "allowExpressions": true, "allowIIFEs": true }
+    ],
+    "typescript/consistent-type-imports": ["error", { "fixStyle": "inline-type-imports" }],
+    // An assertion is an unchecked claim: annotate, narrow or parse instead. `as const` stays.
+    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/strict-boolean-expressions": [
+      "error",
+      { "allowString": false, "allowNumber": false, "allowNullableObject": false }
+    ],
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      {
+        "requireDefaultForNonUnion": true,
+        "allowDefaultCaseForExhaustiveSwitch": false,
+        "considerDefaultExhaustiveForUnions": false
+      }
+    ],
+    "typescript/restrict-template-expressions": [
+      "error",
+      {
+        "allowAny": false,
+        "allowBoolean": false,
+        "allowNever": false,
+        "allowNullish": false,
+        "allowNumber": true,
+        "allowRegExp": false
+      }
+    ],
+    "typescript/restrict-plus-operands": [
+      "error",
+      {
+        "allowAny": false,
+        "allowBoolean": false,
+        "allowNullish": false,
+        "allowNumberAndString": false,
+        "allowRegExp": false
+      }
+    ],
+    "typescript/no-unnecessary-condition": ["error", { "checkTypePredicates": true }],
     "typescript/consistent-type-definitions": ["error", "interface"],
-    "typescript/array-type": "error",
-    "import/no-cycle": "error",
-
+    "unicorn/switch-case-braces": ["error", "avoid"],
     // `() => undefined` is how a mod's handler says it has no opinion.
     "unicorn/no-useless-undefined": ["error", { "checkArrowFunctionBody": false }],
 
@@ -46,8 +192,36 @@
   "overrides": [
     {
       // Claude Code calls a hook as `($, e, next)` and declares its API so; the adapter keeps to it.
+      // `.catch(($, e, next) => next(e))` there registers a fallback hook, not a promise handler.
       "files": ["packages/targets/claude/src/runtime/**"],
-      "rules": { "eslint/max-params": "off" }
+      "rules": {
+        "eslint/max-params": "off",
+        "eslint/id-length": [
+          "error",
+          { "exceptions": ["v", "_", "$", "e", "h"], "exceptionPatterns": ["^[A-Z]$"] }
+        ],
+        "promise/no-callback-in-promise": "off",
+        "unicorn/catch-error-name": "off"
+      }
+    },
+    {
+      // Ambient declarations for `declare module` must stay a script, not a module.
+      "files": ["**/*.d.ts"],
+      "rules": { "import/unambiguous": "off" }
+    },
+    {
+      // `Mounted` is a class's surface and Claude Code does not document how its objects bind
+      // `this`; a method signature keeps `typescript/unbound-method` guarding a detached call.
+      "files": [
+        "packages/modkit/src/runtime/mount.ts",
+        "packages/targets/claude/src/runtime/claude-code.d.ts"
+      ],
+      "rules": { "typescript/method-signature-style": "off" }
+    },
+    {
+      // tsdown loads its config's default export.
+      "files": ["tsdown.config.ts"],
+      "rules": { "import/no-default-export": "off" }
     },
     {
       "files": ["packages/cli/src/**"],

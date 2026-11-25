@@ -1,5 +1,9 @@
 import { defineConfig } from 'tsdown'
 
+// `isolatedDeclarations` would select oxc, whose declarations drop the doc comments on union
+// members and modules; tsgo keeps them.
+const dts = { generator: 'tsgo' } as const
+
 export default defineConfig([
   {
     cwd: 'packages/modkit',
@@ -9,20 +13,20 @@ export default defineConfig([
       'jsx-runtime': 'src/jsx-runtime.ts',
     },
     platform: 'neutral',
-    dts: true,
+    dts,
   },
   {
     cwd: 'packages/compiler',
     entry: {
       index: 'src/index.ts',
     },
-    dts: true,
+    dts,
   },
   {
     cwd: 'packages/targets/claude',
     entry: { 'codegen/index': 'src/codegen/index.ts' },
     tsconfig: 'src/codegen/tsconfig.json',
-    dts: true,
+    dts,
   },
   {
     cwd: 'packages/targets/claude',
@@ -30,7 +34,7 @@ export default defineConfig([
     tsconfig: 'src/runtime/tsconfig.json',
     platform: 'neutral',
     deps: { neverBundle: ['claude-code', 'modkit-claude:state', 'modkit-claude:env'] },
-    dts: true,
+    dts,
   },
   {
     cwd: 'packages/cli',

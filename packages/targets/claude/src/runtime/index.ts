@@ -48,6 +48,7 @@ import {
   type Surface,
   type ToolResult,
   type ToolRow,
+  type UiNode,
   type Verdict,
 } from '@atuin/modkit'
 
@@ -106,9 +107,9 @@ async function harnessFor($: EngineInterface): Promise<HarnessAdapter> {
   const report = reporterFor($)
   return {
     session: { id: await $.session.id() },
-    cwd: () => $.session.cwd(),
-    root: () => $.session.root(),
-    env: (name) => readEnv($, name),
+    cwd: async () => $.session.cwd(),
+    root: async () => $.session.root(),
+    env: async (name) => readEnv($, name),
     store: {
       get: (key) => stored.get(key),
       set: (key, value) => {
@@ -171,7 +172,7 @@ function syncPanes($: EngineInterface, isPress: boolean): void {
   const { shown, changes } = nextShown({ shown: live.shown, rendered: mounted.view().panes })
   // Kept before any call goes out, so a render while they're under way sees them made.
   live.shown = shown
-  const fail = (error: unknown) => {
+  const fail = (error: unknown): void => {
     live.report({ phase: 'render', error })
   }
   for (const change of changes) {
@@ -185,8 +186,9 @@ function syncPanes($: EngineInterface, isPress: boolean): void {
   }
 }
 
-function answering<T>($: EngineInterface, start: () => Promise<T>): Promise<T> {
+async function answering<T>($: EngineInterface, start: () => Promise<T>): Promise<T> {
   live.isAnswering = true
+  // oxlint-disable-next-line typescript/promise-function-async -- answering is only start's synchronous part, up to its first await
   const done = (() => {
     try {
       return start()
@@ -199,7 +201,7 @@ function answering<T>($: EngineInterface, start: () => Promise<T>): Promise<T> {
 }
 
 function pressOn($: EngineInterface, button: ButtonNode, surface: Surface): void {
-  void answering($, () => button.press({ surface }))
+  void answering($, async () => button.press({ surface }))
 }
 
 const PANE_ID_LENGTH = 64
@@ -228,6 +230,7 @@ function registerSession(on: On, { mod, options }: { mod: Root; options: Options
       // oxlint-disable-next-line no-await-in-loop -- the engine takes registrations one at a time
       await $.command.register({ name: command.name, description: command.description })
     }
+    // oxlint-disable-next-line unicorn/no-array-method-this-argument -- $.clock.every schedules a tick; it is no array's every
     $.clock.every(TICK_MS, () => {
       void mounted.tick()
     })
@@ -248,14 +251,14 @@ function registerSession(on: On, { mod, options }: { mod: Root; options: Options
     live.shown = dismissed({ shown: live.shown, id: e.id })
     await live.mounted?.closed(e.id)
     return closed
-  }).catch((_$, e, next) => next(e))
+  }).catch(async (_$, e, next) => next(e))
 }
 
 function registerShell(on: On): void {
   on('tool.check', { tool: 'Bash' }, async ($, e, next) => {
     const verdict = await next(e)
     const { mounted } = live
-    const command = recordOf(e.input)['command']
+    const { command } = recordOf(e.input)
     if (mounted === undefined || typeof command !== 'string') return verdict
     const call = { id: e.tool_use_id ?? '', command, cwd: await $.session.cwd() }
     return decided($, {
@@ -263,7 +266,7 @@ function registerShell(on: On): void {
       mine: await mounted.beforeShell(call),
       canAsk: e.approver !== undefined,
     })
-  }).catch((_$, e, next) => next(e))
+  }).catch(async (_$, e, next) => next(e))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
@@ -278,15 +281,16 @@ function registerShell(on: On): void {
       failed: ran.isError === true,
     }
     return followedBy($, ran, await mounted.afterShell(result))
-  }).catch((_$, e, next) => next(e))
+  }).catch(async (_$, e, next) => next(e))
 }
 
 function decided(
   $: EngineInterface,
   { verdict, mine, canAsk }: { verdict: ToolCheckResult; mine: Verdict; canAsk: boolean },
 ): ToolCheckResult {
-  if (mine !== undefined && 'ask' in mine && !canAsk && mine.otherwise === 'allow')
+  if (mine !== undefined && 'ask' in mine && !canAsk && mine.otherwise === 'allow') {
     $.ui.toast(mine.ask)
+  }
   return decide({ verdict, mine, canAsk })
 }
 
@@ -360,14 +364,14 @@ export async function drawCards(
   if (cards.length === 0) return next(e)
   const elements = $.ui.resolve(e)
   const drawn = await next(e)
-  const press = (button: ButtonNode) => {
+  const press = (button: ButtonNode): void => {
     pressOn($, button, e.surface)
   }
   const under = draw({ elements, nodes: cards, press, at: 'card' })
   return h(elements.Box, { flexDirection: 'column' }, drawn, ...under)
 }
 
-function paneBody(id: string) {
+function paneBody(id: string): readonly UiNode[] | undefined {
   const view = live.mounted?.view()
   const command = view?.commands.find((one) => paneId(one.name) === id)
   return command?.pane?.body ?? view?.panes.find((pane) => pane.id === id)?.body
@@ -380,7 +384,7 @@ function registerDrawing(on: On): void {
     if (statuses.length === 0) return next(e)
     const elements = $.ui.resolve(e)
     const modes = await next(e)
-    const press = (button: ButtonNode) => {
+    const press = (button: ButtonNode): void => {
       pressOn($, button, e.surface)
     }
     const drawn = statuses.map((status, index) => {
@@ -401,7 +405,7 @@ function registerDrawing(on: On): void {
     const body = paneBody(e.requestId)
     if (body === undefined) return next(e)
     const elements = $.ui.resolve(e)
-    const press = (button: ButtonNode) => {
+    const press = (button: ButtonNode): void => {
       pressOn($, button, e.surface)
     }
     return h(elements.Box, { flexDirection: 'column' }, ...draw({ elements, nodes: body, press }))
@@ -414,18 +418,19 @@ function registerCommands(on: On): void {
     const command = mounted?.view().commands.find((one) => one.name === e.command)
     if (mounted === undefined || command === undefined) return next(e)
     if (command.pane === undefined) {
-      const said = await answering($, () => mounted.ran(command.name))
+      const said = await answering($, async () => mounted.ran(command.name))
       return { text: said ?? '' }
     }
     const id = paneId(command.name)
     const { title } = command.pane
-    if ((await $.ui.panes()).some((pane) => pane.id === id && pane.isShown)) {
+    const panes = await $.ui.panes()
+    if (panes.some((pane) => pane.id === id && pane.isShown)) {
       await $.ui.close({ id })
       return { text: `${title} closed.` }
     }
     const opened = await $.ui.open({ id, title, focus: true })
     return { text: opened.isPlaced ? `${title} opened.` : `${title} waits: ${opened.reason}` }
-  }).catch((_$, e, next) => next(e))
+  }).catch(async (_$, e, next) => next(e))
 }
 
 export function registerHooks(on: On, mod: Root, options: Options): void {

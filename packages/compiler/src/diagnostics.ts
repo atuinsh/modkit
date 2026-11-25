@@ -38,7 +38,13 @@ export interface Diagnostic {
   column: number
 }
 
-function placeOf({ file, position }: { file: SourceFile; position: number }) {
+function placeOf({
+  file,
+  position,
+}: {
+  file: SourceFile
+  position: number
+}): Pick<Diagnostic, 'file' | 'line' | 'column'> {
   const { line, character } = file.getLineAndCharacterOfPosition(position)
   return { file: file.fileName, line: line + 1, column: character + 1 }
 }

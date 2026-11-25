@@ -19,7 +19,7 @@ export interface ButtonNode {
   hotkey: string | undefined
   children: readonly UiNode[]
   /** Invoke the button's `onPress` handler. Exceptions are reported and never thrown. */
-  press(press: Press): Promise<void>
+  press: (press: Press) => Promise<void>
 }
 
 export interface ButtonProps {

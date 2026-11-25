@@ -72,8 +72,8 @@ const inputKey = (input: unknown): string => canonicalize(input ?? null) ?? 'nul
 
 export interface Fetched<T> {
   readonly value: T
-  refresh(): Promise<void>
-  set(value: T): void
+  refresh: () => Promise<void>
+  set: (value: T) => void
 }
 
 export function useQuery<T>(query: Query<undefined, T>): Fetched<T>
@@ -82,14 +82,14 @@ export function useQuery<I, T>(declared: Query<I, T>, input?: I | null): Fetched
   const { scope } = activeFrame('useQuery')
   const { id, schema, initial } = declared
   const key = input === null ? undefined : inputKey(input)
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the scheduler hands `fetch` back the input it was registered with
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- the scheduler hands `fetch` back the input it was registered with
   scope.query({ query: declared as Query<unknown, unknown>, key, input })
   const record = recordOf(scope.store.get(id))
   const held =
     record !== undefined && record.input === key ? v.safeParse(schema, record.value) : undefined
   return {
     value: held?.success === true ? held.output : initial,
-    refresh: () => scope.refresh(id),
+    refresh: async () => scope.refresh(id),
     set: (value) => {
       if (key === undefined) throw new Error(`${id} has no input to hold a value for`)
       const kept = checked({ holder: id, schema, value })

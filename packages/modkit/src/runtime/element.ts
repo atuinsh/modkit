@@ -48,17 +48,15 @@ const unrendered = (name: string) => (): ModNode => {
   throw new Error(`<${name}> is read by modkit's render, never called`)
 }
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- P is the tag's props, which JSX checks
 export function primitive<P, Props, K extends Kind>(definition: Primitive<Props, K>): Component<P> {
   const tag = unrendered(definition.name)
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- render hands a definition the props its schema parsed, and textOf the node of its kind
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- render hands a definition the props its schema parsed, and textOf the node of its kind
   const erased = definition as unknown as Primitive
   PRIMITIVES.set(tag, erased)
   BY_KIND.set(definition.name, erased)
   return tag
 }
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- P is the tag's props, which JSX checks
 export function marker<P>(name: string): Component<P> {
   const tag = unrendered(name)
   MARKERS.set(tag, name)
@@ -67,8 +65,11 @@ export function marker<P>(name: string): Component<P> {
 
 export const primitiveOf = (type: Renderable): Primitive | undefined => PRIMITIVES.get(type)
 
-export const isTag = ({ element, tag }: { element: ModElement; tag: Tag }): boolean =>
-  element.type === (tag as unknown)
+export const isTag = ({ element, tag }: { element: ModElement; tag: Tag }): boolean => {
+  // `Tag` and `Renderable` share no type for `===` to compare them in.
+  const renderable: unknown = tag
+  return element.type === renderable
+}
 
 export const nameOf = (element: ModElement): string =>
   primitiveOf(element.type)?.name ??
@@ -76,7 +77,7 @@ export const nameOf = (element: ModElement): string =>
   (element.type.name === '' ? 'Anonymous' : element.type.name)
 
 /** Group child nodes without adding a wrapper element. */
-export const Fragment = marker<{ children?: ModNode }>('Fragment')
+export const Fragment: Component<{ children?: ModNode }> = marker('Fragment')
 
 /**
  * Flatten resolved UI `nodes` into plain text for text-only surfaces.

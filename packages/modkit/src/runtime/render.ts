@@ -86,13 +86,16 @@ function shellsIn({
   part: string
 }): ModElement[] {
   return partsOf(node).flatMap((one): ModElement[] => {
-    const wrong = () => new TypeError(`${part} returns a <${shell}>, not ${describe(one)}`)
+    const wrong = (): TypeError =>
+      new TypeError(`${part} returns a <${shell}>, not ${describe(one)}`)
     if (!isElement(one)) throw wrong()
     if (isTag({ element: one, tag: SHELLS[shell] })) return [one]
-    if (isTag({ element: one, tag: Fragment }))
+    if (isTag({ element: one, tag: Fragment })) {
       return shellsIn({ scope, node: childrenOf(one), shell, part })
-    if (primitiveOf(one.type) !== undefined || isTag({ element: one, tag: SHELLS[OTHER[shell]] }))
+    }
+    if (primitiveOf(one.type) !== undefined || isTag({ element: one, tag: SHELLS[OTHER[shell]] })) {
       throw new TypeError(`${part} returns a <${shell}>, not a <${nameOf(one)}>`)
+    }
     return shellsIn({ scope, node: called({ scope, element: one }), shell, part })
   })
 }
@@ -141,15 +144,18 @@ function commandOf({
   command: NonNullable<Checked['commands']>[string]
 }): CommandView {
   const { description, skill, run, pane } = command
-  if ((run === undefined) === (pane === undefined))
+  if ((run === undefined) === (pane === undefined)) {
     throw new Error(`/${name} runs its \`run\` or toggles its \`pane\`: one of them, not both`)
+  }
   if (pane === undefined) return { name, description, skill, pane: undefined }
   const part = `/${name}'s pane`
   const [element, ...rest] = shellsIn({ scope, node: componentOf(pane), shell: 'Pane', part })
-  if (element === undefined || rest.length > 0)
+  if (element === undefined || rest.length > 0) {
     throw new Error(`${part} returns exactly one <Pane>`)
-  if (element.props['id'] !== undefined || element.props['onClose'] !== undefined)
+  }
+  if (element.props['id'] !== undefined || element.props['onClose'] !== undefined) {
     throw new Error(`${part} is named by the command, and takes no id or onClose`)
+  }
   const { title } = checked({
     holder: `<${nameOf(element)}>`,
     schema: CommandPanePropsSchema,
@@ -163,10 +169,16 @@ function commandOf({
   }
 }
 
-const byTool = (handlers: Readonly<Record<string, Callback>> | undefined) =>
+const byTool = (handlers: Readonly<Record<string, Callback>> | undefined): Map<string, Callback> =>
   new Map(Object.entries(handlers ?? {}))
 
-function exceptBash({ handlers, part }: { handlers: Checked['beforeTool']; part: string }) {
+function exceptBash({
+  handlers,
+  part,
+}: {
+  handlers: Checked['beforeTool']
+  part: string
+}): Map<string, Callback> {
   if (handlers !== undefined && 'Bash' in handlers) {
     const shell = part.replace('Tool', 'Shell')
     throw new Error(`${part}.Bash is ${shell}, which hands it the command`)
@@ -174,7 +186,10 @@ function exceptBash({ handlers, part }: { handlers: Checked['beforeTool']; part:
   return byTool(handlers)
 }
 
-function panesOf({ scope, panes }: { scope: RenderScope; panes: readonly Callback[] }) {
+function panesOf({ scope, panes }: { scope: RenderScope; panes: readonly Callback[] }): {
+  views: PaneView[]
+  onClose: Map<string, Callback>
+} {
   const elements = panes.flatMap((pane) =>
     shellsIn({ scope, node: componentOf(pane), shell: 'Pane', part: 'a pane' }),
   )
@@ -202,7 +217,7 @@ export function render({
   settings: object
   scope: RenderScope
 }): Rendered {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mount matched the settings to the mod's
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- mount matched the settings to the mod's
   const root = componentOf(setup as unknown as Callback)
   const parts = checkedParts(
     withFrame({ scope, component: 'mod' }, () => root.type({ ...settings })),

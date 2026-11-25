@@ -14,11 +14,11 @@ export interface RenderScope {
   readonly harness: Harness
   readonly store: Store
   /** Persist `stored` under `key` and trigger a re-render. */
-  write(change: { key: string; stored: Stored }): void
+  write: (change: { key: string; stored: Stored }) => void
   /** Wrap a button `onPress` so thrown errors are reported to the adapter instead of thrown. */
-  action(onPress: Callback): (press: Press) => Promise<void>
-  query(registration: QueryRegistration): void
-  refresh(id: string): Promise<void>
+  action: (onPress: Callback) => (press: Press) => Promise<void>
+  query: (registration: QueryRegistration) => void
+  refresh: (id: string) => Promise<void>
 }
 
 /** Active component execution frame exposed to hooks via {@link activeFrame}. */
@@ -42,7 +42,7 @@ export function withFrame<T>(frame: Frame, fn: () => T): T {
 /**
  * Return the innermost active render {@link Frame}.
  *
- * @throws If called outside of a component render (`hook` names the caller in the error).
+ * @throws {Error} If called outside of a component render (`hook` names the caller in the error).
  */
 export function activeFrame(hook: string): Frame {
   const frame = frames.at(-1)

@@ -31,7 +31,7 @@ import {
 } from './program.ts'
 import type { Field, Item, Shape } from './shape.ts'
 
-interface NotJson {
+export interface NotJson {
   path: string
   found: string
 }
@@ -40,6 +40,7 @@ interface NotJson {
 export type ShapeResult = { isJson: true; shape: Shape } | { isJson: false; notJson: NotJson }
 
 class NotJsonError extends Error {
+  override readonly name = 'NotJsonError'
   readonly notJson: NotJson
 
   constructor(notJson: NotJson) {
@@ -114,8 +115,9 @@ function fieldOf({
   const optional = (property.flags & SymbolFlags.Optional) !== 0
   const inner = into({ walk, step: `.${property.name}`, container })
   const type = walk.checker.getTypeOfSymbol(property)
-  if (type === undefined)
+  if (type === undefined) {
     return refuse({ walk: inner, found: 'a field TypeScript has no type for' })
+  }
   return {
     name: property.name,
     shape: optional ? presentShape({ walk: inner, type }) : shapeIn(inner, type),
@@ -133,8 +135,9 @@ function objectShape(walk: Walk, type: Type): Shape {
   if (symbol !== undefined && (symbol.flags & SymbolFlags.Class) !== 0) {
     refuse({ walk, found: `an instance of ${symbol.name}` })
   }
-  if (symbol !== undefined && isLibraryInterface({ walk, symbol }))
+  if (symbol !== undefined && isLibraryInterface({ walk, symbol })) {
     refuse({ walk, found: `a ${symbol.name}` })
+  }
   const [index] = checker.getIndexInfosOfType(type)
   return {
     kind: 'object',
@@ -187,14 +190,20 @@ function shapeIn(walk: Walk, type: Type): Shape {
   if (at !== -1) return { kind: 'self', up: walk.within.length - at }
   const primitive = primitiveOf(walk, type)
   if (primitive !== undefined) return primitive
-  if (isUnionType(type))
+  if (isUnionType(type)) {
     return { kind: 'union', of: type.getTypes().map((member) => shapeIn(walk, member)) }
+  }
   if (isIntersectionType(type)) {
     const brand = type.getTypes().find((member) => hasAnyFlag({ type: member, flags: PRIMITIVE }))
     return brand === undefined ? objectShape(walk, type) : shapeIn(walk, brand)
   }
-  if (!hasAnyFlag({ type, flags: TypeFlags.Object }))
+  if (!hasAnyFlag({ type, flags: TypeFlags.Object })) {
     return refuse({ walk, found: walk.checker.typeToString(type) })
+  }
+  return containerShape(walk, type)
+}
+
+function containerShape(walk: Walk, type: Type): Shape {
   if (isTypeReference(type) && walk.checker.isArrayType(type)) {
     const [element] = walk.checker.getTypeArguments(type)
     if (element === undefined) return refuse({ walk, found: 'an array of no element type' })
