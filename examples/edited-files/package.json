@@ -1,0 +1,41 @@
+{
+  "name": "edited-files",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Counts the files the agent wrote or edited",
+  "type": "module",
+  "scripts": {
+    "build": "modkit build",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@atuin/modkit": "workspace:*",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@atuin/modkit-claude-code": "workspace:*",
+    "@atuin/modkit-cli": "workspace:*",
+    "@atuin/modkit-codex": "workspace:*",
+    "@atuin/modkit-opencode": "workspace:*",
+    "@atuin/modkit-pi": "workspace:*",
+    "typescript": "catalog:"
+  },
+  "modkit": {
+    "targets": [
+      "claude-code",
+      "codex",
+      "pi",
+      "opencode"
+    ],
+    "codex": {
+      "gaps": [
+        "status"
+      ]
+    },
+    "opencode": {
+      "gaps": [
+        "status"
+      ]
+    }
+  }
+}

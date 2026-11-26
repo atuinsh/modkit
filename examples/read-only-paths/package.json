@@ -1,0 +1,30 @@
+{
+  "name": "read-only-paths",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Denies the agent writing under the paths its settings name",
+  "type": "module",
+  "scripts": {
+    "build": "modkit build",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@atuin/modkit": "workspace:*"
+  },
+  "devDependencies": {
+    "@atuin/modkit-claude-code": "workspace:*",
+    "@atuin/modkit-cli": "workspace:*",
+    "@atuin/modkit-codex": "workspace:*",
+    "@atuin/modkit-opencode": "workspace:*",
+    "@atuin/modkit-pi": "workspace:*",
+    "typescript": "catalog:"
+  },
+  "modkit": {
+    "targets": [
+      "claude-code",
+      "codex",
+      "pi",
+      "opencode"
+    ]
+  }
+}

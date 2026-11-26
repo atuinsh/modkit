@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@atuin/modkit",
+    // A mod is built by `modkit build`, which emits no declarations from it.
+    "isolatedDeclarations": false,
+    "declaration": false
+  },
+  "include": ["*.ts", "*.tsx"]
+}

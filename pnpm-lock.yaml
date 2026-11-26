@@ -213,6 +213,330 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  examples/branch-status:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/confirm-force-push:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/denied-commands:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/edited-files:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/explain-failure:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/failure-cards:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/failures:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/mcp-status:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/project-root:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/read-only-paths:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/shell-output:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  examples/signal-hints:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   modkit:
     dependencies:
       canonicalize:
