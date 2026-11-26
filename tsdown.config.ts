@@ -75,6 +75,19 @@ export default defineConfig([
     dts,
   },
   {
+    cwd: 'modkit-pi',
+    entry: { 'codegen/index': 'src/codegen/index.ts' },
+    tsconfig: 'src/codegen/tsconfig.json',
+    dts,
+  },
+  {
+    cwd: 'modkit-pi',
+    entry: { 'runtime/index': 'src/runtime/index.ts' },
+    tsconfig: 'src/runtime/tsconfig.json',
+    deps: { neverBundle: [/^@earendil-works\//u] },
+    dts,
+  },
+  {
     cwd: 'modkit-cli',
     entry: { main: 'src/main.ts' },
   },
