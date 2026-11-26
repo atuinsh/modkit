@@ -244,7 +244,7 @@
     },
     {
       // A target builds on modkit-target alone, so the contract is all it can depend on.
-      "files": ["modkit-claude-code/src/**"],
+      "files": ["modkit-claude-code/src/**", "modkit-codex/src/**", "modkit-target-node/src/**"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -263,6 +263,13 @@
           }
         ]
       }
+    },
+    {
+      // Runs as a process the harness starts, whose environment says where its files are and what
+      // the person set. A harness's API is async, and such a process has most of what it asks for
+      // in hand.
+      "files": ["modkit-codex/src/runtime/**", "modkit-target-node/src/runtime/**"],
+      "rules": { "node/no-process-env": "off", "typescript/require-await": "off" }
     },
     {
       "files": ["modkit-cli/src/**"],

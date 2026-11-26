@@ -50,6 +50,31 @@ export default defineConfig([
     dts,
   },
   {
+    cwd: 'modkit-target-node',
+    entry: { 'codegen/index': 'src/codegen/index.ts' },
+    tsconfig: 'src/codegen/tsconfig.json',
+    dts,
+  },
+  {
+    cwd: 'modkit-target-node',
+    entry: ['src/runtime/*.ts'],
+    outDir: 'dist/runtime',
+    tsconfig: 'src/runtime/tsconfig.json',
+    dts,
+  },
+  {
+    cwd: 'modkit-codex',
+    entry: { 'codegen/index': 'src/codegen/index.ts' },
+    tsconfig: 'src/codegen/tsconfig.json',
+    dts,
+  },
+  {
+    cwd: 'modkit-codex',
+    entry: { 'runtime/index': 'src/runtime/index.ts' },
+    tsconfig: 'src/runtime/tsconfig.json',
+    dts,
+  },
+  {
     cwd: 'modkit-cli',
     entry: { main: 'src/main.ts' },
   },

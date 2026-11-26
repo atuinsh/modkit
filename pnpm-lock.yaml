@@ -278,6 +278,31 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  modkit-codex:
+    dependencies:
+      '@atuin/modkit-target-node':
+        specifier: workspace:*
+        version: link:../modkit-target-node
+      es-toolkit:
+        specifier: 'catalog:'
+        version: 1.53.2
+      knitwork:
+        specifier: ^1.3.0
+        version: 1.3.0
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-target':
+        specifier: workspace:*
+        version: link:../modkit-target
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   modkit-compiler:
     dependencies:
       '@sindresorhus/slugify':
@@ -315,6 +340,28 @@ importers:
       '@atuin/modkit':
         specifier: workspace:*
         version: link:../modkit
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  modkit-target-node:
+    dependencies:
+      es-toolkit:
+        specifier: 'catalog:'
+        version: 1.53.2
+      rolldown:
+        specifier: ^1.3.2
+        version: 1.3.2
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-target':
+        specifier: workspace:*
+        version: link:../modkit-target
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6

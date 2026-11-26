@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // Bundled into a mod for a host that runs it in Node or Bun.
+    "types": ["node"]
+  },
+  "include": ["."]
+}

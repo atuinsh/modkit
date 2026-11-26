@@ -1,0 +1,27 @@
+{
+  "name": "@atuin/modkit-codex",
+  "private": true,
+  "description": "Codex plugins: plugin.json, .mcp.json, hooks.json and the mod's own MCP server",
+  "type": "module",
+  "exports": {
+    "./codegen": "./src/codegen/index.ts",
+    "./runtime": "./src/runtime/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p src/runtime && tsc -p src/codegen"
+  },
+  "dependencies": {
+    "@atuin/modkit-target-node": "workspace:*",
+    "es-toolkit": "catalog:",
+    "knitwork": "^1.3.0",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@atuin/modkit-target": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@atuin/modkit-target": "workspace:^"
+  }
+}
