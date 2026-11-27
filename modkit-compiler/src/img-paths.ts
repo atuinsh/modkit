@@ -4,9 +4,10 @@
  *
  * An `image` attribute names its paths with a string literal, or an expression whose type is one or
  * a union of them. A `{...spread}` can set `image` too: one whose type always holds an `image`
- * replaces the paths so far, one whose `image` is optional adds to them, and one whose `image` the
- * build can't read, as of an `any` or an index signature, fails the build, since it could draw a
- * PNG the build never embedded.
+ * replaces the paths so far, and one whose `image` is optional adds to them. An attribute or spread
+ * whose `image` the build can't read, such as a `string`, an `any` or an index signature, leaves the
+ * paths unknown until a later one always sets `image` over it; still unknown after the last, it
+ * fails the build, since it could draw a PNG the build never embedded.
  *
  * @module
  */
@@ -34,6 +35,11 @@ interface Named {
 }
 
 const UNSET: Named = { paths: new Map(), isSet: false }
+
+// The paths so far, or the diagnostic naming the attribute that left them unknown.
+type Read = Named | Diagnostic
+
+const isUnknown = (read: Read): read is Diagnostic => 'code' in read
 
 // What a spread sets `image` to: the paths it can set, and whether it always sets one.
 interface SpreadImage {
@@ -124,37 +130,39 @@ function spreadImageOf({
   }
 }
 
-// `named` once `spread`, the next of an `<Img>`'s attributes, applies over it.
+// `read` once `spread`, the next of an `<Img>`'s attributes, applies over it.
 function spreadOver({
   project,
   spread,
-  named,
+  read,
 }: {
   project: Project
   spread: syntax.JsxSpreadAttribute
-  named: Named
-}): Named | Diagnostic {
+  read: Read
+}): Read {
   const image = spreadImageOf({ project, spread })
   if (image === undefined) {
     return diagnosticAt({ code: 'image', message: SPREAD_MESSAGE, node: spread })
   }
   const set = image.paths.map((path): [string, Node] => [path, spread])
   if (image.isSet) return { paths: new Map(set), isSet: true }
-  return { paths: new Map([...named.paths, ...set]), isSet: named.isSet }
+  // A spread that only may set `image` leaves one the build can't know as unknown as it was.
+  if (isUnknown(read)) return read
+  return { paths: new Map([...read.paths, ...set]), isSet: read.isSet }
 }
 
-// `named` once `property`, the next of an `<Img>`'s attributes, applies over it.
+// `read` once `property`, the next of an `<Img>`'s attributes, applies over it.
 function appliedOf({
   project,
   property,
-  named,
+  read,
 }: {
   project: Project
   property: Node
-  named: Named
-}): Named | Diagnostic {
-  if (syntax.isJsxSpreadAttribute(property)) return spreadOver({ project, spread: property, named })
-  if (!isImageAttribute(property)) return named
+  read: Read
+}): Read {
+  if (syntax.isJsxSpreadAttribute(property)) return spreadOver({ project, spread: property, read })
+  if (!isImageAttribute(property)) return read
   const paths = writtenPathsOf({ project, attribute: property })
   if (paths === undefined) {
     return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: property })
@@ -171,12 +179,11 @@ export function pathsOf({
   project: Project
   element: syntax.JsxSelfClosingElement | syntax.JsxOpeningElement
 }): NamedPaths | Diagnostic {
-  let named = UNSET
+  let read: Read = UNSET
   for (const property of element.attributes.properties) {
-    const applied = appliedOf({ project, property, named })
-    if ('code' in applied) return applied
-    named = applied
+    read = appliedOf({ project, property, read })
   }
-  if (named.isSet) return named.paths
+  if (isUnknown(read)) return read
+  if (read.isSet) return read.paths
   return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: element })
 }
