@@ -1,0 +1,61 @@
+/**
+ * What a target tells `modkit dev`, which runs each target's harness on the mod's build in a pane
+ * of its own and brings it onto each rebuild.
+ *
+ * @module
+ */
+
+/** The environment `modkit dev` runs in, which the harnesses it starts inherit. */
+export type Env = Readonly<Record<string, string | undefined>>
+
+/** A session of a harness that `modkit dev` keeps across restarts of the harness. */
+export interface DevSession {
+  /** A UUID, which a target spells the way its harness spells a session's id. */
+  id: string
+  /** Whether `modkit dev` has started the harness on this session before. */
+  hasStarted: boolean
+}
+
+/** What `modkit dev` runs in a harness's pane: `claude --plugin-dir dist/claude-code`. */
+export interface DevCommand {
+  /** The program, looked up on `PATH`: `claude`. */
+  program: string
+  args: readonly string[]
+  /** Variables set over the environment `modkit dev` runs in. */
+  env: Readonly<Record<string, string>>
+}
+
+/** How a rebuild reaches a running harness. */
+export type Reload =
+  /** The harness watches the build and loads a rebuild itself, as Claude Code does `--plugin-dir`. */
+  | 'watched'
+  /** `modkit dev` restarts the harness on the same session. */
+  | 'restarted'
+
+/** What a target's `dev` is handed. */
+export interface DevInput {
+  /** The directory the target's build is in, `<out>/<target name>`. */
+  out: string
+  /** The harness's name for the package the build wrote, `atuin-mod`. */
+  plugin: string
+  /** A directory the harness may keep files in while `modkit dev` runs. */
+  scratch: string
+  env: Env
+}
+
+/** The harness `modkit dev` runs a target's build in, for as long as `modkit dev` runs. */
+export interface DevHarness {
+  /** How a rebuild reaches the harness once it runs. */
+  readonly reload: Reload
+  /**
+   * The paths under the build the harness writes itself, relative to it, if any: a change to
+   * them is no new build.
+   */
+  readonly writes?: readonly string[]
+  /** The command that starts the harness on the build, in `session`. */
+  command: (session: DevSession) => DevCommand
+  /** Ready the harness for the build just written, before it starts or restarts on it, if needed. */
+  built?: () => Promise<void>
+  /** Undo what {@link DevHarness.built} changed outside the build. */
+  close?: () => Promise<void>
+}

@@ -22,6 +22,7 @@ import { build } from 'rolldown'
 import { Target, type ModkitTarget } from '@atuin/modkit-target'
 
 import { CLAUDE_CODE_CAPABILITIES } from '../spec.ts'
+import { claudeCodeDev } from './dev.ts'
 import { envSource } from './env.ts'
 import { manifestOf } from './manifest.ts'
 import { entrySource, StateModule } from './state.ts'
@@ -69,6 +70,7 @@ async function bundle({
 /** The Claude Code target, which the CLI loads for a mod that lists `claude-code`. */
 export const target: ModkitTarget<undefined> = Target.define('claude-code')
   .capabilities(CLAUDE_CODE_CAPABILITIES)
+  .dev(claudeCodeDev)
   .build(({ compiled, dir, out, plugin, emit }) => {
     const { mod, entry, state, options, env, tools, images } = compiled
     const pluginName = plugin.toString()

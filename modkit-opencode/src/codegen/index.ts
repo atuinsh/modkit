@@ -50,6 +50,16 @@ function emitTui({
 export const target: ModkitTarget<undefined> = Target.define('opencode')
   .capabilities(OPENCODE_CAPABILITIES)
   .knownTools(OPENCODE_TOOLS)
+  .dev(({ out }) => ({
+    reload: 'restarted',
+    command: ({ id }) => ({
+      program: 'opencode',
+      // A private server reads the config in this environment; the shared background one
+      // already read its own.
+      args: ['--standalone', '--session', `ses_${id.replaceAll('-', '')}`],
+      env: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugins: [out] }) },
+    }),
+  }))
   .build(({ compiled, dir, out, plugin, emit }) => {
     const { mod, entry, state, options, images } = compiled
     const pluginName = plugin.toString()

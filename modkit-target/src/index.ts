@@ -24,6 +24,7 @@ export {
   type TargetBuildContext,
   type TargetBuilt,
 } from './define.ts'
+export type { DevCommand, DevHarness, DevInput, DevSession, Env, Reload } from './dev.ts'
 export { Result } from './host/result.ts'
 export { HarnessTools } from './host/tools.ts'
 export { errorMessage } from './host/values.ts'

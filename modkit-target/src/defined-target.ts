@@ -5,6 +5,7 @@ import type * as v from 'valibot'
 
 import type { Diagnostic } from '@atuin/modkit-compiler'
 
+import type { DevHarness, DevInput } from './dev.ts'
 import type { Capabilities } from './host/capabilities.ts'
 import type { HarnessTools } from './host/tools.ts'
 import { PluginName } from './plugin-name.ts'
@@ -40,12 +41,16 @@ export type TargetBuilt =
   | { readonly isOk: false; readonly diagnostics: readonly Diagnostic[] }
   | undefined
 
+/** How a target runs its harness on its build for `modkit dev`. */
+export type DevOf = (input: DevInput) => DevHarness
+
 export interface TargetConfig<Options> {
   readonly name: string
   readonly capabilities: Capabilities
   readonly options: v.GenericSchema<unknown, Options>
   readonly tools: HarnessTools | undefined
   readonly build: (ctx: TargetBuildContext<Options>) => Promise<TargetBuilt> | TargetBuilt
+  readonly dev: DevOf | undefined
 }
 
 type PendingArtifact =
@@ -76,6 +81,16 @@ async function flush({
       : writeFile(dest, artifact.content))
   }
 }
+
+// What `modkit dev` runs in the pane of a target that declares no harness for it.
+const noHarness = (name: string): DevHarness => ({
+  reload: 'restarted',
+  command: () => ({
+    program: 'echo',
+    args: [`${name} declares no harness for modkit dev`],
+    env: {},
+  }),
+})
 
 export class DefinedTarget<Options> extends ModkitTarget<Options> {
   override readonly name: string
@@ -116,5 +131,9 @@ export class DefinedTarget<Options> extends ModkitTarget<Options> {
     const missing =
       this.#config.tools === undefined ? [] : this.#config.tools.missingNotes(input.compiled.tools)
     return { isOk: true, plugin: plugin.toString(), notes: [...(result?.notes ?? []), ...missing] }
+  }
+
+  override dev(input: DevInput): DevHarness {
+    return this.#config.dev?.(input) ?? noHarness(this.name)
   }
 }

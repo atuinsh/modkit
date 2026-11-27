@@ -1,6 +1,11 @@
 import * as v from 'valibot'
 
-import { DefinedTarget, type TargetBuildContext, type TargetBuilt } from './defined-target.ts'
+import {
+  DefinedTarget,
+  type DevOf,
+  type TargetBuildContext,
+  type TargetBuilt,
+} from './defined-target.ts'
 import type { Capabilities } from './host/capabilities.ts'
 import type { HarnessTools } from './host/tools.ts'
 import type { ModkitTarget } from './target.ts'
@@ -18,22 +23,26 @@ export class TargetBuilder<Options> {
   readonly #capabilities: Capabilities
   readonly #options: v.GenericSchema<unknown, Options>
   readonly #tools: HarnessTools | undefined
+  readonly #dev: DevOf | undefined
 
   constructor({
     name,
     capabilities,
     options,
     tools,
+    dev,
   }: {
     name: string
     capabilities: Capabilities
     options: v.GenericSchema<unknown, Options>
     tools: HarnessTools | undefined
+    dev: DevOf | undefined
   }) {
     this.#name = name
     this.#capabilities = capabilities
     this.#options = options
     this.#tools = tools
+    this.#dev = dev
   }
 
   /** Declare the Valibot schema for target-specific `package.json` options. */
@@ -43,6 +52,7 @@ export class TargetBuilder<Options> {
       capabilities: this.#capabilities,
       options: schema,
       tools: this.#tools,
+      dev: this.#dev,
     })
   }
 
@@ -53,6 +63,18 @@ export class TargetBuilder<Options> {
       capabilities: this.#capabilities,
       options: this.#options,
       tools,
+      dev: this.#dev,
+    })
+  }
+
+  /** Declare how `modkit dev` runs the harness on the target's build. */
+  dev(fn: DevOf): TargetBuilder<Options> {
+    return new TargetBuilder({
+      name: this.#name,
+      capabilities: this.#capabilities,
+      options: this.#options,
+      tools: this.#tools,
+      dev: fn,
     })
   }
 
@@ -66,6 +88,7 @@ export class TargetBuilder<Options> {
       options: this.#options,
       tools: this.#tools,
       build: fn,
+      dev: this.#dev,
     })
   }
 }
@@ -80,6 +103,12 @@ export interface NamedTargetBuilder {
 export const Target: { readonly define: (name: string) => NamedTargetBuilder } = {
   define: (name) => ({
     capabilities: (capabilities) =>
-      new TargetBuilder({ name, capabilities, options: NO_OPTIONS, tools: undefined }),
+      new TargetBuilder({
+        name,
+        capabilities,
+        options: NO_OPTIONS,
+        tools: undefined,
+        dev: undefined,
+      }),
   }),
 }
