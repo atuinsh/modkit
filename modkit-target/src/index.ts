@@ -9,6 +9,15 @@
  */
 
 export { NATIVE, type Capabilities, type Support } from './capabilities.ts'
+export {
+  defineTarget,
+  type ArtifactWriter,
+  type KnownTools,
+  type TargetBuildContext,
+  type TargetBuilt,
+  type TargetSpec,
+  type TargetSpecWithOptions,
+} from './define.ts'
 export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
 export { ModPackage } from './package.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'

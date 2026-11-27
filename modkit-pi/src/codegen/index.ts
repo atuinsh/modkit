@@ -1,20 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { genImport, genObjectFromValues } from 'knitwork'
-import * as v from 'valibot'
 
-import {
-  ModkitTarget,
-  NATIVE,
-  pluginNameOf,
-  type BuildInput,
-  type Built,
-  type Capabilities,
-  type ModInfo,
-} from '@atuin/modkit-target'
-import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
+import { defineTarget, NATIVE, type ModInfo, type ModkitTarget } from '@atuin/modkit-target'
+import { bundle, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 
@@ -30,10 +20,6 @@ const PI_TOOLS: ReadonlySet<string> = new Set([
   'ls',
   'powershell',
 ])
-
-const JSON_INDENT_SPACES = 2
-
-const json = (value: unknown): string => `${JSON.stringify(value, null, JSON_INDENT_SPACES)}\n`
 
 const packageJsonOf = ({ plugin, mod }: { plugin: string; mod: ModInfo }): unknown => ({
   name: plugin,
@@ -62,15 +48,9 @@ function notesOf({
   ]
 }
 
-// No option of a mod's is pi's yet, so its section holds only the gaps it accepts.
-const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
-  v.strictObject({}),
-  v.transform(() => undefined),
-)
-
-class PiTarget extends ModkitTarget<undefined> {
-  override readonly name = 'pi'
-  override readonly capabilities: Capabilities = {
+export const target: ModkitTarget<undefined> = defineTarget({
+  name: 'pi',
+  capabilities: {
     status: NATIVE,
     commands: NATIVE,
     panes: NATIVE,
@@ -82,12 +62,10 @@ class PiTarget extends ModkitTarget<undefined> {
       kind: 'lowered',
       why: "pi draws a card's buttons but can't press them, since its transcript rows take no keys",
     },
-  }
-  override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
-
-  override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools, hooks } = compiled
-    const plugin = pluginNameOf(mod.name)
+  },
+  tools: { harness: 'pi', has: PI_TOOLS },
+  build: ({ compiled, dir, out, plugin, emit }) => {
+    const { mod, entry, state, options, hooks } = compiled
     const served = {
       plugin,
       settings: options.map((option) => settingOf(option)),
@@ -102,18 +80,10 @@ class PiTarget extends ModkitTarget<undefined> {
       `export default extensionOf({ mod, ...${genObjectFromValues(served)} })`,
       '',
     ].join('\n')
-    await mkdir(out, { recursive: true })
-    await bundle({ dir, entry: source, file: join(out, 'extension.js'), external: PROVIDED })
-    await writeFile(join(out, 'package.json'), json(packageJsonOf({ plugin, mod })))
-    return {
-      isOk: true,
-      plugin,
-      notes: [
-        ...notesOf({ out, plugin, hasSettings: options.length > 0 }),
-        ...missingToolNotes({ tools, harness: 'pi', has: PI_TOOLS }),
-      ],
-    }
-  }
-}
-
-export const target: ModkitTarget<undefined> = new PiTarget()
+    emit.write(async (dest) =>
+      bundle({ dir, entry: source, file: join(dest, 'extension.js'), external: PROVIDED }),
+    )
+    emit.json('package.json', packageJsonOf({ plugin, mod }))
+    return { notes: notesOf({ out, plugin, hasSettings: options.length > 0 }) }
+  },
+})
