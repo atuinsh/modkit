@@ -17,8 +17,7 @@ import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-targe
 import type { SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 
-import { hooksJsonOf } from './hooks.ts'
-import { mcpJsonOf, pluginJsonOf } from './manifest.ts'
+import { manifestsOf } from './manifest.ts'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 
@@ -106,10 +105,16 @@ class CodexTarget extends ModkitTarget<undefined> {
     await bundle({ dir, entry: entrySource({ mod: entry, served }), file: join(out, 'server.mjs') })
     await mkdir(join(out, '.codex-plugin'), { recursive: true })
     await mkdir(join(out, 'hooks'), { recursive: true })
-    await writeFile(join(out, '.codex-plugin', 'plugin.json'), json(pluginJsonOf({ plugin, mod })))
-    await writeFile(join(out, '.mcp.json'), json(mcpJsonOf({ plugin, env })))
-    const hooks = hooksJsonOf({ plugin, hasBeforeShell: modparts.beforeShell !== undefined, tools })
-    await writeFile(join(out, 'hooks', 'hooks.json'), json(hooks))
+    const manifests = manifestsOf({
+      plugin,
+      mod,
+      env,
+      hasBeforeShell: modparts.beforeShell !== undefined,
+      tools,
+    })
+    await writeFile(join(out, '.codex-plugin', 'plugin.json'), json(manifests.plugin))
+    await writeFile(join(out, '.mcp.json'), json(manifests.mcp))
+    await writeFile(join(out, 'hooks', 'hooks.json'), json(manifests.hooks))
     return {
       isOk: true,
       plugin,

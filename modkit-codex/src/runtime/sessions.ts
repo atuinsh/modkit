@@ -7,9 +7,9 @@ import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtim
 import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { Mod, Options } from '@atuin/modkit-target/host'
 
+import { serverNameOf } from '../protocol'
 import { configuredServer } from './configured'
 import { harnessFor, reporterFor, type SessionState } from './harness'
-import { serverNameOf } from './names'
 import { CodexRuntime, type CodexSession } from './runtime'
 
 export interface Served {

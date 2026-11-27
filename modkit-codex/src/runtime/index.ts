@@ -8,17 +8,16 @@ import {
 import { peerOn, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
 import type { Followup } from '@atuin/modkit-target/host'
 
-import { answerOf, ASK_SCHEMA, decide, type Answer } from './ask'
 import {
   carriesContext,
-  hookEventOf,
-  hookOutputOf,
-  withFollowup,
-  type Decision,
-  type Delivered,
+  HOOK_TOOL,
+  parseHook,
+  serverNameOf,
+  STATUSLINE_TOOL,
   type HookEvent,
-} from './hooks'
-import { HOOK_TOOL, serverNameOf, STATUSLINE_TOOL } from './names'
+} from '../protocol'
+import { answerOf, ASK_SCHEMA, decide, type Answer } from './ask'
+import { hookOutputOf, withFollowup, type Decision, type Delivered } from './hooks'
 import { Sessions, type Live, type Served } from './sessions'
 import { statusLineOf } from './statusline'
 
@@ -174,7 +173,7 @@ class Server {
   }
 
   async #hook(args: unknown): Promise<Json> {
-    const event = hookEventOf(args)
+    const event = parseHook(args)
     const live = await this.#sessions.open({ id: event.session, cwd: event.cwd })
     const { decision, followup } = await this.#acted({ live, event })
     const delivered = withFollowup({ delivered: drained({ live, event: event.event }), followup })
