@@ -112,6 +112,7 @@ function sessionsOf({
   const settings = settingsOf({ decls: served.settings, given: ctx.options, where })
   return new Sessions({
     mod: served.mod,
+    images: served.images,
     options: settings.isOk ? settings.options : undefined,
     problems: settings.problems.map((problem) => `${plugin}: ${problem}`),
     ports: {

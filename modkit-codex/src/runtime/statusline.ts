@@ -67,6 +67,8 @@ function elementOf(node: UiNode): LineElement | undefined {
       return { type: 'row', props: { gap: node.gap }, children: elementsOf(node.children) }
     case 'Button':
       return { type: 'text', children: elementsOf(node.children) }
+    case 'Img':
+      return leafOf(node.fallback)
     case 'Markdown':
       break
   }

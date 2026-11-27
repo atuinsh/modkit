@@ -100,13 +100,13 @@ class ClaudeCodeTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, env, tools } = compiled
+    const { mod, entry, state, options, env, tools, images } = compiled
     const plugin = pluginNameOf(mod.name)
     await bundle({
       dir,
       out,
       modules: new Map([
-        [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools })],
+        [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools, images })],
         [STATE, new StateModule({ plugin, state }).source()],
         [ENV, envSource(env)],
       ]),

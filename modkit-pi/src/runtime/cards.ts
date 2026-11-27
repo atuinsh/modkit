@@ -68,7 +68,7 @@ export class Cards {
             const under = linesOf({
               nodes: cards,
               width,
-              paint: paintOf({ theme, hasKeys: false }),
+              paint: paintOf({ theme, hasKeys: false, drawsImages: true }),
             })
             return [...(drawn?.render(width) ?? []), ...under]
           },

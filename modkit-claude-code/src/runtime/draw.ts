@@ -6,6 +6,10 @@
  * node are wrapped in one. Every emitted element receives a deterministic key (`at.<index>`, or
  * explicit `key` / `hotkey:<k>` on buttons).
  *
+ * An `Img` is Claude Code's `Image` where the surface has one, the terminal's: Claude Code picks the
+ * protocol, and draws the fallback as the `alt` where the terminal speaks none. Every other surface
+ * refuses a tree holding an `Image`, so draws the fallback as text.
+ *
  * @module
  */
 
@@ -14,6 +18,7 @@ import type { Elements, RenderNode } from 'claude-code'
 import {
   textOf,
   type ButtonNode,
+  type ImgNode,
   type StackNode,
   type TextNode,
   type Tone,
@@ -87,6 +92,8 @@ export class Drawing {
           return h(elements.Box, { key, ...boxProps(node) }, ...this.nodes(node.children, key))
         case 'Button':
           return this.#button(node, key)
+        case 'Img':
+          return this.#image(node, key)
         case 'Markdown':
           break
       }
@@ -108,6 +115,19 @@ export class Drawing {
       ...(node.bold && { weight: 'bold' }),
     }
     return h(this.#elements.Text, props, ...children)
+  }
+
+  #image(node: ImgNode, key: string): RenderNode {
+    const { Image, Text } = this.#elements
+    if (Image === undefined) return h(Text, { key }, node.fallback)
+    return h(Image, {
+      key,
+      source: { png: node.png.base64 },
+      columns: node.columns,
+      rows: node.rows,
+      // Claude Code requires an alt, and takes a single space for none.
+      alt: node.fallback === '' ? ' ' : node.fallback,
+    })
   }
 
   #button(node: ButtonNode, key: string): RenderNode {

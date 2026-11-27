@@ -1,6 +1,7 @@
 import type { Harness, Store, Stored } from '../harness/types'
 import type { Press } from '../ui/button'
 import type { Query } from '../ui/hooks/query'
+import type { Images } from '../ui/img'
 import type { Callback } from './schema'
 
 export interface QueryRegistration {
@@ -13,6 +14,8 @@ export interface QueryRegistration {
 export interface RenderScope {
   readonly harness: Harness
   readonly store: Store
+  /** The PNGs the mod's build embeds, which its `Img`s draw. */
+  readonly images: Images
   /** Persist `stored` under `key` and trigger a re-render. */
   write: (change: { key: string; stored: Stored }) => void
   /** Wrap a button `onPress` so thrown errors are reported to the adapter instead of thrown. */

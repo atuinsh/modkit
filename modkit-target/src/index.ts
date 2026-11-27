@@ -9,6 +9,7 @@
  */
 
 export { NATIVE, type Capabilities, type Support } from './capabilities.ts'
+export { imagesSource } from './images.ts'
 export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
 export { ModPackage } from './package.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
@@ -18,6 +19,7 @@ export {
   type Diagnostic,
   type Field,
   type HookNeeds,
+  type ImageDecl,
   type Item,
   type ModInfo,
   type ModpartName,

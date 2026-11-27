@@ -14,4 +14,13 @@ export { textOf } from './runtime/element'
 export { mount, type Mounted, type View } from './runtime/mount'
 export { dismissed, nextShown, NOTHING_SHOWN, type PaneChange, type Shown } from './runtime/panes'
 export type { CommandView, PaneView } from './runtime/render'
-export type { ButtonNode, MarkdownNode, StackNode, TextNode, UiNode } from './ui/index'
+export type {
+  ButtonNode,
+  Images,
+  ImgNode,
+  MarkdownNode,
+  Png,
+  StackNode,
+  TextNode,
+  UiNode,
+} from './ui/index'
