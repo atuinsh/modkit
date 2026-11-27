@@ -4,5 +4,5 @@
     // Bundled into the mod's MCP server, which Codex starts with Node.
     "types": ["node"]
   },
-  "include": ["."]
+  "include": [".", "../protocol.ts"]
 }

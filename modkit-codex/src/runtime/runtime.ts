@@ -8,8 +8,8 @@ import {
   type Verdict,
 } from '@atuin/modkit-target/host'
 
-import { shellCallOf, shellResultOf, toolCallOf, toolResultOf, type HookEvent } from './hooks'
-import { SHELL_TOOL } from './names'
+import { SHELL_TOOL, type HookEvent } from '../protocol'
+import { shellCallOf, shellResultOf, toolCallOf, toolResultOf } from './hooks'
 import { exitFromTranscript, UNKNOWN_EXIT } from './transcript'
 
 export interface CodexSession {
