@@ -2,20 +2,24 @@
  * The PNGs a mod's `<Img>`s name, read from the mod's directory for its targets to embed.
  *
  * An `<Img>` names its PNG with a string literal, or a union of them, so every picture the mod can
- * draw is known before it runs. Each is checked here to be a whole PNG in the mod's directory, links
- * followed, of a size every harness takes, and its pixel size read from its header. `Img` is only
- * ever written as a JSX tag: passed around as a value, it could draw a PNG the build never saw.
+ * draw is known before it runs. Each is checked here to be in the mod's directory, links followed,
+ * of a size every harness takes, and decoded whole with fast-png, so a PNG cut short or holding
+ * broken pixels fails the build rather than the harness. `Img` is only ever written as a JSX tag:
+ * passed around as a value, it could draw a PNG the build never saw.
  *
  * @module
  */
 
 import { readFileSync, realpathSync } from 'node:fs'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
+
+import { decode } from 'fast-png'
+import isPathInside from 'is-path-inside'
+import prettyBytes from 'pretty-bytes'
 
 import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
 import type { ImageDecl } from './ir.ts'
 import { modkitExports } from './modkit.ts'
-import { pngSizeOf } from './png.ts'
 import {
   isStringLiteralType,
   isUnionType,
@@ -36,10 +40,8 @@ export interface ImagesRead {
 
 type ImgElement = syntax.JsxSelfClosingElement | syntax.JsxOpeningElement
 
-const BYTES_PER_MIB = 1_048_576
-
 // Claude Code's Image takes a PNG of at most 2 MiB.
-const MAX_PNG_MIB = 2
+const MAX_PNG_BYTES = 2_097_152
 
 function nodesIn<T extends Node>({
   project,
@@ -149,12 +151,11 @@ function pathsOf({
   return diagnosticAt({ code: 'image', message, node: attribute ?? element })
 }
 
-const mibOf = (bytes: number): string => (bytes / BYTES_PER_MIB).toFixed(1)
+const sizeText = (bytes: number): string => prettyBytes(bytes, { binary: true })
 
-const isOutside = ({ dir, file }: { dir: string; file: string }): boolean => {
-  const inside = relative(dir, file)
-  return inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)
-}
+// The directory itself is left to reading it, which says it is a directory.
+const isOutside = ({ dir, file }: { dir: string; file: string }): boolean =>
+  file !== dir && !isPathInside(file, dir)
 
 // The file `path` names in `dir`, links followed, or why it names none there. Throws what reading
 // the links throws, such as when there is no file.
@@ -191,15 +192,27 @@ function bytesAt({ dir, path }: { dir: string; path: string }): Buffer | string 
   }
 }
 
+// The pixel size of the PNG `bytes` hold, decoded whole, or what decoding them failed on.
+function pngSizeOf(bytes: Buffer): { widthPx: number; heightPx: number } | string {
+  try {
+    const { width, height } = decode(bytes, { checkCrc: true })
+    return { widthPx: width, heightPx: height }
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
 // The image at `path`, or why it can't be embedded.
 function imageAt({ dir, path }: { dir: string; path: string }): ImageDecl | string {
   const bytes = bytesAt({ dir, path })
   if (typeof bytes === 'string') return bytes
-  if (bytes.length > MAX_PNG_MIB * BYTES_PER_MIB) {
-    return `${path} is ${mibOf(bytes.length)} MiB, and a harness draws a PNG of at most ${MAX_PNG_MIB} MiB`
+  if (bytes.length > MAX_PNG_BYTES) {
+    return `${path} is ${sizeText(bytes.length)}, and a harness draws a PNG of at most ${sizeText(MAX_PNG_BYTES)}`
   }
   const size = pngSizeOf(bytes)
-  if (size === undefined) return `${path} is not a whole PNG, the one format every harness draws`
+  if (typeof size === 'string') {
+    return `${path} is not a whole PNG, the one format every harness draws (fast-png: ${size})`
+  }
   return { path, base64: bytes.toString('base64'), ...size }
 }
 
