@@ -65,9 +65,6 @@ function spanned({ span, shared, flow }: { span: Span; shared: Shared; flow: Flo
   return <text {...props}>{span.bold ? <b>{span.text}</b> : span.text}</text>
 }
 
-const bytesOf = (base64: string): Uint8Array =>
-  Uint8Array.from(atob(base64), (character) => character.codePointAt(0) ?? 0)
-
 // OpenTUI draws a picture with kitty's protocol or sixel where its probe of the terminal found one,
 // and in half blocks otherwise; there the mod's fallback stands in for it.
 function pictured({
@@ -94,7 +91,7 @@ function pictured({
   }
   return (
     <image
-      source={bytesOf(spec.png)}
+      source={`data:image/png;base64,${spec.png}`}
       protocol={protocol}
       width={spec.columns}
       height={spec.rows}
