@@ -18,18 +18,10 @@ import isPathInside from 'is-path-inside'
 import prettyBytes from 'pretty-bytes'
 
 import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { pathsOf } from './img-paths.ts'
 import type { ImageDecl } from './ir.ts'
 import { modkitExports } from './modkit.ts'
-import {
-  isStringLiteralType,
-  isUnionType,
-  resolvedSymbol,
-  syntax,
-  type Node,
-  type Project,
-  type TsSymbol,
-  type Type,
-} from './program.ts'
+import { resolvedSymbol, syntax, type Node, type Project, type TsSymbol } from './program.ts'
 
 /** What reading a mod's `<Img>`s found: the PNGs to embed, and why any can't be. */
 export interface ImagesRead {
@@ -115,42 +107,6 @@ function valueUsesIn({ project, img }: { project: Project; img: TsSymbol }): Dia
     .map((node) => diagnosticAt({ code: 'image', message, node }))
 }
 
-const isImageAttribute = (node: Node): node is syntax.JsxAttribute =>
-  syntax.isJsxAttribute(node) && syntax.isIdentifier(node.name) && node.name.text === 'image'
-
-// The strings `type` can be, when it is a string literal or a union of them.
-function literalsOf(type: Type): string[] | undefined {
-  const members = isUnionType(type) ? type.getTypes() : [type]
-  const texts = members.flatMap((member) => (isStringLiteralType(member) ? [member.value] : []))
-  return texts.length === members.length ? texts : undefined
-}
-
-// The paths the value `written` for an `image` attribute can be, when the build can know them.
-function pathsIn({ project, written }: { project: Project; written: Node }): string[] | undefined {
-  // The checker widens a JSX attribute's string to `string`, but not an expression's literal type.
-  if (syntax.isStringLiteral(written)) return [written.text]
-  const type = project.checker.getTypeAtLocation(written)
-  return type === undefined ? undefined : literalsOf(type)
-}
-
-// The paths `element` names, or why the build can't know them.
-function pathsOf({
-  project,
-  element,
-}: {
-  project: Project
-  element: ImgElement
-}): { paths: string[]; at: Node } | Diagnostic {
-  const attribute = element.attributes.properties.find((one) => isImageAttribute(one))
-  const value = attribute?.initializer
-  const written = value !== undefined && syntax.isJsxExpression(value) ? value.expression : value
-  const paths = written === undefined ? undefined : pathsIn({ project, written })
-  if (paths !== undefined && written !== undefined) return { paths, at: written }
-  const message =
-    "<Img> names its image with a string literal, or a union of them: the build embeds each PNG a mod's <Img>s name"
-  return diagnosticAt({ code: 'image', message, node: attribute ?? element })
-}
-
 const sizeText = (bytes: number): string => prettyBytes(bytes, { binary: true })
 
 // The directory itself is left to reading it, which says it is a directory.
@@ -224,12 +180,12 @@ export function imagesIn({ project, dir }: { project: Project; dir: string }): I
   const read = new Map<string, ImageDecl | string>()
   const unread = named.flatMap((one): Diagnostic[] => {
     if ('code' in one) return [one]
-    return one.paths.flatMap((path) => {
+    return [...one].flatMap(([path, at]) => {
       const image = read.get(path) ?? imageAt({ dir, path })
       read.set(path, image)
       if (typeof image !== 'string') return []
       const message = `<Img image="${path}">: ${image}`
-      return [diagnosticAt({ code: 'image', message, node: one.at })]
+      return [diagnosticAt({ code: 'image', message, node: at })]
     })
   })
   const images = [...read.values()].flatMap((image) => (typeof image === 'string' ? [] : [image]))
