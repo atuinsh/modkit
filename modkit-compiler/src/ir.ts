@@ -68,6 +68,16 @@ export interface HookNeeds {
   hasPanes: boolean
 }
 
+/** A PNG an `<Img>` names, read from the mod's directory for a target to embed. */
+export interface ImageDecl {
+  /** The path the `<Img>` names it by, in the mod's directory: `art/logo.png`. */
+  path: string
+  /** The PNG's bytes, base64. */
+  base64: string
+  widthPx: number
+  heightPx: number
+}
+
 /** Output of `compile()`: either the full compiled mod IR or a list of diagnostics. */
 export type Compiled =
   | {
@@ -80,6 +90,8 @@ export type Compiled =
       /** Sorted unique environment variable names referenced by `harness.env()` calls. */
       env: string[]
       tools: { before: string[]; after: string[]; cards: string[] }
+      /** The PNGs the mod's `<Img>`s name, sorted by path. */
+      images: ImageDecl[]
       modparts: Modparts
       hooks: HookNeeds
     }

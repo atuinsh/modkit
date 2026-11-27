@@ -1,5 +1,7 @@
 import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
 import { keysOf, partsNamed, type ModCall } from './entry.ts'
+import { imagesIn } from './images.ts'
+import type { ImageDecl } from './ir.ts'
 import { callsIn, modkitExports } from './modkit.ts'
 import {
   isStringLiteralType,
@@ -32,11 +34,13 @@ interface ToolNames {
   cards: string[]
 }
 
-/** Collected static environment variable and tool names, plus any validation diagnostics. */
+/** Collected static environment variable names, tool names and images, plus any diagnostics. */
 export interface Literals {
   /** Sorted unique environment variable names passed to `harness.env()`. */
   env: string[]
   tools: ToolNames
+  /** The PNGs the mod's `<Img>`s name, sorted by path. */
+  images: ImageDecl[]
   diagnostics: Diagnostic[]
 }
 
@@ -107,12 +111,23 @@ function envIn(project: Project): { env: string[]; diagnostics: Diagnostic[] } {
   }
 }
 
-export function literalsIn({ project, mod }: { project: Project; mod: ModCall }): Literals {
+export function literalsIn({
+  project,
+  mod,
+  dir,
+}: {
+  project: Project
+  mod: ModCall
+  /** The mod's directory, which its `<Img>`s name their PNGs in. */
+  dir: string
+}): Literals {
   const env = envIn(project)
   const tools = toolsIn(mod)
+  const images = imagesIn({ project, dir })
   return {
     env: env.env,
     tools: tools.tools,
-    diagnostics: [...env.diagnostics, ...tools.diagnostics],
+    images: images.images,
+    diagnostics: [...env.diagnostics, ...tools.diagnostics, ...images.diagnostics],
   }
 }
