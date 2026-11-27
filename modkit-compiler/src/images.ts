@@ -2,18 +2,20 @@
  * The PNGs a mod's `<Img>`s name, read from the mod's directory for its targets to embed.
  *
  * An `<Img>` names its PNG with a string literal, or a union of them, so every picture the mod can
- * draw is known before it runs. Each is checked here to be a PNG in the mod's directory, of a size
- * every harness takes, and its pixel size read from its header.
+ * draw is known before it runs. Each is checked here to be a whole PNG in the mod's directory, links
+ * followed, of a size every harness takes, and its pixel size read from its header. `Img` is only
+ * ever written as a JSX tag: passed around as a value, it could draw a PNG the build never saw.
  *
  * @module
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
 import type { ImageDecl } from './ir.ts'
 import { modkitExports } from './modkit.ts'
+import { pngSizeOf } from './png.ts'
 import {
   isStringLiteralType,
   isUnionType,
@@ -39,39 +41,76 @@ const BYTES_PER_MIB = 1_048_576
 // Claude Code's Image takes a PNG of at most 2 MiB.
 const MAX_PNG_MIB = 2
 
-// Every PNG opens with these 8 bytes, then its IHDR chunk: a 4-byte length, `IHDR`, and the width
-// and height as 4-byte big-endian integers.
-const PNG_SIGNATURE = Buffer.from('89504E470D0A1A0A', 'hex')
-const IHDR_AT = 12
-const WIDTH_AT = 16
-const HEIGHT_AT = 20
-const HEADER_BYTES = 24
-
-// The pixel size a PNG's header gives, or undefined when `bytes` are no PNG.
-function pngSizeOf(bytes: Buffer): { widthPx: number; heightPx: number } | undefined {
-  const isPng =
-    bytes.length >= HEADER_BYTES &&
-    bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) &&
-    bytes.toString('latin1', IHDR_AT, WIDTH_AT) === 'IHDR'
-  if (!isPng) return undefined
-  const widthPx = bytes.readUInt32BE(WIDTH_AT)
-  const heightPx = bytes.readUInt32BE(HEIGHT_AT)
-  return widthPx > 0 && heightPx > 0 ? { widthPx, heightPx } : undefined
-}
-
-function imgsIn({ project, img }: { project: Project; img: TsSymbol }): ImgElement[] {
-  const found: ImgElement[] = []
+function nodesIn<T extends Node>({
+  project,
+  is,
+}: {
+  project: Project
+  is: (node: Node) => node is T
+}): T[] {
+  const found: T[] = []
   const visit = (node: Node): void => {
-    if (
-      (syntax.isJsxSelfClosingElement(node) || syntax.isJsxOpeningElement(node)) &&
-      resolvedSymbol({ checker: project.checker, node: node.tagName })?.id === img.id
-    ) {
-      found.push(node)
-    }
+    if (is(node)) found.push(node)
     node.forEachChild(visit)
   }
   for (const file of project.files) visit(file)
   return found
+}
+
+const isElement = (node: Node): node is ImgElement =>
+  syntax.isJsxSelfClosingElement(node) || syntax.isJsxOpeningElement(node)
+
+const isImg = ({ project, img, node }: { project: Project; img: TsSymbol; node: Node }): boolean =>
+  resolvedSymbol({ checker: project.checker, node })?.id === img.id
+
+const imgsIn = ({ project, img }: { project: Project; img: TsSymbol }): ImgElement[] =>
+  nodesIn({ project, is: isElement }).filter((element) =>
+    isImg({ project, img, node: element.tagName }),
+  )
+
+// The names the mod's files bind Img to: its own, and each import or export that renames it.
+function namesOf({ project, img }: { project: Project; img: TsSymbol }): Set<string> {
+  const specifiers = nodesIn({
+    project,
+    is: (node) => syntax.isImportSpecifier(node) || syntax.isExportSpecifier(node),
+  })
+  const renamed = specifiers.filter((one) => isImg({ project, img, node: one.name }))
+  return new Set(['Img', ...renamed.map((one) => one.name.text)])
+}
+
+// Whether `reference` names a JSX element's tag, as `Img` or `ui.Img` does in `<ui.Img />`.
+function isTagName(reference: syntax.Identifier): boolean {
+  const { parent } = reference
+  const tag =
+    syntax.isPropertyAccessExpression(parent) && parent.name === reference ? parent : reference
+  const holder = tag.parent
+  return (isElement(holder) || syntax.isJsxClosingElement(holder)) && holder.tagName === tag
+}
+
+function isInType(node: Node): boolean {
+  for (let at = node.parent; !syntax.isSourceFile(at); at = at.parent) {
+    if (syntax.isTypeQueryNode(at)) return true
+  }
+  return false
+}
+
+// Whether `reference` to Img leaves the build nothing it can't read: a JSX tag, which it reads the
+// image of, or an import, an export or a type, which draw nothing.
+const isReadable = (reference: syntax.Identifier): boolean =>
+  syntax.isImportSpecifier(reference.parent) ||
+  syntax.isExportSpecifier(reference.parent) ||
+  isTagName(reference) ||
+  isInType(reference)
+
+// Each use of Img as a value, such as `const Picture = Img`, which would draw PNGs the build can't
+// see the names of.
+function valueUsesIn({ project, img }: { project: Project; img: TsSymbol }): Diagnostic[] {
+  const names = namesOf({ project, img })
+  const message =
+    '<Img> is written as a JSX tag, never passed around as a value: the build embeds the PNG each <Img> tag names'
+  return nodesIn({ project, is: syntax.isIdentifier })
+    .filter((one) => names.has(one.text) && !isReadable(one) && isImg({ project, img, node: one }))
+    .map((node) => diagnosticAt({ code: 'image', message, node }))
 }
 
 const isImageAttribute = (node: Node): node is syntax.JsxAttribute =>
@@ -112,31 +151,43 @@ function pathsOf({
 
 const mibOf = (bytes: number): string => (bytes / BYTES_PER_MIB).toFixed(1)
 
-// The file `path` names in `dir`, or why it names none there.
+const isOutside = ({ dir, file }: { dir: string; file: string }): boolean => {
+  const inside = relative(dir, file)
+  return inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)
+}
+
+// The file `path` names in `dir`, links followed, or why it names none there. Throws what reading
+// the links throws, such as when there is no file.
 function fileIn({ dir, path }: { dir: string; path: string }): { file: string } | string {
   if (isAbsolute(path)) {
     return "an image is named by its path in the mod's directory, not by an absolute one"
   }
-  const file = resolve(dir, path)
-  const inside = relative(dir, file)
-  if (inside === '..' || inside.startsWith(`..${sep}`)) {
+  const named = resolve(dir, path)
+  if (isOutside({ dir, file: named })) {
     return `${path} is outside the mod's directory, which the build embeds images from`
+  }
+  // A link in the mod's directory can lead out of it, and the build would embed what it leads to.
+  const file = realpathSync(named)
+  if (isOutside({ dir: realpathSync(dir), file })) {
+    return `${path} links outside the mod's directory, which the build embeds images from`
   }
   return { file }
 }
 
+function unreadOf({ error, path }: { error: unknown; path: string }): string {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined
+  if (code === 'ENOENT') return `the mod's directory has no ${path}`
+  if (code === 'EISDIR') return `${path} is a directory, not a PNG`
+  return `${path} can't be read: ${error instanceof Error ? error.message : String(error)}`
+}
+
 // The bytes of the file at `path` in `dir`, or why there are none to read.
 function bytesAt({ dir, path }: { dir: string; path: string }): Buffer | string {
-  const named = fileIn({ dir, path })
-  if (typeof named === 'string') return named
-  const { file } = named
   try {
-    return readFileSync(file)
+    const named = fileIn({ dir, path })
+    return typeof named === 'string' ? named : readFileSync(named.file)
   } catch (error) {
-    const code = error instanceof Error && 'code' in error ? error.code : undefined
-    if (code === 'ENOENT') return `the mod's directory has no ${path}`
-    if (code === 'EISDIR') return `${path} is a directory, not a PNG`
-    return `${path} can't be read: ${error instanceof Error ? error.message : String(error)}`
+    return unreadOf({ error, path })
   }
 }
 
@@ -148,7 +199,7 @@ function imageAt({ dir, path }: { dir: string; path: string }): ImageDecl | stri
     return `${path} is ${mibOf(bytes.length)} MiB, and a harness draws a PNG of at most ${MAX_PNG_MIB} MiB`
   }
   const size = pngSizeOf(bytes)
-  if (size === undefined) return `${path} is not a PNG, the one format every harness draws`
+  if (size === undefined) return `${path} is not a whole PNG, the one format every harness draws`
   return { path, base64: bytes.toString('base64'), ...size }
 }
 
@@ -158,7 +209,7 @@ export function imagesIn({ project, dir }: { project: Project; dir: string }): I
   if (img === undefined) return { images: [], diagnostics: [] }
   const named = imgsIn({ project, img }).map((element) => pathsOf({ project, element }))
   const read = new Map<string, ImageDecl | string>()
-  const diagnostics = named.flatMap((one): Diagnostic[] => {
+  const unread = named.flatMap((one): Diagnostic[] => {
     if ('code' in one) return [one]
     return one.paths.flatMap((path) => {
       const image = read.get(path) ?? imageAt({ dir, path })
@@ -171,6 +222,6 @@ export function imagesIn({ project, dir }: { project: Project; dir: string }): I
   const images = [...read.values()].flatMap((image) => (typeof image === 'string' ? [] : [image]))
   return {
     images: images.toSorted((one, other) => one.path.localeCompare(other.path)),
-    diagnostics,
+    diagnostics: [...valueUsesIn({ project, img }), ...unread],
   }
 }
