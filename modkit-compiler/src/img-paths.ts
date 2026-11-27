@@ -106,7 +106,10 @@ function memberImageOf({
   }
   const paths = present === undefined ? undefined : literalsOf(present)
   if (paths === undefined) return undefined
-  return { paths, isSet: (image.flags & SymbolFlags.Optional) === 0 }
+  // A spread copies own enumerable properties alone, so an accessor, as a class's getter on its
+  // prototype is, may set nothing even where the checker says it always does.
+  const isSet = (image.flags & (SymbolFlags.Optional | SymbolFlags.Accessor)) === 0
+  return { paths, isSet }
 }
 
 // What spreading `spread` sets `image` to, over each member of its type when that is a union.
