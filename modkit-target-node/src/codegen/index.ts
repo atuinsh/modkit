@@ -8,22 +8,6 @@ import type { Tags } from '../runtime/store.ts'
 export const tagsOf = (state: readonly StateDecl[]): Tags =>
   Object.fromEntries(state.map((one) => [one.id, one.tag]))
 
-export function missingToolNotes({
-  tools,
-  harness,
-  has,
-}: {
-  tools: { before: readonly string[]; after: readonly string[]; cards?: readonly string[] }
-  harness: string
-  has: ReadonlySet<string>
-}): string[] {
-  const hooked = new Set([...tools.before, ...tools.after, ...(tools.cards ?? [])])
-  return [...hooked]
-    .filter((tool) => !has.has(tool) && !tool.startsWith('mcp__'))
-    .toSorted()
-    .map((tool) => `${harness} has no ${tool} tool, so what the mod does on it never runs there`)
-}
-
 export function settingOf(option: OptionDecl): SettingDecl {
   const common = { name: option.name, isRequired: option.isRequired }
   switch (option.kind) {
