@@ -2,7 +2,6 @@ import {
   ModkitTargetRuntime,
   type Followup,
   type HarnessAdapter,
-  type PaneOpened,
   type Repeat,
   type UiNode,
   type Verdict,
@@ -48,29 +47,8 @@ export class CodexRuntime extends ModkitTargetRuntime<CodexSession> {
     return result === undefined ? {} : this.followupFor(result)
   }
 
-  protected override async adapter(session: CodexSession): Promise<HarnessAdapter> {
+  protected override adapter(session: CodexSession): HarnessAdapter {
     return session.harness
-  }
-
-  // Codex asks for the status line when it draws one; nothing tells it to draw.
-  protected override async redraw(): Promise<unknown> {
-    return undefined
-  }
-
-  protected override async openPane(): Promise<PaneOpened> {
-    return { isPlaced: false, reason: 'Codex draws no panes' }
-  }
-
-  protected override async closePane(): Promise<unknown> {
-    return undefined
-  }
-
-  protected override async isPaneShown(): Promise<boolean> {
-    return false
-  }
-
-  protected override async registerCommand(): Promise<unknown> {
-    return undefined
   }
 
   protected override repeat(session: CodexSession, { everyMs, tick }: Repeat): void {

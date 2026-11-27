@@ -52,7 +52,7 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
   }
 
   async close(session: OpencodeSession, pane: string): Promise<void> {
-    await this.closePane(session, pane)
+    this.closePane(session, pane)
     await this.dismiss(pane)
   }
 
@@ -73,40 +73,34 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
     return this.followupFor(failedResultOf(failed))
   }
 
-  protected override async adapter(session: OpencodeSession): Promise<HarnessAdapter> {
+  protected override adapter(session: OpencodeSession): HarnessAdapter {
     return session.harness
   }
 
-  protected override async redraw(session: OpencodeSession): Promise<unknown> {
+  protected override redraw(session: OpencodeSession): void {
     session.changed()
-    return undefined
   }
 
-  protected override async openPane(
-    session: OpencodeSession,
-    { id, title }: PaneOpening,
-  ): Promise<PaneOpened> {
+  protected override openPane(session: OpencodeSession, { id, title }: PaneOpening): PaneOpened {
     this.#panes.set(id, title)
     session.changed()
     return { isPlaced: true }
   }
 
-  protected override async closePane(session: OpencodeSession, id: string): Promise<unknown> {
+  protected override closePane(session: OpencodeSession, id: string): void {
     this.#panes.delete(id)
     session.changed()
-    return undefined
   }
 
-  protected override async isPaneShown(_session: OpencodeSession, id: string): Promise<boolean> {
+  protected override isPaneShown(_session: OpencodeSession, id: string): boolean {
     return this.#panes.has(id)
   }
 
-  protected override async registerCommand(
+  protected override registerCommand(
     _session: OpencodeSession,
     { name, description }: CommandView,
-  ): Promise<unknown> {
+  ): void {
     this.#commands.push({ name, description })
-    return undefined
   }
 
   protected override repeat(session: OpencodeSession, { everyMs, tick }: Repeat): void {
