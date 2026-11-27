@@ -23,8 +23,12 @@ import {
   type UiNode,
 } from '@atuin/modkit/host'
 
+type Awaitable<T> = T | Promise<T>
+
 // How often a session refreshes the mod's resources.
 const TICK_MS = 1000
+
+const NO_PANES: PaneOpened = { isPlaced: false, reason: 'this harness draws no panes' }
 
 // Until a session starts, a failure has nowhere to be reported.
 const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
@@ -106,25 +110,25 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   /** The adapter the mod's handlers reach the harness through for the session. */
-  protected abstract adapter(engine: Engine): Promise<HarnessAdapter>
-
-  /** Have the harness draw the mod's view again. */
-  protected abstract redraw(engine: Engine): Promise<unknown>
-
-  /** Show one of the mod's panes, or retitle it when it shows. */
-  protected abstract openPane(engine: Engine, pane: PaneOpening): Promise<PaneOpened>
-
-  /** Take down one of the mod's panes. */
-  protected abstract closePane(engine: Engine, id: string): Promise<unknown>
-
-  /** Whether the harness shows pane `id`. */
-  protected abstract isPaneShown(engine: Engine, id: string): Promise<boolean>
-
-  /** Make one of the mod's commands one the person can run. */
-  protected abstract registerCommand(engine: Engine, command: CommandView): Promise<unknown>
+  protected abstract adapter(engine: Engine): Awaitable<HarnessAdapter>
 
   /** Have the harness call `repeat.tick` every `repeat.everyMs` for the rest of the session. */
   protected abstract repeat(engine: Engine, repeat: Repeat): void
+
+  /** Have the harness draw the mod's view again. */
+  protected redraw?(engine: Engine): Awaitable<unknown>
+
+  /** Show one of the mod's panes, or retitle it when it shows. */
+  protected openPane?(engine: Engine, pane: PaneOpening): Awaitable<PaneOpened>
+
+  /** Take down one of the mod's panes. */
+  protected closePane?(engine: Engine, id: string): Awaitable<unknown>
+
+  /** Whether the harness shows pane `id`. */
+  protected isPaneShown?(engine: Engine, id: string): Awaitable<boolean>
+
+  /** Make one of the mod's commands one the person can run. */
+  protected registerCommand?(engine: Engine, command: CommandView): Awaitable<unknown>
 
   /**
    * Mount the mod for a session that started: register its commands, show its panes, start its
@@ -139,13 +143,15 @@ export abstract class ModkitTargetRuntime<Engine> {
     const mounted = mount({ mod: this.#mod, options: this.#options, adapter })
     this.#mounted = mounted
     mounted.subscribe(() => {
-      void this.redraw(engine)
+      void this.redraw?.(engine)
       if (!this.#isAnswering) this.#syncPanes(engine, false)
     })
     this.#syncPanes(engine, false)
-    for (const command of mounted.view().commands) {
-      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
-      await this.registerCommand(engine, command)
+    if (this.registerCommand !== undefined) {
+      for (const command of mounted.view().commands) {
+        // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
+        await this.registerCommand(engine, command)
+      }
     }
     this.repeat(engine, {
       everyMs: TICK_MS,
@@ -154,7 +160,7 @@ export abstract class ModkitTargetRuntime<Engine> {
       },
     })
     await mounted.event('session.start')
-    await this.redraw(engine)
+    await this.redraw?.(engine)
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
@@ -252,17 +258,19 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   async #toggled(engine: Engine, { id, title }: { id: string; title: string }): Promise<string> {
-    if (await this.isPaneShown(engine, id)) {
-      await this.closePane(engine, id)
+    if ((await this.isPaneShown?.(engine, id)) === true) {
+      await this.closePane?.(engine, id)
       return `${title} closed.`
     }
-    const opened = await this.openPane(engine, { id, title, focus: true })
+    const opened = (await this.openPane?.(engine, { id, title, focus: true })) ?? NO_PANES
     return opened.isPlaced ? `${title} opened.` : `${title} waits: ${opened.reason}`
   }
 
   #syncPanes(engine: Engine, isAnswer: boolean): void {
     const mounted = this.#mounted
-    if (mounted === undefined) return
+    if (mounted === undefined || (this.openPane === undefined && this.closePane === undefined)) {
+      return
+    }
     const { shown, changes } = nextShown({ shown: this.#shown, rendered: mounted.view().panes })
     // Kept before any call goes out, so a render while they're under way sees them made.
     this.#shown = shown
@@ -272,8 +280,10 @@ export abstract class ModkitTargetRuntime<Engine> {
     for (const change of changes) {
       const changed =
         change.kind === 'close'
-          ? this.closePane(engine, change.id)
-          : this.openPane(engine, { id: change.id, title: change.title, focus: isAnswer })
+          ? Promise.resolve(this.closePane?.(engine, change.id))
+          : Promise.resolve(
+              this.openPane?.(engine, { id: change.id, title: change.title, focus: isAnswer }),
+            )
       changed.catch(fail)
     }
   }

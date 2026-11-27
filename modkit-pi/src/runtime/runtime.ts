@@ -140,7 +140,7 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
     return this.answerCommand(ctx, name)
   }
 
-  protected override async adapter(ctx: ExtensionContext): Promise<HarnessAdapter> {
+  protected override adapter(ctx: ExtensionContext): HarnessAdapter {
     const plugin = this.#plugin
     const report = failureReporter({
       plugin,
@@ -171,38 +171,32 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
     return harnessFor({ pi: this.#pi, ctx, plugin, servers, store: kept, report })
   }
 
-  protected override async redraw(ctx: ExtensionContext): Promise<unknown> {
-    if (this.#isStopped) return undefined
+  protected override redraw(ctx: ExtensionContext): void {
+    if (this.#isStopped) return
     this.#drawStatuses(ctx, this.statuses())
     this.#overlays.redraw((id) => this.paneBody(id))
     this.#redrawCards()
-    return undefined
   }
 
-  protected override async openPane(
+  protected override openPane(
     ctx: ExtensionContext,
     { id, title, focus }: PaneOpening,
-  ): Promise<PaneOpened> {
+  ): PaneOpened {
     if (ctx.mode !== 'tui') return { isPlaced: false, reason: 'pi shows panes in its terminal UI' }
     this.#overlays.show({ ctx, id, title, body: this.paneBody(id) ?? [], focus })
     return { isPlaced: true }
   }
 
-  protected override async closePane(_ctx: ExtensionContext, id: string): Promise<unknown> {
+  protected override closePane(_ctx: ExtensionContext, id: string): void {
     this.#overlays.forget(id)
-    return undefined
   }
 
-  protected override async isPaneShown(_ctx: ExtensionContext, id: string): Promise<boolean> {
+  protected override isPaneShown(_ctx: ExtensionContext, id: string): boolean {
     return this.#overlays.has(id)
   }
 
-  protected override async registerCommand(
-    _ctx: ExtensionContext,
-    command: CommandView,
-  ): Promise<unknown> {
+  protected override registerCommand(_ctx: ExtensionContext, command: CommandView): void {
     this.#registerCommand(command)
-    return undefined
   }
 
   protected override repeat(_ctx: ExtensionContext, { everyMs, tick }: Repeat): void {
