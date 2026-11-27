@@ -1,7 +1,12 @@
 import { copy } from '@atuin/modkit-target-node/runtime/clipboard'
 import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import type { Failure, HarnessAdapter, Store } from '@atuin/modkit-target/host'
+import {
+  failureReporter,
+  type Failure,
+  type HarnessAdapter,
+  type Store,
+} from '@atuin/modkit-target/host'
 
 export interface SessionState {
   readonly id: string
@@ -10,22 +15,28 @@ export interface SessionState {
   context: string[]
 }
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
 const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 
 export function harnessFor({
+  plugin,
   session,
   servers,
-  store,
-  report,
+  storeFor,
+  log,
 }: {
+  plugin: string
   session: SessionState
   servers: Servers
-  store: Store
-  report: (failure: Failure) => void
+  storeFor: (report: (failure: Failure) => void) => Store
+  log: (line: string) => void
 }): HarnessAdapter {
+  const report = failureReporter({
+    plugin,
+    notify: (line) => {
+      session.notes.push(line)
+    },
+    log,
+  })
   return {
     session: { id: session.id },
     cwd: async () => session.cwd,
@@ -45,26 +56,7 @@ export function harnessFor({
       return 'queued'
     },
     now: () => Date.now(),
-    store,
+    store: storeFor(report),
     report,
-  }
-}
-
-export function reporterFor({
-  plugin,
-  session,
-  log,
-}: {
-  plugin: string
-  session: SessionState
-  log: (line: string) => void
-}): (failure: Failure) => void {
-  const told = new Set<string>()
-  return ({ phase, error }) => {
-    const line = `${plugin}: ${phase} failed: ${messageOf(error)}`
-    log(line)
-    if (told.has(line)) return
-    told.add(line)
-    session.notes.push(line)
   }
 }

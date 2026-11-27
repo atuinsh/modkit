@@ -1,14 +1,8 @@
 import { isPlainObject } from 'es-toolkit/predicate'
 
-import type {
-  Followup,
-  ShellCall,
-  ShellResult,
-  ToolCall,
-  ToolResult,
-} from '@atuin/modkit-target/host'
+import type { Followup, HookedCall, HookedResult } from '@atuin/modkit-target/host'
 
-import { carriesContext, type HookEvent, type HookEventName } from '../protocol'
+import { carriesContext, SHELL_TOOL, type HookEvent, type HookEventName } from '../protocol'
 
 function commandOf(input: unknown): string | undefined {
   const command: unknown = isPlainObject(input) ? input['command'] : undefined
@@ -23,49 +17,51 @@ function outputOf(response: unknown): string {
   return response === undefined ? '' : JSON.stringify(response)
 }
 
-export function shellCallOf(event: HookEvent & { event: 'PreToolUse' }): ShellCall | undefined {
+export function callOf(event: HookEvent & { event: 'PreToolUse' }): HookedCall | undefined {
+  if (event.tool !== SHELL_TOOL) {
+    return {
+      kind: 'tool',
+      id: event.toolUseId,
+      tool: event.tool,
+      input: argumentsOf(event.input),
+      cwd: event.cwd,
+    }
+  }
   const command = commandOf(event.input)
-  return command === undefined ? undefined : { id: event.toolUseId, command, cwd: event.cwd }
+  return command === undefined
+    ? undefined
+    : { kind: 'shell', id: event.toolUseId, command, cwd: event.cwd }
 }
-
-export const toolCallOf = (event: HookEvent & { event: 'PreToolUse' }): ToolCall => ({
-  id: event.toolUseId,
-  tool: event.tool,
-  input: argumentsOf(event.input),
-  cwd: event.cwd,
-})
 
 export interface Exit {
   exitCode: number | null
   failed: boolean
 }
 
-export function shellResultOf({
+export function resultOf({
   event,
   exit,
 }: {
   event: HookEvent & { event: 'PostToolUse' }
   exit: Exit
-}): ShellResult | undefined {
+}): HookedResult | undefined {
+  const output = outputOf(event.response)
+  if (event.tool !== SHELL_TOOL) {
+    return {
+      kind: 'tool',
+      id: event.toolUseId,
+      tool: event.tool,
+      input: argumentsOf(event.input),
+      cwd: event.cwd,
+      output,
+      failed: exit.failed,
+    }
+  }
   const command = commandOf(event.input)
-  if (command === undefined) return undefined
-  return { id: event.toolUseId, command, cwd: event.cwd, output: outputOf(event.response), ...exit }
+  return command === undefined
+    ? undefined
+    : { kind: 'shell', id: event.toolUseId, command, cwd: event.cwd, output, ...exit }
 }
-
-export const toolResultOf = ({
-  event,
-  exit,
-}: {
-  event: HookEvent & { event: 'PostToolUse' }
-  exit: Exit
-}): ToolResult => ({
-  id: event.toolUseId,
-  tool: event.tool,
-  input: argumentsOf(event.input),
-  cwd: event.cwd,
-  output: outputOf(event.response),
-  failed: exit.failed,
-})
 
 export interface Delivered {
   notes: readonly string[]

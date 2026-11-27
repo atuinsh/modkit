@@ -160,19 +160,3 @@ export function harnessFor({
     report,
   }
 }
-
-export function reporterFor({
-  plugin,
-  notify,
-}: {
-  plugin: string
-  notify: (line: string) => void
-}): (failure: Failure) => void {
-  const told = new Set<string>()
-  return ({ phase, error }) => {
-    const line = `${plugin}: ${phase} failed: ${messageOf(error)}`
-    if (told.has(line)) return
-    told.add(line)
-    notify(line)
-  }
-}

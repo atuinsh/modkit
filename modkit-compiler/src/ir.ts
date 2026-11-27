@@ -54,6 +54,20 @@ export type OptionDecl = OptionKind & {
   isSensitive: boolean
 }
 
+/** Resolved hook subscriptions and UI flags derived from the mod's parts and queries. */
+export interface HookNeeds {
+  /** Tools to intercept before running, including `'Bash'` when `beforeShell` is declared. */
+  before: string[]
+  /** Tools to intercept after running, including `'Bash'` when `afterShell` or a query exists. */
+  after: string[]
+  /** Tools whose rows draw mod cards. */
+  cards: string[]
+  /** True when the mod renders any status row. */
+  hasStatus: boolean
+  /** True when the mod defines any pane or command (commands may toggle a pane). */
+  hasPanes: boolean
+}
+
 /** Output of `compile()`: either the full compiled mod IR or a list of diagnostics. */
 export type Compiled =
   | {
@@ -67,5 +81,6 @@ export type Compiled =
       env: string[]
       tools: { before: string[]; after: string[]; cards: string[] }
       modparts: Modparts
+      hooks: HookNeeds
     }
   | { isOk: false; diagnostics: Diagnostic[] }

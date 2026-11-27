@@ -9,7 +9,7 @@ import {
 } from '@atuin/modkit-target/host'
 
 import { SHELL_TOOL, type HookEvent } from '../protocol'
-import { shellCallOf, shellResultOf, toolCallOf, toolResultOf } from './hooks'
+import { callOf, resultOf } from './hooks'
 import { exitFromTranscript, UNKNOWN_EXIT } from './transcript'
 
 export interface CodexSession {
@@ -34,22 +34,18 @@ export class CodexRuntime extends ModkitTargetRuntime<CodexSession> {
   }
 
   async verdictOn(event: HookEvent & { event: 'PreToolUse' }): Promise<Verdict> {
-    if (event.tool !== SHELL_TOOL) return this.beforeTool(toolCallOf(event))
-    const call = shellCallOf(event)
-    return call === undefined ? undefined : this.beforeShell(call)
+    const call = callOf(event)
+    return call === undefined ? undefined : this.verdictFor(call)
   }
 
   async followupOn(event: HookEvent & { event: 'PostToolUse' }): Promise<Followup> {
-    if (event.tool !== SHELL_TOOL) {
-      return this.afterTool(toolResultOf({ event, exit: UNKNOWN_EXIT }))
-    }
     if (!this.hasStarted) return {}
     const exit =
-      event.transcript === null
-        ? UNKNOWN_EXIT
-        : await exitFromTranscript({ path: event.transcript, id: event.toolUseId })
-    const result = shellResultOf({ event, exit })
-    return result === undefined ? {} : this.afterShell(result)
+      event.tool === SHELL_TOOL && event.transcript !== null
+        ? await exitFromTranscript({ path: event.transcript, id: event.toolUseId })
+        : UNKNOWN_EXIT
+    const result = resultOf({ event, exit })
+    return result === undefined ? {} : this.followupFor(result)
   }
 
   protected override async adapter(session: CodexSession): Promise<HarnessAdapter> {

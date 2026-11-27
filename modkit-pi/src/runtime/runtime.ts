@@ -10,10 +10,11 @@ import type {
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
+  failureReporter,
   ModkitTargetRuntime,
+  resolveVerdict,
   type CommandView,
   type Failure,
-  type Followup,
   type HarnessAdapter,
   type Mod,
   type Options,
@@ -23,22 +24,10 @@ import {
   type Store,
   type ToolRow,
   type UiNode,
-  type Verdict,
 } from '@atuin/modkit-target/host'
 
-import { harnessFor, reporterFor } from './harness'
-import {
-  blockOf,
-  followedBy,
-  PI_SHELL,
-  shellCallOf,
-  shellResultOf,
-  toolCallOf,
-  toolResultOf,
-  type Block,
-  type PiCall,
-  type PiResult,
-} from './hooks'
+import { harnessFor } from './harness'
+import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks'
 import { linesOf } from './lines'
 import { configuredServer } from './mcp'
 import { Overlays } from './overlays'
@@ -119,14 +108,14 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   async beforeCall(event: PiCall, ctx: ExtensionContext): Promise<Block | undefined> {
     try {
-      return await blockOf({
-        verdict: await this.#verdictOn(event, ctx.cwd),
+      const outcome = await resolveVerdict({
+        verdict: await this.verdictFor(callOf({ event, cwd: ctx.cwd })),
         canAsk: ctx.hasUI,
         confirm: async (ask) => ctx.ui.confirm(`${this.#plugin} asks`, ask),
-        notify: (text) => {
-          if (ctx.hasUI) ctx.ui.notify(text, 'info')
-        },
       })
+      if (!outcome.allow) return { block: true, reason: outcome.reason }
+      if (outcome.note !== undefined && ctx.hasUI) ctx.ui.notify(outcome.note, 'info')
+      return undefined
     } catch {
       return undefined
     }
@@ -137,7 +126,9 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
     ctx: ExtensionContext,
   ): Promise<ToolResultEventResult | undefined> {
     try {
-      const followup = await this.#followupOn(event, ctx.cwd)
+      const result = resultOf({ event, cwd: ctx.cwd })
+      if (result === undefined) return undefined
+      const followup = await this.followupFor(result)
       if (followup.note !== undefined && ctx.hasUI) ctx.ui.notify(followup.note, 'info')
       return followedBy({ event, followup })
     } catch {
@@ -151,7 +142,7 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   protected override async adapter(ctx: ExtensionContext): Promise<HarnessAdapter> {
     const plugin = this.#plugin
-    const report = reporterFor({
+    const report = failureReporter({
       plugin,
       notify: (line) => {
         if (ctx.hasUI) ctx.ui.notify(line, 'error')
@@ -218,19 +209,6 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
     const repeat = setInterval(tick, everyMs)
     repeat.unref()
     this.#repeats.push(repeat)
-  }
-
-  async #verdictOn(event: PiCall, cwd: string): Promise<Verdict> {
-    const call = shellCallOf({ event, cwd })
-    if (call !== undefined) return this.beforeShell(call)
-    return this.beforeTool(toolCallOf({ event, cwd }))
-  }
-
-  async #followupOn(event: PiResult, cwd: string): Promise<Followup> {
-    const result = shellResultOf({ event, cwd })
-    if (result !== undefined) return this.afterShell(result)
-    if (event.toolName === PI_SHELL) return {}
-    return this.afterTool(toolResultOf({ event, cwd }))
   }
 
   #statusKey(index: number): string {

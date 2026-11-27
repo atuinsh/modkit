@@ -17,6 +17,7 @@ export {
   type Author,
   type Diagnostic,
   type Field,
+  type HookNeeds,
   type Item,
   type ModInfo,
   type ModpartName,

@@ -92,9 +92,9 @@ class CodexTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, env, tools, modparts } = compiled
+    const { mod, entry, state, options, env, tools, hooks } = compiled
     const plugin = pluginNameOf(mod.name)
-    const hasStatus = modparts.status !== undefined
+    const { hasStatus } = hooks
     const served = {
       plugin,
       version: mod.version,
@@ -105,13 +105,7 @@ class CodexTarget extends ModkitTarget<undefined> {
     await bundle({ dir, entry: entrySource({ mod: entry, served }), file: join(out, 'server.mjs') })
     await mkdir(join(out, '.codex-plugin'), { recursive: true })
     await mkdir(join(out, 'hooks'), { recursive: true })
-    const manifests = manifestsOf({
-      plugin,
-      mod,
-      env,
-      hasBeforeShell: modparts.beforeShell !== undefined,
-      tools,
-    })
+    const manifests = manifestsOf({ plugin, mod, env, hooks })
     await writeFile(join(out, '.codex-plugin', 'plugin.json'), json(manifests.plugin))
     await writeFile(join(out, '.mcp.json'), json(manifests.mcp))
     await writeFile(join(out, 'hooks', 'hooks.json'), json(manifests.hooks))

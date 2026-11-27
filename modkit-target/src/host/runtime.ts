@@ -62,6 +62,16 @@ export interface ButtonPress {
   surface: Surface
 }
 
+/** A shell or tool call intercepted before execution. */
+export type HookedCall =
+  | ({ readonly kind: 'shell' } & ShellCall)
+  | ({ readonly kind: 'tool' } & ToolCall)
+
+/** A shell or tool result intercepted after execution. */
+export type HookedResult =
+  | ({ readonly kind: 'shell' } & ShellResult)
+  | ({ readonly kind: 'tool' } & ToolResult)
+
 /**
  * A mod's session, which every target runs the same way: it mounts the mod when the session starts,
  * keeps the panes the mod shows open, ticks it, and answers the harness's hooks and the person's
@@ -170,6 +180,16 @@ export abstract class ModkitTargetRuntime<Engine> {
   /** What the mod follows a tool call's result with. */
   protected async afterTool(result: ToolResult): Promise<Followup> {
     return (await this.#mounted?.afterTool(result)) ?? NO_FOLLOWUP
+  }
+
+  /** Route a shell or tool call to `beforeShell` or `beforeTool`. */
+  protected async verdictFor(call: HookedCall): Promise<Verdict> {
+    return call.kind === 'shell' ? this.beforeShell(call) : this.beforeTool(call)
+  }
+
+  /** Route a shell or tool result to `afterShell` or `afterTool`. */
+  protected async followupFor(result: HookedResult): Promise<Followup> {
+    return result.kind === 'shell' ? this.afterShell(result) : this.afterTool(result)
   }
 
   /** The cards the mod draws under a row of the session's tool calls. */

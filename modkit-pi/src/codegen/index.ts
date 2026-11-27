@@ -86,15 +86,14 @@ class PiTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools, modparts } = compiled
+    const { mod, entry, state, options, tools, hooks } = compiled
     const plugin = pluginNameOf(mod.name)
     const served = {
       plugin,
       settings: options.map((option) => settingOf(option)),
       state: tagsOf(state),
-      cards: tools.cards,
-      // A command can hold a pane of its own, so a mod with either has panes to move to.
-      hasPanes: modparts.panes !== undefined || modparts.commands !== undefined,
+      cards: hooks.cards,
+      hasPanes: hooks.hasPanes,
     }
     const source = [
       genImport(RUNTIME, ['extensionOf']),

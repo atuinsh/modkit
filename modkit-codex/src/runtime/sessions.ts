@@ -9,7 +9,7 @@ import type { Mod, Options } from '@atuin/modkit-target/host'
 
 import { serverNameOf } from '../protocol'
 import { configuredServer } from './configured'
-import { harnessFor, reporterFor, type SessionState } from './harness'
+import { harnessFor, type SessionState } from './harness'
 import { CodexRuntime, type CodexSession } from './runtime'
 
 export interface Served {
@@ -85,19 +85,20 @@ export class Sessions {
   }
 
   #harnessFor(state: SessionState): CodexSession['harness'] {
-    const report = reporterFor({
+    return harnessFor({
       plugin: this.#served.plugin,
       session: state,
+      servers: this.#servers,
+      storeFor: (report) =>
+        fileStore({
+          dir: join(this.#dir, 'sessions'),
+          session: state.id,
+          tags: this.#served.state,
+          report,
+        }),
       log: (line) => {
         process.stderr.write(`${line}\n`)
       },
     })
-    const store = fileStore({
-      dir: join(this.#dir, 'sessions'),
-      session: state.id,
-      tags: this.#served.state,
-      report,
-    })
-    return harnessFor({ session: state, servers: this.#servers, store, report })
   }
 }

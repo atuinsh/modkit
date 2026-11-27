@@ -1,6 +1,6 @@
 import { isPlainObject } from 'es-toolkit/predicate'
 
-import type { ShellCall, ShellResult, ToolCall, ToolResult } from '@atuin/modkit-target/host'
+import type { HookedCall, HookedResult } from '@atuin/modkit-target/host'
 
 const OPENCODE_SHELL = 'shell'
 const MOD_SHELL = 'Bash'
@@ -28,18 +28,14 @@ type Json = Readonly<Record<string, unknown>>
 
 const recordOf = (value: unknown): Json => (isPlainObject(value) ? value : {})
 
-export function shellCallOf({ call, cwd }: { call: OcCall; cwd: string }): ShellCall | undefined {
-  const { command, workdir } = recordOf(call.input)
-  if (call.tool !== OPENCODE_SHELL || typeof command !== 'string') return undefined
-  return { id: call.id, command, cwd: typeof workdir === 'string' ? workdir : cwd }
+export function callOf({ call, cwd }: { call: OcCall; cwd: string }): HookedCall {
+  const input = recordOf(call.input)
+  const { command, workdir } = input
+  if (call.tool === OPENCODE_SHELL && typeof command === 'string') {
+    return { kind: 'shell', id: call.id, command, cwd: typeof workdir === 'string' ? workdir : cwd }
+  }
+  return { kind: 'tool', id: call.id, tool: modToolOf(call.tool), input, cwd }
 }
-
-export const toolCallOf = ({ call, cwd }: { call: OcCall; cwd: string }): ToolCall => ({
-  id: call.id,
-  tool: modToolOf(call.tool),
-  input: recordOf(call.input),
-  cwd,
-})
 
 function textOf(content: OcResult['content']): string {
   if (typeof content === 'string') return content
@@ -48,7 +44,7 @@ function textOf(content: OcResult['content']): string {
     .join('\n')
 }
 
-export function shellResultOf({
+export function resultOf({
   call,
   result,
   cwd,
@@ -56,36 +52,25 @@ export function shellResultOf({
   call: OcCall
   result: OcResult
   cwd: string
-}): ShellResult | undefined {
-  const shell = shellCallOf({ call, cwd })
+}): HookedResult | undefined {
+  const parsed = callOf({ call, cwd })
+  if (parsed.kind === 'tool') {
+    return { ...parsed, output: textOf(result.content), failed: false }
+  }
   const { status, exit } = recordOf(result.metadata)
-  if (shell === undefined || status === 'running') return undefined
+  if (status === 'running') return undefined
   const { output: structured } = recordOf(result.output)
   const exitCode = typeof exit === 'number' ? exit : null
   return {
-    ...shell,
+    ...parsed,
     output: typeof structured === 'string' ? structured : textOf(result.content),
     exitCode,
     failed: exitCode !== 0,
   }
 }
 
-export const toolResultOf = ({
-  call,
-  result,
-  cwd,
-}: {
-  call: OcCall
-  result: OcResult
-  cwd: string
-}): ToolResult => ({
-  ...toolCallOf({ call, cwd }),
-  output: textOf(result.content),
-  failed: false,
-})
-
 // A call opencode ended with an error rather than a result, as the mod's handlers take it.
-export function failedShellOf({
+export function failedResultOf({
   call,
   message,
   cwd,
@@ -93,22 +78,12 @@ export function failedShellOf({
   call: OcCall
   message: string
   cwd: string
-}): ShellResult | undefined {
-  const shell = shellCallOf({ call, cwd })
-  return shell === undefined
-    ? undefined
-    : { ...shell, output: message, exitCode: null, failed: true }
+}): HookedResult {
+  const parsed = callOf({ call, cwd })
+  return parsed.kind === 'shell'
+    ? { ...parsed, output: message, exitCode: null, failed: true }
+    : { ...parsed, output: message, failed: true }
 }
-
-export const failedToolOf = ({
-  call,
-  message,
-  cwd,
-}: {
-  call: OcCall
-  message: string
-  cwd: string
-}): ToolResult => ({ ...toolCallOf({ call, cwd }), output: message, failed: true })
 
 export function withContext<Result extends OcResult>({
   result,
