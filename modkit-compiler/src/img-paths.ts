@@ -22,6 +22,7 @@ import {
   TypeFlags,
   type Node,
   type Project,
+  type TsSymbol,
   type Type,
 } from './program.ts'
 
@@ -82,6 +83,17 @@ function writtenPathsOf({
   return type === undefined ? undefined : literalsOf(type)
 }
 
+// Whether a spread copies `image`. It copies own enumerable properties alone: a getter written in an
+// object literal is one, while a class's getter sits on its prototype, and one only declared in a
+// type may be either, so neither of those may set anything though the checker says it always does.
+function isCopied(image: TsSymbol): boolean {
+  if ((image.flags & SymbolFlags.Accessor) === 0) return true
+  return image.declarations.every((declaration) => {
+    const node = declaration.resolve()
+    return node !== undefined && syntax.isObjectLiteralExpression(node.parent)
+  })
+}
+
 // What spreading a value of `type`, which is no union, sets `image` to, or undefined when the
 // build can't tell.
 function memberImageOf({
@@ -106,10 +118,7 @@ function memberImageOf({
   }
   const paths = present === undefined ? undefined : literalsOf(present)
   if (paths === undefined) return undefined
-  // A spread copies own enumerable properties alone, so an accessor, as a class's getter on its
-  // prototype is, may set nothing even where the checker says it always does.
-  const isSet = (image.flags & (SymbolFlags.Optional | SymbolFlags.Accessor)) === 0
-  return { paths, isSet }
+  return { paths, isSet: (image.flags & SymbolFlags.Optional) === 0 && isCopied(image) }
 }
 
 // What spreading `spread` sets `image` to, over each member of its type when that is a union.
