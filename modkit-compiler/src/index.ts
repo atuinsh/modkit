@@ -10,6 +10,7 @@ export {
 export type {
   Author,
   Compiled,
+  HookNeeds,
   ModInfo,
   OptionDecl,
   OptionKind,

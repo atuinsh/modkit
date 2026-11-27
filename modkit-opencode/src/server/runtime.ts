@@ -9,16 +9,7 @@ import {
   type Verdict,
 } from '@atuin/modkit-target/host'
 
-import {
-  failedShellOf,
-  failedToolOf,
-  shellCallOf,
-  shellResultOf,
-  toolCallOf,
-  toolResultOf,
-  type OcCall,
-  type OcResult,
-} from './hooks'
+import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './hooks'
 import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view'
 
 export interface OpencodeSession {
@@ -66,26 +57,12 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
   }
 
   async verdictOn({ call, cwd }: { call: OcCall; cwd: string }): Promise<Verdict> {
-    const shell = shellCallOf({ call, cwd })
-    return shell === undefined
-      ? this.beforeTool(toolCallOf({ call, cwd }))
-      : this.beforeShell(shell)
+    return this.verdictFor(callOf({ call, cwd }))
   }
 
-  async followupOn({
-    call,
-    result,
-    cwd,
-  }: {
-    call: OcCall
-    result: OcResult
-    cwd: string
-  }): Promise<Followup> {
-    const shell = shellResultOf({ call, result, cwd })
-    if (shell !== undefined) return this.afterShell(shell)
-    // A shell call still running has no result for the mod yet.
-    if (shellCallOf({ call, cwd }) !== undefined) return {}
-    return this.afterTool(toolResultOf({ call, result, cwd }))
+  async followupOn(input: { call: OcCall; result: OcResult; cwd: string }): Promise<Followup> {
+    const result = resultOf(input)
+    return result === undefined ? {} : this.followupFor(result)
   }
 
   async followupOnFailed(failed: {
@@ -93,8 +70,7 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
     message: string
     cwd: string
   }): Promise<Followup> {
-    const shell = failedShellOf(failed)
-    return shell === undefined ? this.afterTool(failedToolOf(failed)) : this.afterShell(shell)
+    return this.followupFor(failedResultOf(failed))
   }
 
   protected override async adapter(session: OpencodeSession): Promise<HarnessAdapter> {

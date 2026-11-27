@@ -4,10 +4,10 @@ import { declarationsIn } from './declarations.ts'
 import { fromTypeScript, type Diagnostic } from './diagnostics.ts'
 import { modCallIn } from './entry.ts'
 import { hostImportsIn } from './imports.ts'
-import type { Compiled, ModInfo } from './ir.ts'
-import { literalsIn } from './literals.ts'
+import type { Compiled, HookNeeds, ModInfo, StateDecl } from './ir.ts'
+import { literalsIn, type Literals } from './literals.ts'
 import { modInfo, tsconfigAt } from './manifest.ts'
-import { modpartsIn } from './modparts.ts'
+import { modpartsIn, type Modparts } from './modparts.ts'
 import { optionsIn } from './options.ts'
 import { errorsIn, openProject, projectErrorsIn, type Project, type SourceFile } from './program.ts'
 
@@ -49,6 +49,28 @@ function unreadable({
   }
 }
 
+const SHELL_TOOL = 'Bash'
+
+function hooksFor({
+  modparts,
+  tools,
+  state,
+}: {
+  modparts: Modparts
+  tools: Literals['tools']
+  state: readonly StateDecl[]
+}): HookNeeds {
+  const needsAfterShell =
+    modparts.afterShell !== undefined || state.some((entry) => entry.kind === 'query')
+  return {
+    before: modparts.beforeShell === undefined ? tools.before : [SHELL_TOOL, ...tools.before],
+    after: needsAfterShell ? [SHELL_TOOL, ...tools.after] : tools.after,
+    cards: tools.cards,
+    hasStatus: modparts.status !== undefined,
+    hasPanes: modparts.panes !== undefined || modparts.commands !== undefined,
+  }
+}
+
 function compiledIn({ project, dir }: { project: Project; dir: string }): Compiled {
   const mod = modInfo(dir)
   const typeErrors = typeErrorsIn(project)
@@ -69,6 +91,7 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
     ...literals.diagnostics,
   ]
   if (diagnostics.length > 0) return { isOk: false, diagnostics }
+  const modparts = modpartsIn(call)
   return {
     isOk: true,
     mod,
@@ -77,7 +100,8 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
     options: settings.options,
     env: literals.env,
     tools: literals.tools,
-    modparts: modpartsIn(call),
+    modparts,
+    hooks: hooksFor({ modparts, tools: literals.tools, state: declared.state }),
   }
 }
 

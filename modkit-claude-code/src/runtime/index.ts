@@ -34,6 +34,7 @@ import { readEnv } from 'modkit-claude:env'
 import { bumpView, load, plugin, readView, save } from 'modkit-claude:state'
 
 import {
+  failureReporter,
   ModkitTargetRuntime,
   type ButtonNode,
   type CommandView,
@@ -58,16 +59,6 @@ const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
-
-function reporterFor($: EngineInterface): HarnessAdapter['report'] {
-  const reported = new Set<string>()
-  return ({ phase, error }) => {
-    const line = `${plugin}: ${phase} failed: ${messageOf(error)}`
-    if (reported.has(line)) return
-    reported.add(line)
-    $.ui.toast(line)
-  }
-}
 
 function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'> {
   return {
@@ -99,7 +90,12 @@ function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'
 
 async function harnessFor($: EngineInterface): Promise<HarnessAdapter> {
   const stored = await load($)
-  const report = reporterFor($)
+  const report = failureReporter({
+    plugin,
+    notify: (line) => {
+      $.ui.toast(line)
+    },
+  })
   return {
     session: { id: await $.session.id() },
     cwd: async () => $.session.cwd(),

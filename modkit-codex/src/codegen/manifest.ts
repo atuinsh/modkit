@@ -1,11 +1,10 @@
-import type { ModInfo } from '@atuin/modkit-target'
+import type { HookNeeds, ModInfo } from '@atuin/modkit-target'
 
 import {
   HOOK_TOOL,
   hookInputOf,
   hookTimeoutOf,
   serverNameOf,
-  SHELL_TOOL,
   type HookEventName,
 } from '../protocol.ts'
 
@@ -77,33 +76,26 @@ function hookFor({ plugin, event }: { plugin: string; event: HookEventName }): C
 
 function hooksConfigOf({
   plugin,
-  hasBeforeShell,
-  tools,
+  hooks,
 }: {
   plugin: string
-  hasBeforeShell: boolean
-  tools: { before: readonly string[]; after: readonly string[] }
+  hooks: Pick<HookNeeds, 'before' | 'after'>
 }): CodexHooksConfig {
   const on = (event: HookEventName): readonly CodexHookEntry[] => [
     { hooks: [hookFor({ plugin, event })] },
   ]
   const preHook = hookFor({ plugin, event: 'PreToolUse' })
   const postHook = hookFor({ plugin, event: 'PostToolUse' })
-  const before = [
-    ...(hasBeforeShell ? [SHELL_TOOL] : []),
-    ...tools.before.filter((tool) => tool !== SHELL_TOOL),
-  ]
-  // The shell is always hooked after: a query that refreshes on `shell.after` needs it even in a
-  // mod with no `afterShell`.
-  const after = [SHELL_TOOL, ...tools.after.filter((tool) => tool !== SHELL_TOOL)]
   return {
     hooks: {
       SessionStart: on('SessionStart'),
       UserPromptSubmit: on('UserPromptSubmit'),
-      ...(before.length > 0 && {
-        PreToolUse: before.map((tool) => ({ matcher: matcherOf(tool), hooks: [preHook] })),
+      ...(hooks.before.length > 0 && {
+        PreToolUse: hooks.before.map((tool) => ({ matcher: matcherOf(tool), hooks: [preHook] })),
       }),
-      PostToolUse: after.map((tool) => ({ matcher: matcherOf(tool), hooks: [postHook] })),
+      ...(hooks.after.length > 0 && {
+        PostToolUse: hooks.after.map((tool) => ({ matcher: matcherOf(tool), hooks: [postHook] })),
+      }),
       Stop: on('Stop'),
     },
   }
@@ -113,14 +105,12 @@ export function manifestsOf({
   plugin,
   mod,
   env,
-  hasBeforeShell,
-  tools,
+  hooks,
 }: {
   plugin: string
   mod: ModInfo
   env: readonly string[]
-  hasBeforeShell: boolean
-  tools: { before: readonly string[]; after: readonly string[] }
+  hooks: HookNeeds
 }): CodexManifests {
   return {
     plugin: {
@@ -141,6 +131,6 @@ export function manifestsOf({
         },
       },
     },
-    hooks: hooksConfigOf({ plugin, hasBeforeShell, tools }),
+    hooks: hooksConfigOf({ plugin, hooks }),
   }
 }

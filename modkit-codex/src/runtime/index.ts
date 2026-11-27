@@ -6,7 +6,7 @@ import {
   RpcError,
 } from '@atuin/modkit-target-node/runtime/errors'
 import { peerOn, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
-import type { Followup } from '@atuin/modkit-target/host'
+import { resolveVerdict, type Followup } from '@atuin/modkit-target/host'
 
 import {
   carriesContext,
@@ -16,7 +16,6 @@ import {
   STATUSLINE_TOOL,
   type HookEvent,
 } from '../protocol'
-import { answerOf, ASK_SCHEMA, decide, type Answer } from './ask'
 import { hookOutputOf, withFollowup, type Decision, type Delivered } from './hooks'
 import { Sessions, type Live, type Served } from './sessions'
 import { statusLineOf } from './statusline'
@@ -26,6 +25,19 @@ export type { Served } from './sessions'
 const PROTOCOL_VERSION = '2025-06-18'
 
 const STATUSLINE_STATE = 'com.openai/codex-statusline-state'
+
+const ASK_SCHEMA = {
+  type: 'object',
+  properties: { run: { type: 'boolean', title: 'Go ahead', default: false } },
+  required: ['run'],
+} as const
+
+function confirmedFrom(result: unknown): boolean | undefined {
+  if (!isPlainObject(result)) return undefined
+  const { action, content }: Readonly<Record<string, unknown>> = result
+  if (action !== 'accept' && action !== 'decline' && action !== 'cancel') return undefined
+  return action === 'accept' && isPlainObject(content) && content['run'] === true
+}
 
 type Json = Readonly<Record<string, unknown>>
 
@@ -133,14 +145,14 @@ class Server {
     }
   }
 
-  async #elicit(ask: string): Promise<Answer | undefined> {
+  async #elicit(ask: string): Promise<boolean | undefined> {
     if (this.#peer === undefined || !this.#canElicit) return undefined
     try {
       const result = await this.#peer.request({
         method: 'elicitation/create',
         params: { message: `${this.#served.plugin}: ${ask}`, requestedSchema: ASK_SCHEMA },
       })
-      return answerOf(result)
+      return confirmedFrom(result)
     } catch {
       return undefined
     }
@@ -154,13 +166,16 @@ class Server {
         runtime.endTurn()
         return NOTHING
       case 'PreToolUse': {
-        const decided = await decide({
+        const outcome = await resolveVerdict({
           verdict: await runtime.verdictOn(event),
           canAsk: event.canAsk,
-          elicit: async (ask) => this.#elicit(ask),
+          confirm: async (ask) => this.#elicit(ask),
         })
-        if (decided.note !== undefined) live.state.notes.push(decided.note)
-        return { ...NOTHING, decision: decided.decision }
+        if (!outcome.allow) {
+          return { ...NOTHING, decision: { kind: 'deny', reason: outcome.reason } }
+        }
+        if (outcome.note !== undefined) live.state.notes.push(outcome.note)
+        return NOTHING
       }
       case 'PostToolUse':
         return { ...NOTHING, followup: await runtime.followupOn(event) }

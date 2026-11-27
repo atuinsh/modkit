@@ -11,10 +11,13 @@
 export {
   ModkitTargetRuntime,
   type ButtonPress,
+  type HookedCall,
+  type HookedResult,
   type PaneOpened,
   type PaneOpening,
   type Repeat,
 } from './runtime.ts'
+export { failureReporter, resolveVerdict, type VerdictOutcome } from './verdict.ts'
 export {
   textOf,
   type ButtonNode,

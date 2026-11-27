@@ -1,15 +1,8 @@
 import { isPlainObject } from 'es-toolkit/predicate'
 
-import type {
-  Followup,
-  ShellCall,
-  ShellResult,
-  ToolCall,
-  ToolResult,
-  Verdict,
-} from '@atuin/modkit-target/host'
+import type { Followup, HookedCall, HookedResult } from '@atuin/modkit-target/host'
 
-export const PI_SHELL = 'bash'
+const PI_SHELL = 'bash'
 const MOD_SHELL = 'Bash'
 
 export const modToolOf = (piTool: string): string => (piTool === PI_SHELL ? MOD_SHELL : piTool)
@@ -36,18 +29,19 @@ export interface Block {
   reason: string
 }
 
-export function shellCallOf({ event, cwd }: { event: PiCall; cwd: string }): ShellCall | undefined {
+export function callOf({ event, cwd }: { event: PiCall; cwd: string }): HookedCall {
   const { command } = event.input
-  if (event.toolName !== PI_SHELL || typeof command !== 'string') return undefined
-  return { id: event.toolCallId, command, cwd }
+  if (event.toolName === PI_SHELL && typeof command === 'string') {
+    return { kind: 'shell', id: event.toolCallId, command, cwd }
+  }
+  return {
+    kind: 'tool',
+    id: event.toolCallId,
+    tool: modToolOf(event.toolName),
+    input: event.input,
+    cwd,
+  }
 }
-
-export const toolCallOf = ({ event, cwd }: { event: PiCall; cwd: string }): ToolCall => ({
-  id: event.toolCallId,
-  tool: modToolOf(event.toolName),
-  input: event.input,
-  cwd,
-})
 
 const outputOf = (content: readonly PiBlock[]): string =>
   content
@@ -80,46 +74,19 @@ function commandOutputOf(result: Pick<PiResult, 'content' | 'structuredContent'>
   return outputOf(result.content).replace(EXITED, '').trimEnd()
 }
 
-export function shellResultOf({
+export function resultOf({
   event,
   cwd,
 }: {
   event: PiResult
   cwd: string
-}): ShellResult | undefined {
-  const call = shellCallOf({ event, cwd })
-  if (call === undefined) return undefined
-  return { ...call, output: commandOutputOf(event), ...exitOf(event) }
-}
-
-export const toolResultOf = ({ event, cwd }: { event: PiResult; cwd: string }): ToolResult => ({
-  ...toolCallOf({ event, cwd }),
-  output: outputOf(event.content),
-  failed: event.isError,
-})
-
-const refusedReason = (ask: string): string => `${ask}\n\nThe person said no.`
-
-export async function blockOf({
-  verdict,
-  canAsk,
-  confirm,
-  notify,
-}: {
-  verdict: Verdict
-  canAsk: boolean
-  confirm: (ask: string) => Promise<boolean>
-  notify: (text: string) => void
-}): Promise<Block | undefined> {
-  if (verdict === undefined) return undefined
-  if ('deny' in verdict) return { block: true, reason: verdict.deny }
-  if (canAsk) {
-    const isAllowed = await confirm(verdict.ask)
-    return isAllowed ? undefined : { block: true, reason: refusedReason(verdict.ask) }
+}): HookedResult | undefined {
+  const call = callOf({ event, cwd })
+  if (call.kind === 'shell') {
+    return { ...call, output: commandOutputOf(event), ...exitOf(event) }
   }
-  if (verdict.otherwise === 'deny') return { block: true, reason: verdict.ask }
-  notify(verdict.ask)
-  return undefined
+  if (event.toolName === PI_SHELL) return undefined
+  return { ...call, output: outputOf(event.content), failed: event.isError }
 }
 
 export function followedBy<Part extends PiBlock, Structured>({
