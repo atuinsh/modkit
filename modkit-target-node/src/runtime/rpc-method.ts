@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-import { INTERNAL_ERROR, INVALID_PARAMS, RpcError } from './errors'
+import { INTERNAL_ERROR, INVALID_PARAMS, RpcError } from './errors.ts'
 
 /** Typed JSON-RPC 2.0 method descriptor coupling its wire name, params schema, and result schema. */
 export class RpcMethod<Params, Result> {

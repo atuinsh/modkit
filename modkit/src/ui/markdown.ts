@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-import { primitive, type Component } from '../runtime/element'
+import { primitive, type Component } from '../runtime/element.ts'
 
 /** Resolved `Markdown` element. */
 export interface MarkdownNode {

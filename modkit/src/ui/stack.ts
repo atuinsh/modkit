@@ -1,8 +1,8 @@
 import * as v from 'valibot'
 
-import { primitive, type Component, type ModNode } from '../runtime/element'
-import type { UiNode } from './node'
-import { BorderSchema, NonNegIntSchema, ToneSchema, type Border, type Tone } from './style'
+import { primitive, type Component, type ModNode } from '../runtime/element.ts'
+import type { UiNode } from './node.ts'
+import { BorderSchema, NonNegIntSchema, ToneSchema, type Border, type Tone } from './style.ts'
 
 /** Resolved `Column` or `Row` container. */
 export interface StackNode {

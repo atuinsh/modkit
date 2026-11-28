@@ -6,8 +6,8 @@
 
 import * as v from 'valibot'
 
-import { marker, type Component, type ModNode } from '../runtime/element'
-import { CallbackSchema, type Callback } from '../runtime/schema'
+import { marker, type Component, type ModNode } from '../runtime/element.ts'
+import { CallbackSchema, type Callback } from '../runtime/schema.ts'
 
 export interface PaneProps {
   title: string

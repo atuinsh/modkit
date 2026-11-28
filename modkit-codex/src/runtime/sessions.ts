@@ -7,10 +7,10 @@ import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runt
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { Images, Mod, Options } from '@atuin/modkit-target/host'
 
-import { configuredServer } from './configured'
-import { LiveSession } from './live-session'
+import { configuredServer } from './configured.ts'
+import { LiveSession } from './live-session.ts'
 
-export type { LiveSession } from './live-session'
+export type { LiveSession } from './live-session.ts'
 
 export interface Served {
   mod: Mod<Options>

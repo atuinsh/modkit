@@ -9,7 +9,7 @@
  * @module
  */
 
-import type { PaneView } from './render'
+import type { PaneView } from './render.ts'
 
 /** Current top-level pane state tracked by a harness target. */
 export interface Shown {

@@ -1,6 +1,6 @@
 import { ModkitTargetRuntime, type Capabilities, type Repeat } from '@atuin/modkit-target/host'
 
-import { Timers } from './timers'
+import { Timers } from './timers.ts'
 
 /**
  * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning interval timer lifetimes and

@@ -4,9 +4,9 @@ import { isPlainObject } from 'es-toolkit/predicate'
 
 import type { ToolRow, UiNode } from '@atuin/modkit-target/host'
 
-import { PI_TOOLS } from '../spec'
-import { linesOf } from './lines'
-import { paintOf } from './paint'
+import { PI_TOOLS } from '../spec.ts'
+import { linesOf } from './lines.ts'
+import { paintOf } from './paint.ts'
 
 const ROWS_REDRAWN = 200
 

@@ -9,9 +9,9 @@ import type {
   Surface,
 } from '@atuin/modkit-target/host'
 
-import { copy } from './clipboard'
-import { projectRootOf, run } from './run'
-import type { Servers } from './servers'
+import { copy } from './clipboard.ts'
+import { projectRootOf, run } from './run.ts'
+import type { Servers } from './servers.ts'
 
 /** Base dependencies required to construct a Node/Bun {@link HarnessAdapter}. */
 export interface NodeHarnessInit {

@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-import { primitive, type Component } from '../runtime/element'
+import { primitive, type Component } from '../runtime/element.ts'
 
 /** A PNG a mod's build embeds: its bytes, base64, and its size in pixels. */
 export interface Png {

@@ -10,8 +10,8 @@ import type {
   Verdict,
 } from '@atuin/modkit-target/host'
 
-import { CODEX_CAPABILITIES, type CodexCapabilities, type CodexHookEvent } from '../protocol'
-import { exitFromTranscript, UNKNOWN_EXIT } from './transcript'
+import { CODEX_CAPABILITIES, type CodexCapabilities, type CodexHookEvent } from '../protocol.ts'
+import { exitFromTranscript, UNKNOWN_EXIT } from './transcript.ts'
 
 export interface CodexSession {
   readonly harness: HarnessAdapter

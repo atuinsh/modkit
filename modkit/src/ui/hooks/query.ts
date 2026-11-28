@@ -1,9 +1,9 @@
 import canonicalize from 'canonicalize'
 import * as v from 'valibot'
 
-import type { Harness, Stored } from '../../harness/types'
-import { activeFrame } from '../../runtime/frame'
-import { checked, type Json } from '../../runtime/schema'
+import type { Harness, Stored } from '../../harness/types.ts'
+import { activeFrame } from '../../runtime/frame.ts'
+import { checked, type Json } from '../../runtime/schema.ts'
 
 type Awaitable<T> = T | Promise<T>
 

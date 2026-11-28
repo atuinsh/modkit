@@ -6,10 +6,10 @@ import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runt
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { CommandView, Images, Mod, Options } from '@atuin/modkit-target/host'
 
-import { Cards } from './cards'
-import { agentDir } from './mcp'
-import { FOCUS_KEY } from './pane'
-import { PiRuntime } from './runtime'
+import { Cards } from './cards.ts'
+import { agentDir } from './mcp.ts'
+import { FOCUS_KEY } from './pane.ts'
+import { PiRuntime } from './runtime.ts'
 
 export interface Served {
   mod: Mod<Options>

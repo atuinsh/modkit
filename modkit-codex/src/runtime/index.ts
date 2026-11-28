@@ -12,11 +12,11 @@ import {
   STATUSLINE_TOOL,
   type Decision,
   type WireHookOutput,
-} from '../protocol'
-import { Sessions, type LiveSession, type Served } from './sessions'
-import { CodexStatusLine } from './statusline'
+} from '../protocol.ts'
+import { Sessions, type LiveSession, type Served } from './sessions.ts'
+import { CodexStatusLine } from './statusline.ts'
 
-export type { Served } from './sessions'
+export type { Served } from './sessions.ts'
 
 const PROTOCOL_VERSION = '2025-06-18'
 const STATUSLINE_STATE = 'com.openai/codex-statusline-state'

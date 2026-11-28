@@ -3,8 +3,8 @@ import { getCapabilities, hyperlink, Markdown, parseColor } from '@earendil-work
 
 import type { Hex, Tone } from '@atuin/modkit-target/host'
 
-import { PICK_MARK, type Paint } from './lines'
-import { pictureLines } from './pictures'
+import { PICK_MARK, type Paint } from './lines.ts'
+import { pictureLines } from './pictures.ts'
 
 const TONE_COLORS: Readonly<Record<Tone, ThemeColor>> = {
   plain: 'text',

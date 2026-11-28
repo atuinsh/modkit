@@ -1,5 +1,5 @@
-import { METHOD_NOT_FOUND, RpcError } from './errors'
-import type { RpcMethod } from './rpc-method'
+import { METHOD_NOT_FOUND, RpcError } from './errors.ts'
+import type { RpcMethod } from './rpc-method.ts'
 
 /** Schema-validating JSON-RPC request router built from {@link RpcMethod} descriptors. */
 export class RpcRouter {

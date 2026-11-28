@@ -12,7 +12,7 @@ import {
   type JSX,
 } from 'solid-js'
 
-import type { ViewJson } from '../contract'
+import type { ViewJson } from '../contract.ts'
 import { EMPTY_VIEW, hotkeysIn, specsOf, viewOf, type Paint, type Span, type Spec } from './draw.js'
 import { CONTRACT, PLUGIN } from './mod.js'
 

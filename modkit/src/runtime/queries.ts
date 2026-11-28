@@ -1,8 +1,8 @@
 import * as v from 'valibot'
 
-import type { HarnessAdapter } from '../harness/types'
-import { recordOf, type HarnessEvent, type QueryRecord } from '../ui/hooks/query'
-import type { QueryRegistration, RenderScope } from './frame'
+import type { HarnessAdapter } from '../harness/types.ts'
+import { recordOf, type HarnessEvent, type QueryRecord } from '../ui/hooks/query.ts'
+import type { QueryRegistration, RenderScope } from './frame.ts'
 
 interface Fetching {
   again: boolean

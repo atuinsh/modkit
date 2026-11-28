@@ -7,13 +7,13 @@ import { isPlainObject } from 'es-toolkit/predicate'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { SettingsSchema } from '@atuin/modkit-target-node/runtime/settings'
 
-import { contractOf, type ViewJson } from '../contract'
-import { hookCalls } from './calls'
-import { opencodeServerOf } from './mcp'
-import type { Served } from './served'
-import { Sessions, sessionsDirOf } from './sessions'
+import { contractOf, type ViewJson } from '../contract.ts'
+import { hookCalls } from './calls.ts'
+import { opencodeServerOf } from './mcp.ts'
+import type { Served } from './served.ts'
+import { Sessions, sessionsDirOf } from './sessions.ts'
 
-export type { Served } from './served'
+export type { Served } from './served.ts'
 
 const RUN_ENDS = new Set([
   'session.execution.succeeded',

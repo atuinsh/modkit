@@ -1,9 +1,9 @@
 import * as v from 'valibot'
 
-import type { Surface } from '../harness/types'
-import { primitive, type Component, type ModNode } from '../runtime/element'
-import { CallbackSchema } from '../runtime/schema'
-import { nodesIn, type UiNode } from './node'
+import type { Surface } from '../harness/types.ts'
+import { primitive, type Component, type ModNode } from '../runtime/element.ts'
+import { CallbackSchema } from '../runtime/schema.ts'
+import { nodesIn, type UiNode } from './node.ts'
 
 /** Context passed to `Button`'s `onPress` handler when the user activates a button. */
 export interface Press {

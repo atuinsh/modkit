@@ -8,9 +8,9 @@ import type {
   ToolResult,
   ToolRow,
   Verdict,
-} from '../harness/types'
-import type { ModNode } from '../runtime/element'
-import { describe } from '../runtime/schema'
+} from '../harness/types.ts'
+import type { ModNode } from '../runtime/element.ts'
+import { describe } from '../runtime/schema.ts'
 
 type Awaitable<T> = T | Promise<T>
 

@@ -1,5 +1,5 @@
-import type { Harness } from '../../harness/types'
-import { activeFrame } from '../../runtime/frame'
+import type { Harness } from '../../harness/types.ts'
+import { activeFrame } from '../../runtime/frame.ts'
 
 /** Return the {@link Harness} interface for the currently rendering mod. */
 export function useHarness(): Harness {
