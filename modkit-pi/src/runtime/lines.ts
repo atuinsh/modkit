@@ -5,6 +5,7 @@ import {
   type Border,
   type ButtonNode,
   type Hex,
+  type ImgNode,
   type LinkNode,
   type TextNode,
   type Tone,
@@ -24,6 +25,8 @@ export interface Paint {
   // nodes are drawn with room for it.
   spellsUrls: boolean
   markdown: (markdown: { text: string; width: number }) => readonly string[]
+  // A picture's lines, or undefined where the surface or the terminal draws none.
+  image: (image: { node: ImgNode; width: number }) => readonly string[] | undefined
 }
 
 interface Span {
@@ -248,6 +251,10 @@ function nodeLines({
         text: paint.button({ label, hotkey: node.hotkey, isPicked: node === paint.picked }),
         width,
       })
+    }
+    case 'Img': {
+      const picture = paint.image({ node, width })
+      return picture === undefined ? wrapped({ text: node.fallback, width }) : [...picture]
     }
     case 'Markdown':
       break

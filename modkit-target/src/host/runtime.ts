@@ -18,6 +18,7 @@ import {
   type ButtonNode,
   type CommandView,
   type HarnessAdapter,
+  type Images,
   type Mounted,
   type Shown,
   type UiNode,
@@ -87,6 +88,7 @@ export type HookedResult =
 export abstract class ModkitTargetRuntime<Engine> {
   readonly #mod: Mod<Options>
   readonly #options: Options
+  readonly #images: Images
   #mounted: Mounted | undefined = undefined
   #report: HarnessAdapter['report'] = REPORT_NOTHING
   #shown: Shown = NOTHING_SHOWN
@@ -95,9 +97,10 @@ export abstract class ModkitTargetRuntime<Engine> {
   // with keyboard focus and the relaxed placement rules an interaction gets.
   #isAnswering = false
 
-  constructor({ mod, options }: { mod: Mod<Options>; options: Options }) {
+  constructor({ mod, options, images }: { mod: Mod<Options>; options: Options; images: Images }) {
     this.#mod = mod
     this.#options = options
+    this.#images = images
   }
 
   /** Whether the session started, so the mod answers the harness's hooks. */
@@ -136,7 +139,7 @@ export abstract class ModkitTargetRuntime<Engine> {
       adapter.report(failure)
     }
     this.#shown = NOTHING_SHOWN
-    const mounted = mount({ mod: this.#mod, options: this.#options, adapter })
+    const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
     this.#mounted = mounted
     mounted.subscribe(() => {
       void this.redraw(engine)

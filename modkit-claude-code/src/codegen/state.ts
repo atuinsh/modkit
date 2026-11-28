@@ -12,7 +12,7 @@
 import { genAugmentation, genImport, genObjectFromValues, genString } from 'knitwork'
 import { pascalCase } from 'scule'
 
-import type { Shape, StateDecl } from '@atuin/modkit-target'
+import { imagesSource, type ImageDecl, type Shape, type StateDecl } from '@atuin/modkit-target'
 
 // Atom bumped on every render so Claude Code's `ui.render` hooks re-evaluate.
 const VIEW_KEY = 'modkit.view'
@@ -27,17 +27,21 @@ export const entrySource = ({
   mod,
   runtime,
   tools,
+  images,
 }: {
   mod: string
   runtime: string
   tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
+  images: readonly ImageDecl[]
 }): string =>
   [
     genImport(runtime, ['ClaudeCodeRuntime', 'engineOf', 'registerHooks']),
     genImport(mod, 'mod'),
     '',
+    `const images = ${imagesSource(images)}`,
+    '',
     'export const register = (on, options) => {',
-    '  const runtime = new ClaudeCodeRuntime({ mod, options })',
+    '  const runtime = new ClaudeCodeRuntime({ mod, options, images })',
     '  registerHooks(on, runtime)',
     ...tools.before.map((tool) => toolHook({ event: 'tool.check', tool, hook: 'checkTool' })),
     ...tools.after.map((tool) => toolHook({ event: 'tool.call', tool, hook: 'callTool' })),

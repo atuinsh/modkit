@@ -69,6 +69,8 @@ function elementOf(node: UiNode): LineElement | undefined {
     case 'Button':
     case 'Link':
       return { type: 'text', children: elementsOf(node.children) }
+    case 'Img':
+      return leafOf(node.fallback)
     case 'Markdown':
       break
   }

@@ -11,6 +11,7 @@ import type {
 } from '../harness/index'
 import { followupOf, verdictOf, type Mod, type Options, type Parts } from '../modparts/mod'
 import type { HarnessEvent } from '../ui/hooks/query'
+import type { Images } from '../ui/img'
 import type { UiNode } from '../ui/node'
 import { isRendering, type QueryRegistration, type RenderScope } from './frame'
 import { Queries } from './queries'
@@ -61,6 +62,7 @@ class MountedMod implements Mounted {
   readonly #setup: (settings: never) => Parts
   readonly #options: object
   readonly #adapter: HarnessAdapter
+  readonly #images: Images
   readonly #listeners = new Set<() => void>()
   readonly #queries: Queries
   #rendered: Rendered = NOTHING
@@ -69,14 +71,17 @@ class MountedMod implements Mounted {
     setup,
     options,
     adapter,
+    images,
   }: {
     setup: (settings: never) => Parts
     options: object
     adapter: HarnessAdapter
+    images: Images
   }) {
     this.#setup = setup
     this.#options = options
     this.#adapter = adapter
+    this.#images = images
     this.#queries = new Queries({
       adapter,
       write: (change) => {
@@ -195,6 +200,7 @@ class MountedMod implements Mounted {
     return {
       harness: this.#adapter,
       store: this.#adapter.store,
+      images: this.#images,
       write: (change) => {
         this.#write(change)
       },
@@ -233,14 +239,18 @@ class MountedMod implements Mounted {
   }
 }
 
+/** Mount `mod` with `options`, reaching the harness through `adapter` and drawing `images`. */
 export function mount<Settings extends Options>({
   mod,
   options,
   adapter,
+  images,
 }: {
   mod: Mod<Settings>
   options: Settings
   adapter: HarnessAdapter
+  /** The PNGs the mod's build embeds, by the path each `Img` names. */
+  images: Images
 }): Mounted {
-  return new MountedMod({ setup: mod.setup, options, adapter })
+  return new MountedMod({ setup: mod.setup, options, adapter, images })
 }

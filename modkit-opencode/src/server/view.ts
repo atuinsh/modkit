@@ -60,6 +60,10 @@ function nodeJson({ node, here, walk }: { node: UiNode; here: string; walk: Walk
       }
     case 'Button':
       return buttonJson({ node, here, walk })
+    case 'Img': {
+      const { png, columns, rows, fallback } = node
+      return { kind: 'Img', png: png.base64, columns, rows, fallback }
+    }
     case 'Markdown':
       break
   }

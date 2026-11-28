@@ -4,6 +4,7 @@ import { getCapabilities, hyperlink, Markdown, parseColor } from '@earendil-work
 import type { Hex, Tone } from '@atuin/modkit-target/host'
 
 import { PICK_MARK, type Paint } from './lines'
+import { pictureLines } from './pictures'
 
 const TONE_COLORS: Readonly<Record<Tone, ThemeColor>> = {
   plain: 'text',
@@ -28,7 +29,8 @@ const borderColor = (tone: Tone | undefined): ThemeColor =>
   tone === undefined || tone === 'plain' ? 'border' : TONE_COLORS[tone]
 
 /**
- * Paint drawing with `theme`, and hotkeys beside buttons when `hasKeys`.
+ * Paint drawing with `theme`: hotkeys beside buttons when `hasKeys`, and pictures when
+ * `drawsImages`.
  *
  * A link is colored and underlined as pi's markdown draws one. Where the terminal opens no links it
  * draws as its text, followed by its URL unless `isLine`, as the footer has no room for one.
@@ -37,10 +39,12 @@ export function paintOf({
   theme,
   hasKeys,
   isLine,
+  drawsImages,
 }: {
   theme: Theme
   hasKeys: boolean
   isLine: boolean
+  drawsImages: boolean
 }): Paint {
   const opensLinks = getCapabilities().hyperlinks
   return {
@@ -63,5 +67,6 @@ export function paintOf({
         : name
     },
     markdown: ({ text, width }) => new Markdown(text, 0, 0, getMarkdownTheme()).render(width),
+    image: (image) => (drawsImages ? pictureLines(image) : undefined),
   }
 }

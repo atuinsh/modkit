@@ -1,6 +1,6 @@
 import { Plugin, usePlugin } from '@opencode/plugin/tui'
 import type { PanelInput } from '@opencode/plugin/tui/context'
-import { SyntaxStyle, type RGBA } from '@opentui/core'
+import { resolveImageRenderProtocol, SyntaxStyle, type RGBA } from '@opentui/core'
 import {
   createEffect,
   createSignal,
@@ -79,6 +79,41 @@ function spanned({ span, shared, flow }: { span: Span; shared: Shared; flow: Flo
 // Whether the terminal is known to open no links, so a pane spells out each link's URL.
 const isLinkless = (ctx: Context): boolean => ctx.renderer.capabilities?.hyperlinks === false
 
+// OpenTUI draws a picture with kitty's protocol or sixel where its probe of the terminal found one,
+// and in half blocks otherwise; there the mod's fallback stands in for it.
+function pictured({
+  spec,
+  shared,
+  flow,
+}: {
+  spec: Extract<Spec, { tag: 'image' }>
+  shared: Shared
+  flow: Flow
+}): JSX.Element {
+  const { renderer } = shared.ctx
+  const protocol = resolveImageRenderProtocol(
+    'auto',
+    renderer.capabilities,
+    renderer.resolution !== null,
+  )
+  if (protocol === 'blocks') {
+    return drawn({
+      spec: { tag: 'text', spans: [{ text: spec.fallback, bold: false }] },
+      shared,
+      flow,
+    })
+  }
+  return (
+    <image
+      source={`data:image/png;base64,${spec.png}`}
+      protocol={protocol}
+      width={spec.columns}
+      height={spec.rows}
+      {...lineProps(flow)}
+    />
+  )
+}
+
 const bordered = ({ spec, shared }: { spec: Extract<Spec, { tag: 'box' }>; shared: Shared }) =>
   spec.border === undefined
     ? {}
@@ -115,6 +150,8 @@ function drawn({
           <For each={spec.children}>{(child) => drawn({ spec: child, shared, flow })}</For>
         </box>
       )
+    case 'image':
+      return pictured({ spec, shared, flow })
     case 'markdown':
       break
   }

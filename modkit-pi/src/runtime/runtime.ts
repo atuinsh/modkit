@@ -16,6 +16,7 @@ import {
   type CommandView,
   type Failure,
   type HarnessAdapter,
+  type Images,
   type Mod,
   type Options,
   type PaneOpened,
@@ -38,6 +39,7 @@ const STATUS_COLUMNS = 400
 export interface Session {
   mod: Mod<Options>
   options: Options
+  images: Images
   pi: ExtensionAPI
   plugin: string
   dir: string
@@ -61,8 +63,8 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
   #isStopped = false
 
   constructor(session: Session) {
-    const { mod, options, pi, plugin, dir, state, registerCommand, redrawCards } = session
-    super({ mod, options })
+    const { mod, options, images, pi, plugin, dir, state, registerCommand, redrawCards } = session
+    super({ mod, options, images })
     this.#pi = pi
     this.#plugin = plugin
     this.#dir = dir
@@ -217,7 +219,13 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   #drawStatuses(ctx: ExtensionContext, statuses: readonly (readonly UiNode[])[]): void {
     if (!ctx.hasUI) return
-    const paint = paintOf({ theme: ctx.ui.theme, hasKeys: false, isLine: true })
+    // The footer pi draws takes a line of text, so a status draws each fallback.
+    const paint = paintOf({
+      theme: ctx.ui.theme,
+      hasKeys: false,
+      isLine: true,
+      drawsImages: false,
+    })
     for (const [index, status] of statuses.entries()) {
       const line = linesOf({ nodes: status, width: STATUS_COLUMNS, paint }).join(' ')
       ctx.ui.setStatus(this.#statusKey(index), line === '' ? undefined : line)

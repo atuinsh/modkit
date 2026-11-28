@@ -11,6 +11,7 @@ export type {
   Author,
   Compiled,
   HookNeeds,
+  ImageDecl,
   ModInfo,
   OptionDecl,
   OptionKind,

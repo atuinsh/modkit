@@ -5,7 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 
 import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
-import type { CommandView, Mod, Options } from '@atuin/modkit-target/host'
+import type { CommandView, Images, Mod, Options } from '@atuin/modkit-target/host'
 
 import { Cards } from './cards'
 import { agentDir } from './mcp'
@@ -14,6 +14,7 @@ import { PiRuntime } from './runtime'
 
 export interface Served {
   mod: Mod<Options>
+  images: Images
   plugin: string
   settings: readonly SettingDecl[]
   state: Tags
@@ -72,10 +73,11 @@ class Extension {
     this.#stop(ctx)
     const options = this.#settings(ctx)
     if (options === undefined) return
-    const { mod, plugin, state } = this.#served
+    const { mod, images, plugin, state } = this.#served
     const runtime = new PiRuntime({
       mod,
       options,
+      images,
       pi: this.#pi,
       plugin,
       dir: this.#dir,
