@@ -234,9 +234,16 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     await this.#mounted?.closed(key)
   }
 
+  // Read through a method so TypeScript does not keep `#isDisposed` narrowed to `false` across `await`.
+  #stopped(): boolean {
+    return this.#isDisposed
+  }
+
   async #mount(engine: Engine): Promise<void> {
+    if (this.#stopped()) return
     this.#bindHosts()
     const adapter = await this.adapter(engine)
+    if (this.#stopped()) return
     this.#report = (failure) => {
       adapter.report(failure)
     }
@@ -244,23 +251,29 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
     this.#mounted = mounted
     mounted.subscribe(() => {
-      if (this.#isDisposed) return
+      if (this.#stopped()) return
       void this.#view.redraw(engine)
       if (!this.#isAnswering) this.#syncPanes(engine, false)
     })
     this.#syncPanes(engine, false)
-    for (const command of mounted.view().commands) {
-      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
-      await this.#commands.register(engine, command)
-    }
+    await this.#registerCommands(engine, mounted)
+    if (this.#stopped()) return
     this.repeat(engine, {
       everyMs: TICK.ms,
       tick: () => {
-        if (!this.#isDisposed) void mounted.tick()
+        if (!this.#stopped()) void mounted.tick()
       },
     })
     await mounted.event('session.start')
-    if (!this.#isDisposed) await this.#view.redraw(engine)
+    if (!this.#stopped()) await this.#view.redraw(engine)
+  }
+
+  async #registerCommands(engine: Engine, mounted: Mounted): Promise<void> {
+    for (const command of mounted.view().commands) {
+      if (this.#stopped()) return
+      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
+      await this.#commands.register(engine, command)
+    }
   }
 
   #bindHosts(): void {

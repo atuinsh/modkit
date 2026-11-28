@@ -15,6 +15,10 @@ export abstract class NodeTargetRuntime<Engine, Caps extends Capabilities = Capa
 
   /** Register a {@link Disposable} resource to be torn down in LIFO order when this runtime disposes. */
   protected own<T extends Disposable>(resource: T): T {
+    if (this.isDisposed) {
+      resource[Symbol.dispose]()
+      return resource
+    }
     this.#owned.push(resource)
     return resource
   }
@@ -24,8 +28,26 @@ export abstract class NodeTargetRuntime<Engine, Caps extends Capabilities = Capa
   }
 
   [Symbol.dispose](): void {
-    this.disposeSession()
-    this.#timers[Symbol.dispose]()
-    for (const resource of this.#owned.splice(0).toReversed()) resource[Symbol.dispose]()
+    const errors: unknown[] = []
+    const attempt = (fn: () => void): void => {
+      try {
+        fn()
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+    attempt(() => {
+      this.disposeSession()
+    })
+    attempt(() => {
+      this.#timers[Symbol.dispose]()
+    })
+    for (const resource of this.#owned.splice(0).toReversed()) {
+      attempt(() => {
+        resource[Symbol.dispose]()
+      })
+    }
+    if (errors.length === 1) throw errors[0]
+    if (errors.length > 1) throw new AggregateError(errors, 'multiple resources failed to dispose')
   }
 }
