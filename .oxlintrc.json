@@ -234,6 +234,18 @@
       "rules": { "typescript/method-signature-style": "off" }
     },
     {
+      // A mod is its file's default export, and its JSX is modkit's, not React's: text is written
+      // in place, a part's function sits beside the mod that uses it, and panes nest as they draw.
+      "files": ["examples/**"],
+      "rules": {
+        "import/no-default-export": "off",
+        "react/jsx-filename-extension": "off",
+        "react/jsx-no-literals": "off",
+        "react/only-export-components": "off",
+        "react/jsx-max-depth": "off"
+      }
+    },
+    {
       // tsdown loads its config's default export.
       "files": ["tsdown.config.ts"],
       "rules": { "import/no-default-export": "off" }

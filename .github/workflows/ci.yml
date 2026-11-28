@@ -35,6 +35,9 @@ jobs:
         run: pnpm typecheck
       - name: Oxlint
         run: pnpm lint
+      # Each example builds for every target it lists, which is what checks the targets end to end.
+      - name: Examples
+        run: pnpm examples
       - name: Knip
         run: pnpm knip
       - name: Codespell
