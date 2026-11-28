@@ -45,7 +45,7 @@ export {
   type StyledSpan,
   type UiVisitor,
 } from './ui.ts'
-export { asRecord, errorMessage } from './values.ts'
+export { asRecord, errorMessage, isPlainRecord } from './values.ts'
 export { failureReporter, ModVerdict, type VerdictOutcome } from './verdict.ts'
 export {
   PaneId,

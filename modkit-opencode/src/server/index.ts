@@ -99,20 +99,27 @@ async function serversOf(ctx: Plugin.Context): Promise<Servers> {
   return new Servers({ find: async (name) => opencodeServerOf({ name, configured }) })
 }
 
-interface Outbox {
-  emit?: (event: 'changed' | 'notified', data: Record<string, string>) => Promise<void>
+class RpcOutEvent extends Event {
+  readonly kind: 'changed' | 'notified'
+  readonly data: Record<string, string>
+
+  constructor({ kind, data }: { kind: 'changed' | 'notified'; data: Record<string, string> }) {
+    super('rpc')
+    this.kind = kind
+    this.data = data
+  }
 }
 
 function sessionsOf({
   ctx,
   served,
   servers,
-  outbox,
+  events,
 }: {
   ctx: Plugin.Context
   served: Served
   servers: Servers
-  outbox: Outbox
+  events: EventTarget
 }): Sessions {
   const { plugin } = served
   const where = `${plugin}'s options in opencode.json`
@@ -127,10 +134,10 @@ function sessionsOf({
       dir: sessionsDirOf({ data: dataDir(), plugin }),
       tags: served.state,
       changed: (id) => {
-        void outbox.emit?.('changed', { sessionID: id })
+        events.dispatchEvent(new RpcOutEvent({ kind: 'changed', data: { sessionID: id } }))
       },
       notified: ({ id, text }) => {
-        void outbox.emit?.('notified', { sessionID: id, text })
+        events.dispatchEvent(new RpcOutEvent({ kind: 'notified', data: { sessionID: id, text } }))
       },
     },
   })
@@ -144,12 +151,18 @@ async function setUp({
   served: Served
 }): Promise<() => void> {
   const servers = await serversOf(ctx)
-  const outbox: Outbox = {}
-  const sessions = sessionsOf({ ctx, served, servers, outbox })
+  const events = new EventTarget()
+  const sessions = sessionsOf({ ctx, served, servers, events })
   const registration = await ctx.rpc.register(contractOf(served.plugin), handlersOf(sessions))
-  outbox.emit = async (event, data) => registration.events.emit(event, data)
-  await hookCalls({ ctx, sessions })
   const stop = new AbortController()
+  events.addEventListener(
+    'rpc',
+    (event) => {
+      if (event instanceof RpcOutEvent) void registration.events.emit(event.kind, event.data)
+    },
+    { signal: stop.signal },
+  )
+  await hookCalls({ ctx, sessions })
   void followEvents({ ctx, sessions, signal: stop.signal })
   return () => {
     stop.abort()

@@ -46,13 +46,15 @@ export function nextShown({ shown, rendered }: { shown: Shown; rendered: Rendere
     shown.open.get(pane.id) === pane.title ? [] : [{ kind: 'open', ...pane }],
   )
   const ids = new Set(rendered.map((pane) => pane.id))
-  const closes = [...shown.open.keys()].flatMap((id): PaneChange[] =>
-    ids.has(id) ? [] : [{ kind: 'close', id }],
-  )
+  const closes = shown.open
+    .keys()
+    .filter((id) => !ids.has(id))
+    .map((id): PaneChange => ({ kind: 'close', id }))
+    .toArray()
   return {
     shown: {
       open: new Map(held.map((pane) => [pane.id, pane.title])),
-      dismissed: new Set([...shown.dismissed].filter((id) => ids.has(id))),
+      dismissed: shown.dismissed.intersection(ids),
     },
     changes: [...closes, ...opens],
   }
@@ -66,5 +68,5 @@ export function dismissed({ shown, id }: { shown: Shown; id: string }): Shown {
   if (!shown.open.has(id)) return shown
   const open = new Map(shown.open)
   open.delete(id)
-  return { open, dismissed: new Set([...shown.dismissed, id]) }
+  return { open, dismissed: shown.dismissed.union(new Set([id])) }
 }

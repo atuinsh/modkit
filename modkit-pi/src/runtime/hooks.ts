@@ -1,6 +1,9 @@
-import { isPlainObject } from 'es-toolkit/predicate'
-
-import type { Followup, HookedCall, HookedResult } from '@atuin/modkit-target/host'
+import {
+  asRecord,
+  type Followup,
+  type HookedCall,
+  type HookedResult,
+} from '@atuin/modkit-target/host'
 
 import { PI_TOOLS } from '../spec.ts'
 
@@ -49,8 +52,7 @@ const EXITED = /Command exited with code (?<code>\d+)\s*$/u
 
 const structuredOf = (
   result: Pick<PiResult, 'structuredContent'>,
-): Readonly<Record<string, unknown>> =>
-  isPlainObject(result.structuredContent) ? result.structuredContent : {}
+): Readonly<Record<string, unknown>> => asRecord(result.structuredContent)
 
 function exitOf(result: Pick<PiResult, 'content' | 'structuredContent' | 'isError'>): {
   exitCode: number | null

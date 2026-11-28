@@ -4,7 +4,15 @@
     // The TUI part, which opencode compiles with its own Solid onto OpenTUI.
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
-    "lib": ["es2023", "esnext.disposable", "esnext.temporal", "dom"],
+    "lib": [
+      "es2025",
+      "esnext.disposable",
+      "esnext.temporal",
+      "esnext.error",
+      "esnext.collection",
+      "esnext.typedarrays",
+      "dom"
+    ],
     "types": [],
     // Copied into the mod as source, so nothing builds declarations from it.
     "isolatedDeclarations": false,

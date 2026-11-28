@@ -14,8 +14,10 @@ import { CODEX_CAPABILITIES, type CodexCapabilities, type CodexHookEvent } from 
 import { exitFromTranscript, UNKNOWN_EXIT } from './transcript.ts'
 
 export interface CodexSession {
-  readonly harness: HarnessAdapter
-  readonly store: Disposable
+  readonly buildHarness: (signal: AbortSignal) => {
+    readonly harness: HarnessAdapter
+    readonly store: Disposable
+  }
 }
 
 export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilities> {
@@ -52,8 +54,9 @@ export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilit
   }
 
   protected override adapter(session: CodexSession): HarnessAdapter {
-    this.own(session.store)
-    return session.harness
+    const { harness, store } = session.buildHarness(this.signal)
+    this.own(store)
+    return harness
   }
 
   protected override hosts(): RuntimeHosts<CodexSession, CodexCapabilities> {

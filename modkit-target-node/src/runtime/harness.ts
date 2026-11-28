@@ -20,6 +20,7 @@ export interface NodeHarnessInit {
   readonly servers: Servers
   readonly store: Store
   readonly report: (failure: Failure) => void
+  readonly signal?: AbortSignal
 }
 
 type NotifyFn = (text: string) => Delivery
@@ -82,14 +83,15 @@ export class NodeHarnessBuilder {
 
   /** Build the configured {@link HarnessAdapter}. */
   build(): HarnessAdapter {
-    const { sessionId, cwd, servers, store, report } = this.#init
+    const { sessionId, cwd, servers, store, report, signal } = this.#init
     const resolveCwd = typeof cwd === 'function' ? cwd : (): string => cwd
     return {
       session: { id: sessionId },
       cwd: async () => resolveCwd(),
-      root: async () => findProjectRoot(resolveCwd()),
+      root: async () => findProjectRoot(resolveCwd(), signal),
       env: async (name) => process.env[name],
-      run: async (argv, options) => run({ argv, options, cwd: resolveCwd() }),
+      run: async (argv, options) =>
+        run({ argv, options, cwd: resolveCwd(), ...(signal !== undefined && { signal }) }),
       mcp: async (call) => servers.call(call),
       complete: this.#complete,
       copy: this.#copy,

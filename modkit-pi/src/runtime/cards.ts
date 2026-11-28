@@ -1,8 +1,7 @@
 import type { ToolRendererResolver, ToolRenderers } from '@earendil-works/pi-coding-agent'
 import type { Component } from '@earendil-works/pi-tui'
-import { isPlainObject } from 'es-toolkit/predicate'
 
-import type { ToolRow, UiNode } from '@atuin/modkit-target/host'
+import { asRecord, type ToolRow, type UiNode } from '@atuin/modkit-target/host'
 
 import { PI_TOOLS } from '../spec.ts'
 import { linesOf } from './lines.ts'
@@ -58,7 +57,7 @@ export class Cards {
         const row = {
           id: context.toolCallId,
           tool: name,
-          input: isPlainObject(context.args) ? context.args : {},
+          input: asRecord(context.args),
           isRunning: options.isPartial,
           failed: context.isError,
         }

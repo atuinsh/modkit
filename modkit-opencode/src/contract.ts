@@ -156,28 +156,33 @@ export function parseViewJson(raw: unknown): ViewJson {
   return parsed.success ? parsed.output : EMPTY_VIEW
 }
 
-const SessionInputSchema = v.object({ sessionID: v.string() })
-const PressInputSchema = v.object({ sessionID: v.string(), button: v.string() })
-const RunInputSchema = v.object({ sessionID: v.string(), command: v.string() })
-const CloseInputSchema = v.object({ sessionID: v.string(), pane: v.string() })
+export type SessionId = string & v.Brand<'SessionId'>
+
+const SessionIdSchema = v.pipe(v.string(), v.minLength(1), v.brand('SessionId'))
+const SessionInputSchema = v.object({ sessionID: SessionIdSchema })
+const PressInputSchema = v.object({ sessionID: SessionIdSchema, button: v.string() })
+const RunInputSchema = v.object({ sessionID: SessionIdSchema, command: v.string() })
+const CloseInputSchema = v.object({ sessionID: SessionIdSchema, pane: v.string() })
 const RunOutputSchema = v.object({ text: v.optional(v.string()) })
 
-export function parseSessionInput(raw: unknown): { sessionID: string } | undefined {
+export function parseSessionInput(raw: unknown): { sessionID: SessionId } | undefined {
   const parsed = v.safeParse(SessionInputSchema, raw)
   return parsed.success ? parsed.output : undefined
 }
 
-export function parsePressInput(raw: unknown): { sessionID: string; button: string } | undefined {
+export function parsePressInput(
+  raw: unknown,
+): { sessionID: SessionId; button: string } | undefined {
   const parsed = v.safeParse(PressInputSchema, raw)
   return parsed.success ? parsed.output : undefined
 }
 
-export function parseRunInput(raw: unknown): { sessionID: string; command: string } | undefined {
+export function parseRunInput(raw: unknown): { sessionID: SessionId; command: string } | undefined {
   const parsed = v.safeParse(RunInputSchema, raw)
   return parsed.success ? parsed.output : undefined
 }
 
-export function parseCloseInput(raw: unknown): { sessionID: string; pane: string } | undefined {
+export function parseCloseInput(raw: unknown): { sessionID: SessionId; pane: string } | undefined {
   const parsed = v.safeParse(CloseInputSchema, raw)
   return parsed.success ? parsed.output : undefined
 }

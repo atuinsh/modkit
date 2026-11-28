@@ -78,9 +78,11 @@ async function copyWhereShown({
 async function completeWith({
   ctx,
   request,
+  sessionSignal,
 }: {
   ctx: Pick<ExtensionContext, 'modelRegistry' | 'model'>
   request: CompletionRequest
+  sessionSignal: AbortSignal
 }): Promise<Completion> {
   const model = modelFor({
     wanted: request.model,
@@ -95,7 +97,9 @@ async function completeWith({
     }
   }
   const signal =
-    request.timeoutMs === undefined ? undefined : AbortSignal.timeout(request.timeoutMs)
+    request.timeoutMs === undefined
+      ? sessionSignal
+      : AbortSignal.any([sessionSignal, AbortSignal.timeout(request.timeoutMs)])
   try {
     // Each of a mod's efforts is one of pi's levels, and pi's provider-neutral request thinks only
     // when given one. Its plain `complete` thinks hard unless told otherwise, which can spend a
@@ -110,13 +114,13 @@ async function completeWith({
         {
           ...(request.maxTokens !== undefined && { maxTokens: request.maxTokens }),
           ...(request.effort !== undefined && { reasoning: request.effort }),
-          ...(signal !== undefined && { signal }),
+          signal,
         },
       )
       .result()
     return parseCompletion({ reply, model })
   } catch (error) {
-    const reason = signal?.aborted === true ? 'aborted' : 'api-error'
+    const reason = signal.aborted ? 'aborted' : 'api-error'
     return { isAnswered: false, reason, detail: errorMessage(error) }
   }
 }
@@ -133,6 +137,7 @@ function buildPiHarness({
   servers,
   store,
   report,
+  signal,
 }: {
   pi: Pick<ExtensionAPI, 'sendMessage'>
   ctx: ExtensionContext
@@ -140,6 +145,7 @@ function buildPiHarness({
   servers: Servers
   store: Store
   report: (failure: Failure) => void
+  signal: AbortSignal
 }): HarnessAdapter {
   return NodeHarness.builder({
     sessionId: ctx.sessionManager.getSessionId(),
@@ -147,8 +153,9 @@ function buildPiHarness({
     servers,
     store,
     report,
+    signal,
   })
-    .withComplete(async (request) => completeWith({ ctx, request }))
+    .withComplete(async (request) => completeWith({ ctx, request, sessionSignal: signal }))
     .withCopy(async (text) => copyWhereShown({ ctx, text }))
     .withNotify((text) => {
       if (!ctx.hasUI) return 'dropped'
@@ -171,12 +178,14 @@ export function createSessionResources({
   plugin,
   dir,
   state,
+  signal,
 }: {
   pi: Pick<ExtensionAPI, 'sendMessage'>
   ctx: ExtensionContext
   plugin: string
   dir: string
   state: Tags
+  signal: AbortSignal
 }): PiSessionResources {
   const report = failureReporter({
     plugin,
@@ -194,7 +203,7 @@ export function createSessionResources({
     tags: state,
     report,
   })
-  const harness = buildPiHarness({ pi, ctx, plugin, servers, store, report })
+  const harness = buildPiHarness({ pi, ctx, plugin, servers, store, report, signal })
   return {
     harness,
     report,

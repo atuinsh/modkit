@@ -52,12 +52,15 @@ export class HarnessTools {
     cards: readonly string[]
   }): string[] {
     const hooked = new Set<string>([...tools.before, ...tools.after, ...tools.cards])
-    const missing: string[] = [...hooked].filter(
-      (tool) => !this.#canonical.has(tool) && !tool.startsWith('mcp__'),
-    )
-    missing.sort()
-    return missing.map(
-      (tool) => `${this.#harness} has no ${tool} tool, so what the mod does on it never runs there`,
-    )
+    return hooked
+      .difference(this.#canonical)
+      .values()
+      .filter((tool) => !tool.startsWith('mcp__'))
+      .toArray()
+      .toSorted()
+      .map(
+        (tool) =>
+          `${this.#harness} has no ${tool} tool, so what the mod does on it never runs there`,
+      )
   }
 }

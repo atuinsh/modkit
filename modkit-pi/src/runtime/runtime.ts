@@ -138,6 +138,7 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
         plugin: this.#plugin,
         dir: this.#dir,
         state: this.#state,
+        signal: this.signal,
       }),
     )
     this.#resources = resources

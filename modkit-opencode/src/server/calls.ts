@@ -1,13 +1,12 @@
 import type { Plugin } from '@opencode/plugin'
-import { isPlainObject } from 'es-toolkit/predicate'
 
-import type { Followup } from '@atuin/modkit-target/host'
+import { asRecord, type Followup } from '@atuin/modkit-target/host'
 
 import { withContext, type OcCall, type OcResult } from './hooks.ts'
 import type { Live, Sessions } from './sessions.ts'
 
 function callIdOf(source: unknown): string | undefined {
-  const id: unknown = isPlainObject(source) ? source['id'] : undefined
+  const { id } = asRecord(source)
   return typeof id === 'string' ? id : undefined
 }
 

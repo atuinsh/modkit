@@ -301,7 +301,7 @@ class Server implements Disposable {
 
 export async function serve(served: Served): Promise<void> {
   using server = new Server(served)
-  const peer = peerOn({
+  using peer = peerOn({
     input: process.stdin,
     output: process.stdout,
     onRequest: async (call) => server.answer(call),

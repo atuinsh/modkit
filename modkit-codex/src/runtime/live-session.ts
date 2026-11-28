@@ -70,15 +70,12 @@ export class LiveSession implements Disposable {
     if (!settings.isOk) {
       return new LiveSession({ state, runtime: undefined, opened: Promise.resolve() })
     }
-    const { harness, store } = LiveSession.#buildHarness({
-      state,
-      dir,
-      plugin,
-      stateTags,
-      servers,
-    })
     const runtime = new CodexRuntime({ mod, options: settings.options, images })
-    return new LiveSession({ state, runtime, opened: runtime.open({ harness, store }) })
+    const opened = runtime.open({
+      buildHarness: (signal) =>
+        LiveSession.#buildHarness({ state, dir, plugin, stateTags, servers, signal }),
+    })
+    return new LiveSession({ state, runtime, opened })
   }
 
   static #buildHarness({
@@ -87,12 +84,14 @@ export class LiveSession implements Disposable {
     plugin,
     stateTags,
     servers,
+    signal,
   }: {
     state: SessionState
     dir: string
     plugin: string
     stateTags: Tags
     servers: Servers
+    signal: AbortSignal
   }): { harness: HarnessAdapter; store: FileStore } {
     const report = failureReporter({
       plugin,
@@ -115,6 +114,7 @@ export class LiveSession implements Disposable {
       servers,
       store,
       report,
+      signal,
     })
       .withNotify((text) => {
         state.notes.push(text)

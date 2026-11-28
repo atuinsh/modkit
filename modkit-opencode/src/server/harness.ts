@@ -75,15 +75,17 @@ export function buildHarness({
   store,
   notify,
   report,
+  signal,
 }: {
   reached: Reached
   id: string
   store: Store
   notify: (text: string) => void
   report: (failure: Failure) => void
+  signal: AbortSignal
 }): HarnessAdapter {
   let injected = 0
-  return NodeHarness.builder({ sessionId: id, cwd, servers, store, report })
+  return NodeHarness.builder({ sessionId: id, cwd, servers, store, report, signal })
     .withComplete(async (request) => completeWith({ ctx, request }))
     .withNotify((text) => {
       notify(text)

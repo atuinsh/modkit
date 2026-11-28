@@ -359,9 +359,6 @@ importers:
       '@atuin/modkit-target-node':
         specifier: workspace:*
         version: link:../modkit-target-node
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.53.2
       knitwork:
         specifier: ^1.3.0
         version: 1.3.0
@@ -399,9 +396,6 @@ importers:
       '@atuin/modkit-target-node':
         specifier: workspace:*
         version: link:../modkit-target-node
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.53.2
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@7.0.2)
@@ -449,9 +443,6 @@ importers:
 
   modkit-target-node:
     dependencies:
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.53.2
       knitwork:
         specifier: ^1.3.0
         version: 1.3.0

@@ -20,14 +20,13 @@ export function modkitExports(project: Project): TsSymbol[] {
         : [],
     ),
   )
-  // oxlint-disable-next-line oxc/no-map-spread -- the spread turns an exports iterator into the array flatMap flattens
-  const exported = specifiers.flatMap((specifier) => [
-    ...(checker.getSymbolAtLocation(specifier)?.getExports().values() ?? []),
-  ])
+  const exported = specifiers.flatMap(
+    (specifier) => checker.getSymbolAtLocation(specifier)?.getExports().values().toArray() ?? [],
+  )
   const resolved = exported.map((symbol) =>
     (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol),
   )
-  return [...new Map(resolved.map((symbol) => [symbol.id, symbol])).values()]
+  return new Map(resolved.map((symbol) => [symbol.id, symbol])).values().toArray()
 }
 
 /** Collect every call expression within `node`, including nested calls. */

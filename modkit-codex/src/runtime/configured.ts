@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import * as v from 'valibot'
 
+import { execFileStdout } from '@atuin/modkit-target-node/runtime/run'
 import {
   StringEnvSchema,
   StringListSchema,
@@ -10,17 +8,15 @@ import {
 } from '@atuin/modkit-target-node/runtime/servers'
 import { errorMessage, Result } from '@atuin/modkit-target/host'
 
-// oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
-const execFileAsync = promisify(execFile)
-
 async function codexDescribes(name: string): Promise<unknown> {
-  const described = await execFileAsync('codex', ['mcp', 'get', name, '--json'], {
-    encoding: 'utf8',
+  const stdout = await execFileStdout({
+    command: 'codex',
+    args: ['mcp', 'get', name, '--json'],
   }).catch((error: unknown) => {
     throw new Error(`codex mcp get ${name} failed: ${errorMessage(error)}`, { cause: error })
   })
   try {
-    const json: unknown = JSON.parse(described.stdout)
+    const json: unknown = JSON.parse(stdout)
     return json
   } catch (error) {
     throw new Error(`codex mcp get ${name} printed no JSON`, { cause: error })

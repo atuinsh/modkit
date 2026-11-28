@@ -2,7 +2,7 @@ import type { ArtifactWriter, HookNeeds, ModInfo, PluginName } from '@atuin/modk
 
 import { HOOK_TOOL, hookInputTemplate, hookTimeout, type HookEventName } from '../protocol.ts'
 
-const PASSED_ALWAYS = ['CODEX_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR'] as const
+const PASSED_ALWAYS = new Set(['CODEX_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR'])
 
 interface PluginJson {
   readonly name: string
@@ -48,7 +48,7 @@ function escapeMatcher(tool: string): string {
   // Codex compares a matcher of letters, digits and `_` as written, and reads any other as an
   // unanchored regex, which `mcp__my-server__x` would match more than one tool with.
   if (/^\w+$/u.test(tool)) return tool
-  return `^${tool.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)}$`
+  return `^${RegExp.escape(tool)}$`
 }
 
 function buildHook({ server, event }: { server: string; event: HookEventName }): CodexHook {
@@ -143,7 +143,7 @@ export class CodexPluginManifest {
             command: 'node',
             args: ['./server.mjs'],
             cwd: '.',
-            env_vars: [...new Set([...env, ...PASSED_ALWAYS])].toSorted(),
+            env_vars: new Set(env).union(PASSED_ALWAYS).values().toArray().toSorted(),
           },
         },
       },

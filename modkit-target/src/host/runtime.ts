@@ -297,14 +297,8 @@ export abstract class ModkitTargetRuntime<
   // synchronous part shows open on `engine`, the interaction's, and take the keyboard.
   async #answering<T>(engine: Engine, start: () => Promise<T>): Promise<T> {
     this.#isAnswering = true
-    // oxlint-disable-next-line typescript/promise-function-async -- answering is only start's synchronous part, up to its first await
-    const done = (() => {
-      try {
-        return start()
-      } finally {
-        this.#isAnswering = false
-      }
-    })()
+    const done = Promise.try(start)
+    this.#isAnswering = false
     this.#syncPanes(engine, true)
     return done
   }
@@ -329,11 +323,11 @@ export abstract class ModkitTargetRuntime<
     }
     for (const change of changes) {
       const id = PaneId.parse(change.id)
-      const changed =
+      const apply = (): Awaitable<unknown> =>
         change.kind === 'close'
-          ? Promise.resolve(this.#panes.close(engine, id))
-          : Promise.resolve(this.#panes.open(engine, { id, title: change.title, focus: isAnswer }))
-      changed.catch(fail)
+          ? this.#panes.close(engine, id)
+          : this.#panes.open(engine, { id, title: change.title, focus: isAnswer })
+      Promise.try(apply).catch(fail)
     }
   }
 }

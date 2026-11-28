@@ -77,13 +77,19 @@ export interface Delivered {
 
 export type WireHookOutput = Readonly<Record<string, unknown>>
 
-const SESSION = { session_id: v.string(), cwd: v.string() }
+export type SessionId = string & v.Brand<'SessionId'>
+export type ToolUseId = string & v.Brand<'ToolUseId'>
+
+const SessionIdSchema = v.pipe(v.string(), v.brand('SessionId'))
+const ToolUseIdSchema = v.pipe(v.string(), v.brand('ToolUseId'))
+
+const SESSION = { session_id: SessionIdSchema, cwd: v.string() }
 
 const TOOL = {
   ...SESSION,
   tool_name: v.string(),
   tool_input: v.optional(v.unknown()),
-  tool_use_id: v.string(),
+  tool_use_id: ToolUseIdSchema,
 }
 
 interface HookSpec {
@@ -169,7 +175,7 @@ export class CodexHookEvent {
     return this.#wire.event
   }
 
-  get sessionId(): string {
+  get sessionId(): SessionId {
     return this.#wire.session_id
   }
 
@@ -192,7 +198,7 @@ export class CodexHookEvent {
     )
   }
 
-  get toolUseId(): string | undefined {
+  get toolUseId(): ToolUseId | undefined {
     return this.#wire.event === 'PreToolUse' || this.#wire.event === 'PostToolUse'
       ? this.#wire.tool_use_id
       : undefined
