@@ -12,7 +12,6 @@
 import { errorMessage, Result, type Env } from '@atuin/modkit-target'
 
 import type { Build, TargetBuild } from './build.ts'
-import { Dekit } from './dekit.ts'
 import { HarnessTask } from './harness-task.ts'
 import type { DevLayout } from './layout.ts'
 
@@ -26,7 +25,6 @@ const unchained = (error: unknown): unknown[] =>
 export interface WorkspaceInput {
   build: Build
   layout: DevLayout
-  dekit: Dekit
   /** The targets that get a harness, which the mod's package.json lists. */
   names: readonly string[]
   /** The environment the harnesses start in. */
@@ -44,10 +42,8 @@ export class Workspace {
 
   constructor(input: WorkspaceInput) {
     this.#input = input
-    const { layout, dekit, env } = input
-    this.#tasks = input.names.map((name) =>
-      this.#stack.use(new HarnessTask({ place: layout.target(name), dekit, env })),
-    )
+    const { layout, env } = input
+    this.#tasks = input.names.map((name) => this.#stack.use(HarnessTask.in({ layout, name, env })))
   }
 
   /** The `modkit-logs` task of the run `layout` holds, which builds `build`, or why there is none. */
@@ -64,8 +60,7 @@ export class Workspace {
     if (request === undefined) {
       return Result.err(`${layout.root} holds no modkit dev run to build for; run modkit dev`)
     }
-    const dekit = new Dekit({ root: layout.root, env })
-    return Result.ok(new Workspace({ build, layout, dekit, names: request.targets, env }))
+    return Result.ok(new Workspace({ build, layout, names: request.targets, env }))
   }
 
   /** Build the mod on every save, bringing the harnesses onto each build. */

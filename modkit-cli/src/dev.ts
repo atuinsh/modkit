@@ -4,7 +4,7 @@
  *
  * Run by hand, it opens the {@link DevProject} in this terminal. Its tasks run it again, saying
  * which task they are in their environment ({@link TaskEnv}): `modkit-logs` runs the
- * {@link Workspace}, and a harness's task {@link launch}es its harness.
+ * {@link Workspace}, and a harness's task turns into its harness ({@link HarnessTask.exec}).
  *
  * @module
  */
@@ -12,7 +12,7 @@
 import type { Env } from '@atuin/modkit-target'
 
 import { Build } from './build.ts'
-import { launch } from './launch.ts'
+import { HarnessTask } from './harness-task.ts'
 import { DevLayout } from './layout.ts'
 import { DevProject, type DevArgs } from './project.ts'
 import { TaskEnv } from './task-env.ts'
@@ -47,7 +47,7 @@ export async function dev({ args, env }: { args: DevArgs; env: Env }): Promise<n
   const layout = DevLayout.for(build)
   switch (role.kind) {
     case 'harness':
-      return launch({ build, name: role.target, env: started })
+      return HarnessTask.in({ layout, name: role.target, env: started }).exec(build)
     case 'logs':
       break
   }

@@ -77,6 +77,11 @@ export class Build {
     return this.#out
   }
 
+  /** Where the build for the target `name` goes, `<out>/<name>`. */
+  targetOut(name: string): string {
+    return join(this.#out, name)
+  }
+
   /** The mod's package directory. */
   get dir(): string {
     return this.#package.dir
@@ -154,16 +159,12 @@ export class Build {
     return builds
   }
 
-  #outOf(target: ListedTarget): string {
-    return join(this.#out, target.name)
-  }
-
   #unbuilt(target: ListedTarget): TargetBuild {
-    return { target, out: this.#outOf(target), isOk: false }
+    return { target, out: this.targetOut(target.name), isOk: false }
   }
 
   async #for(target: ListedTarget, { compiled, gaps }: Checked): Promise<TargetBuild> {
-    const out = this.#outOf(target)
+    const out = this.targetOut(target.name)
     const built = await target.build(compiled, out).catch((error: unknown) => errorMessage(error))
     if (typeof built === 'string') {
       console.error(built)
