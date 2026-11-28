@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
 import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
-import type { Mod, Options } from '@atuin/modkit-target/host'
+import type { Images, Mod, Options } from '@atuin/modkit-target/host'
 
 import { serverNameOf } from '../protocol'
 import { configuredServer } from './configured'
@@ -14,6 +14,7 @@ import { CodexRuntime, type CodexSession } from './runtime'
 
 export interface Served {
   mod: Mod<Options>
+  images: Images
   plugin: string
   version: string
   settings: readonly SettingDecl[]
@@ -71,13 +72,15 @@ export class Sessions {
   }
 
   #started({ id, cwd }: { id: string; cwd: string }): Live {
-    const { plugin, mod } = this.#served
+    const { plugin, mod, images } = this.#served
     const state: SessionState = { id, cwd, notes: [], context: [] }
     const path = join(this.#dir, 'settings.json')
     const settings = settingsFrom({ decls: this.#served.settings, text: readText(path), path })
     for (const problem of settings.problems) state.notes.push(`${plugin}: ${problem}`)
     const repeats: NodeJS.Timeout[] = []
-    const runtime = settings.isOk ? new CodexRuntime({ mod, options: settings.options }) : undefined
+    const runtime = settings.isOk
+      ? new CodexRuntime({ mod, options: settings.options, images })
+      : undefined
     const opened = runtime?.open({ harness: this.#harnessFor(state), repeats }) ?? Promise.resolve()
     const live: Live = { state, runtime, opened, repeats }
     this.#live.set(id, live)

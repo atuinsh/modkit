@@ -34,6 +34,8 @@ declare module 'claude-code' {
     readonly Text: Element
     readonly Button: Element
     readonly Markdown: Element
+    /** The terminal surface's alone: a tree holding it on another surface is refused. */
+    readonly Image?: Element
   }
 
   export interface EngineInterface {

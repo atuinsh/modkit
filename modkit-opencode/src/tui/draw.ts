@@ -24,6 +24,7 @@ export type Spec =
       children: Spec[]
     }
   | { tag: 'markdown'; content: string }
+  | { tag: 'image'; png: string; columns: number; rows: number; fallback: string }
 
 const BORDER_STYLES: Readonly<Record<Border, BorderStyle>> = {
   single: 'single',
@@ -66,6 +67,8 @@ function plainOf(node: NodeJson): string {
       return node.children.map((child) => plainOf(child)).join('')
     case 'Button':
       return node.label
+    case 'Img':
+      return node.fallback
     case 'Markdown':
       break
   }
@@ -141,6 +144,10 @@ export function specsOf({
           tag: 'text',
           spans: buttonSpans({ label: node.label, hotkey: node.hotkey, hasKeys }),
         }
+      case 'Img': {
+        const { png, columns, rows, fallback } = node
+        return { tag: 'image', png, columns, rows, fallback }
+      }
       case 'Markdown':
         break
     }
@@ -151,7 +158,7 @@ export function specsOf({
 export function hotkeysIn(nodes: readonly NodeJson[]): Map<string, string> {
   const found = new Map<string, string>()
   const walk = (node: NodeJson): void => {
-    if (typeof node === 'string' || node.kind === 'Markdown') return
+    if (typeof node === 'string' || node.kind === 'Markdown' || node.kind === 'Img') return
     if (node.kind === 'Button') {
       if (node.hotkey !== undefined && !found.has(node.hotkey)) found.set(node.hotkey, node.id)
       return

@@ -83,7 +83,7 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
   if (isDiagnostic(call)) return { isOk: false, diagnostics: [call] }
   const declared = declarationsIn(project)
   const settings = optionsIn({ project, mod: call })
-  const literals = literalsIn({ project, mod: call })
+  const literals = literalsIn({ project, mod: call, dir })
   const diagnostics = [
     ...hostImportsIn(project),
     ...declared.diagnostics,
@@ -100,6 +100,7 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
     options: settings.options,
     env: literals.env,
     tools: literals.tools,
+    images: literals.images,
     modparts,
     hooks: hooksFor({ modparts, tools: literals.tools, state: declared.state }),
   }

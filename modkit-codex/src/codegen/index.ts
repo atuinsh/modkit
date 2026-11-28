@@ -6,12 +6,14 @@ import { genImport, genObjectFromValues } from 'knitwork'
 import * as v from 'valibot'
 
 import {
+  imagesSource,
   ModkitTarget,
   NATIVE,
   pluginNameOf,
   type BuildInput,
   type Built,
   type Capabilities,
+  type ImageDecl,
 } from '@atuin/modkit-target'
 import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
 import type { SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
@@ -46,9 +48,11 @@ function notesOf({ plugin, hasStatus }: { plugin: string; hasStatus: boolean }):
 
 const entrySource = ({
   mod,
+  images,
   served,
 }: {
   mod: string
+  images: readonly ImageDecl[]
   served: {
     plugin: string
     version: string
@@ -61,7 +65,7 @@ const entrySource = ({
     genImport(RUNTIME, ['serve']),
     genImport(mod, 'mod'),
     '',
-    `await serve({ mod, ...${genObjectFromValues(served)} })`,
+    `await serve({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
     '',
   ].join('\n')
 
@@ -92,7 +96,7 @@ class CodexTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, env, tools, hooks } = compiled
+    const { mod, entry, state, options, env, tools, images, hooks } = compiled
     const plugin = pluginNameOf(mod.name)
     const { hasStatus } = hooks
     const served = {
@@ -102,7 +106,8 @@ class CodexTarget extends ModkitTarget<undefined> {
       state: tagsOf(state),
       hasStatus,
     }
-    await bundle({ dir, entry: entrySource({ mod: entry, served }), file: join(out, 'server.mjs') })
+    const source = entrySource({ mod: entry, images, served })
+    await bundle({ dir, entry: source, file: join(out, 'server.mjs') })
     await mkdir(join(out, '.codex-plugin'), { recursive: true })
     await mkdir(join(out, 'hooks'), { recursive: true })
     const manifests = manifestsOf({ plugin, mod, env, hooks })

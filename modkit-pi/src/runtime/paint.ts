@@ -4,6 +4,7 @@ import { Markdown, parseColor } from '@earendil-works/pi-tui'
 import type { Hex, Tone } from '@atuin/modkit-target/host'
 
 import { PICK_MARK, type Paint } from './lines'
+import { pictureLines } from './pictures'
 
 const TONE_COLORS: Readonly<Record<Tone, ThemeColor>> = {
   plain: 'text',
@@ -27,7 +28,15 @@ const textColor = ({
 const borderColor = (tone: Tone | undefined): ThemeColor =>
   tone === undefined || tone === 'plain' ? 'border' : TONE_COLORS[tone]
 
-export function paintOf({ theme, hasKeys }: { theme: Theme; hasKeys: boolean }): Paint {
+export function paintOf({
+  theme,
+  hasKeys,
+  drawsImages,
+}: {
+  theme: Theme
+  hasKeys: boolean
+  drawsImages: boolean
+}): Paint {
   return {
     text: ({ text, tone, bold, color, background }) => {
       const fg = textColor({ tone, color })
@@ -45,5 +54,6 @@ export function paintOf({ theme, hasKeys }: { theme: Theme; hasKeys: boolean }):
         : name
     },
     markdown: ({ text, width }) => new Markdown(text, 0, 0, getMarkdownTheme()).render(width),
+    image: (image) => (drawsImages ? pictureLines(image) : undefined),
   }
 }

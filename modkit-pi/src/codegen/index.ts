@@ -6,6 +6,7 @@ import { genImport, genObjectFromValues } from 'knitwork'
 import * as v from 'valibot'
 
 import {
+  imagesSource,
   ModkitTarget,
   NATIVE,
   pluginNameOf,
@@ -86,7 +87,7 @@ class PiTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools, hooks } = compiled
+    const { mod, entry, state, options, tools, images, hooks } = compiled
     const plugin = pluginNameOf(mod.name)
     const served = {
       plugin,
@@ -99,7 +100,7 @@ class PiTarget extends ModkitTarget<undefined> {
       genImport(RUNTIME, ['extensionOf']),
       genImport(entry, 'mod'),
       '',
-      `export default extensionOf({ mod, ...${genObjectFromValues(served)} })`,
+      `export default extensionOf({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
       '',
     ].join('\n')
     await mkdir(out, { recursive: true })

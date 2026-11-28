@@ -14,6 +14,8 @@ export type NodeJson =
     }
   | { kind: 'Button'; id: string; hotkey?: string; label: string }
   | { kind: 'Markdown'; text: string }
+  /** A PNG, base64, over a box of `columns` by `rows` cells. */
+  | { kind: 'Img'; png: string; columns: number; rows: number; fallback: string }
 
 export interface PaneJson {
   id: string

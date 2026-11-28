@@ -1,7 +1,13 @@
 import { join } from 'node:path'
 
 import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
-import { failureReporter, type Ask, type Mod, type Options } from '@atuin/modkit-target/host'
+import {
+  failureReporter,
+  type Ask,
+  type Images,
+  type Mod,
+  type Options,
+} from '@atuin/modkit-target/host'
 
 import { harnessFor, type Reached } from './harness'
 import { OpencodeRuntime, type OpencodeSession } from './runtime'
@@ -23,6 +29,7 @@ export interface Ports {
 
 export class Sessions {
   readonly #mod: Mod<Options>
+  readonly #images: Images
   readonly #options: Options | undefined
   readonly #problems: readonly string[]
   readonly #ports: Ports
@@ -31,16 +38,19 @@ export class Sessions {
 
   constructor({
     mod,
+    images,
     options,
     problems,
     ports,
   }: {
     mod: Mod<Options>
+    images: Images
     options: Options | undefined
     problems: readonly string[]
     ports: Ports
   }) {
     this.#mod = mod
+    this.#images = images
     this.#options = options
     this.#problems = problems
     this.#ports = ports
@@ -78,7 +88,7 @@ export class Sessions {
     }
     const options = this.#options
     if (options === undefined) return undefined
-    const runtime = new OpencodeRuntime({ mod: this.#mod, options })
+    const runtime = new OpencodeRuntime({ mod: this.#mod, options, images: this.#images })
     const session: OpencodeSession = {
       harness: this.#harnessFor(id),
       changed: () => {

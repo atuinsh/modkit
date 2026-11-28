@@ -6,6 +6,7 @@ import { genExport, genImport, genObjectFromValues, genString } from 'knitwork'
 import * as v from 'valibot'
 
 import {
+  imagesSource,
   ModkitTarget,
   NATIVE,
   pluginNameOf,
@@ -117,7 +118,7 @@ class OpencodeTarget extends ModkitTarget<undefined> {
   override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
 
   override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools } = compiled
+    const { mod, entry, state, options, tools, images } = compiled
     const plugin = pluginNameOf(mod.name)
     const served = {
       plugin,
@@ -129,7 +130,7 @@ class OpencodeTarget extends ModkitTarget<undefined> {
       genImport(SERVER, ['serverOf']),
       genImport(entry, 'mod'),
       '',
-      `export default serverOf({ mod, ...${genObjectFromValues(served)} })`,
+      `export default serverOf({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
     ])
     await bundle({ dir, entry: server, file: join(out, 'server.js'), external: PROVIDED })
     await writeTui({ dir, out, plugin })

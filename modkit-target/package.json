@@ -13,6 +13,7 @@
   "dependencies": {
     "@atuin/modkit-compiler": "workspace:*",
     "import-meta-resolve": "^4.2.0",
+    "knitwork": "^1.3.0",
     "valibot": "catalog:"
   },
   "devDependencies": {

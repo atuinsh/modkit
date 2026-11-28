@@ -26,6 +26,8 @@ export type DiagnosticCode =
   /** A `harness.env()` call passes a non-literal variable name. */
   | 'env-name'
   | 'tool-name'
+  /** An `<Img>` names its PNG with no string literal, or names no PNG in the mod's directory. */
+  | 'image'
   /** A mod imports what only a target may: `@atuin/modkit/host` or an `@atuin/modkit-*` package. */
   | 'host-import'
   /** `package.json` lists no `modkit.targets`, or its `modkit` field is malformed. */

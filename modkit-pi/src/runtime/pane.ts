@@ -14,7 +14,7 @@ export const FOCUS_KEY = 'alt+m'
 
 function buttonsIn(nodes: readonly UiNode[]): ButtonNode[] {
   return nodes.flatMap((node): ButtonNode[] => {
-    if (typeof node === 'string' || node.kind === 'Markdown') return []
+    if (typeof node === 'string' || node.kind === 'Markdown' || node.kind === 'Img') return []
     return node.kind === 'Button' ? [node] : buttonsIn(node.children)
   })
 }

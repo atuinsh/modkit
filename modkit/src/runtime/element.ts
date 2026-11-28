@@ -83,7 +83,7 @@ export const Fragment: Component<{ children?: ModNode }> = marker('Fragment')
  * Flatten resolved UI `nodes` into plain text for text-only surfaces.
  *
  * `Column` children join with `gap + 1` newlines, `Row` children join with `max(1, gap)` spaces,
- * and `Button` nodes render as `[hotkey] label` when a hotkey is set.
+ * `Button` nodes render as `[hotkey] label` when a hotkey is set, and `Img` nodes as their fallback.
  */
 export function textOf(nodes: readonly UiNode[]): string {
   return nodes
