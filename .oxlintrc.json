@@ -133,6 +133,9 @@
       "error",
       { "styles": { "node:path": { "named": true, "default": false } } }
     ],
+    // A relative import names its file, `./mount.ts`: Node runs a file as written only when every
+    // file it reaches does, and a bundle-only file comes within reach through any import.
+    "import/extensions": ["error", "always", { "ignorePackages": true, "checkTypeImports": true }],
     // Valibot's documented import is `import * as v`.
     "import/no-namespace": ["error", { "ignore": ["valibot"] }],
     // The automatic JSX runtime exports its `JSX` namespace as a declaration.
