@@ -142,6 +142,34 @@ const buttonSpans = ({
   { text: label, fg: { tone: 'accent' }, bold: false },
 ]
 
+// The box a `Column` or `Row` draws `children` in.
+function boxSpec({
+  node,
+  children,
+}: {
+  node: Extract<NodeJson, { kind: 'Column' | 'Row' }>
+  children: Spec[]
+}): Spec {
+  const padX = node.paddingX ?? 0
+  const padY = node.paddingY ?? 0
+  return {
+    tag: 'box',
+    flexDirection: node.kind === 'Column' ? 'column' : 'row',
+    gap: node.gap,
+    ...(node.border !== undefined && {
+      border: {
+        style: BORDER_STYLES[node.border],
+        color:
+          node.borderTone === undefined || node.borderTone === 'plain'
+            ? { tone: 'border' }
+            : { tone: node.borderTone },
+      },
+    }),
+    padding: { left: padX, right: padX, top: padY, bottom: padY },
+    children,
+  }
+}
+
 /**
  * Specs drawing `nodes`, with the hotkeys beside buttons when `hasKeys`, and each link's URL after
  * its text when `spellsUrls`, for a terminal that opens no links.
@@ -164,26 +192,8 @@ export function specsOf({
       case 'Link':
         return { tag: 'text', spans: spansOf({ node, around: PLAIN, spellsUrls }) }
       case 'Column':
-      case 'Row': {
-        const padX = node.paddingX ?? 0
-        const padY = node.paddingY ?? 0
-        return {
-          tag: 'box',
-          flexDirection: node.kind === 'Column' ? 'column' : 'row',
-          gap: node.gap,
-          ...(node.border !== undefined && {
-            border: {
-              style: BORDER_STYLES[node.border],
-              color:
-                node.borderTone === undefined || node.borderTone === 'plain'
-                  ? { tone: 'border' }
-                  : { tone: node.borderTone },
-            },
-          }),
-          padding: { left: padX, right: padX, top: padY, bottom: padY },
-          children: specsOf({ nodes: node.children, hasKeys, spellsUrls }),
-        }
-      }
+      case 'Row':
+        return boxSpec({ node, children: specsOf({ nodes: node.children, hasKeys, spellsUrls }) })
       case 'Button':
         return {
           tag: 'text',
