@@ -3,9 +3,10 @@ import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { isPlainObject } from 'es-toolkit/predicate'
+import { asRecord, errorMessage } from '@atuin/modkit-target/host'
 
 import { INTERNAL_ERROR, METHOD_NOT_FOUND, RpcError } from './errors'
+import type { RpcMethod } from './rpc-method'
 
 interface Call {
   method: string
@@ -14,13 +15,22 @@ interface Call {
 
 const MS_PER_SECOND = 1000
 
+interface Timeout {
+  ms: number
+  what: string
+}
+
 interface Request extends Call {
   // How long to wait for the answer, and what to call the wait when it runs out.
-  timeout?: { ms: number; what: string }
+  timeout?: Timeout
 }
 
 export interface Peer {
   request: (call: Request) => Promise<unknown>
+  call: <Params, Result>(
+    method: RpcMethod<Params, Result>,
+    options: { readonly params: Params; readonly timeout?: Timeout },
+  ) => Promise<Result>
   notify: (call: Call) => void
   readonly closed: Promise<void>
 }
@@ -32,7 +42,7 @@ interface Pending {
 
 type Json = Readonly<Record<string, unknown>>
 
-function parsed(line: string): unknown {
+function parseLine(line: string): unknown {
   try {
     return JSON.parse(line)
   } catch {
@@ -40,13 +50,13 @@ function parsed(line: string): unknown {
   }
 }
 
-const errorOf = (error: unknown): { code: number; message: string } =>
+const formatWireError = (error: unknown): { code: number; message: string } =>
   error instanceof RpcError
     ? { code: error.code, message: error.message }
-    : { code: INTERNAL_ERROR, message: error instanceof Error ? error.message : String(error) }
+    : { code: INTERNAL_ERROR, message: errorMessage(error) }
 
-function rpcErrorOf(error: unknown): RpcError {
-  const { code, message }: Json = isPlainObject(error) ? error : {}
+function parseWireError(error: unknown): RpcError {
+  const { code, message } = asRecord(error)
   return new RpcError({
     code: typeof code === 'number' ? code : INTERNAL_ERROR,
     message: typeof message === 'string' ? message : 'the peer answered an error',
@@ -80,13 +90,25 @@ class LinePeer implements Peer {
     this.#handlers = handlers
     this.#lines = createInterface({ input })
     this.#lines.on('line', (line) => {
-      this.#receive(parsed(line))
+      this.#receive(parseLine(line))
     })
     // A write to a side that has gone, as a pipe to a process that exited, closes the peer too.
     output.on('error', () => {
       this.#lines.close()
     })
     this.closed = this.#untilClosed()
+  }
+
+  async call<Params, Result>(
+    method: RpcMethod<Params, Result>,
+    { params, timeout }: { readonly params: Params; readonly timeout?: Timeout },
+  ): Promise<Result> {
+    const raw = await this.request({
+      method: method.name,
+      params,
+      ...(timeout !== undefined && { timeout }),
+    })
+    return method.parseResult(raw)
   }
 
   async request({ method, params, timeout }: Request): Promise<unknown> {
@@ -129,10 +151,11 @@ class LinePeer implements Peer {
   }
 
   #receive(message: unknown): void {
-    if (!isPlainObject(message)) return
-    const { method, id, params }: Json = message
+    const record = asRecord(message)
+    if (Object.keys(record).length === 0) return
+    const { method, id, params } = record
     if (typeof method !== 'string') {
-      this.#settle(message)
+      this.#settle(record)
       return
     }
     if (id === undefined) {
@@ -158,7 +181,7 @@ class LinePeer implements Peer {
       }
       this.#send({ id, result: await onRequest({ method, params }) })
     } catch (error) {
-      this.#send({ id, error: errorOf(error) })
+      this.#send({ id, error: formatWireError(error) })
     }
   }
 
@@ -169,7 +192,7 @@ class LinePeer implements Peer {
     if (waiting === undefined) return
     this.#pending.delete(id)
     if (error === undefined) waiting.resolve(result)
-    else waiting.reject(rpcErrorOf(error))
+    else waiting.reject(parseWireError(error))
   }
 }
 

@@ -1,12 +1,14 @@
 import { visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui'
 
 import {
+  flattenTextSpans,
   textOf,
+  visitUiNode,
   type Border,
   type ButtonNode,
-  type Hex,
   type ImgNode,
   type LinkNode,
+  type StyledSpan,
   type TextNode,
   type Tone,
   type UiNode,
@@ -16,7 +18,7 @@ import {
 export const PICK_MARK = '›'
 
 export interface Paint {
-  text: (span: Span) => string
+  text: (span: StyledSpan) => string
   border: (border: { tone: Tone | undefined; text: string }) => string
   button: (button: { label: string; hotkey: string | undefined; isPicked: boolean }) => string
   // The button the keyboard is on, which enter presses.
@@ -29,17 +31,6 @@ export interface Paint {
   image: (image: { node: ImgNode; width: number }) => readonly string[] | undefined
 }
 
-interface Span {
-  text: string
-  tone: Tone
-  bold: boolean
-  color: Hex | undefined
-  background: Hex | undefined
-  href: string | undefined
-}
-
-type Style = Omit<Span, 'text'>
-
 const EDGES: Readonly<Record<Border, readonly [string, string, string, string, string, string]>> = {
   single: ['┌', '┐', '┘', '└', '─', '│'],
   round: ['╭', '╮', '╯', '╰', '─', '│'],
@@ -51,63 +42,11 @@ const EDGES: Readonly<Record<Border, readonly [string, string, string, string, s
 // A box has a left side and a right one.
 const SIDES = 2
 
-const NO_STYLE: Style = {
-  tone: 'plain',
-  bold: false,
-  color: undefined,
-  background: undefined,
-  href: undefined,
-}
-
 const padded = ({ line, width }: { line: string; width: number }): string =>
   line + ' '.repeat(Math.max(0, width - visibleWidth(line)))
 
 const widest = (lines: readonly string[]): number =>
   Math.max(0, ...lines.map((line) => visibleWidth(line)))
-
-// The style `node`'s children are drawn in, inside `around`.
-function styleIn({ node, around }: { node: TextNode | LinkNode; around: Style }): Style {
-  if (node.kind === 'Link') return { ...around, href: node.href }
-  return {
-    tone: node.tone === 'plain' ? around.tone : node.tone,
-    bold: node.bold || around.bold,
-    color: node.color ?? around.color,
-    background: node.background ?? around.background,
-    href: around.href,
-  }
-}
-
-// What a link whose URL is spelled out ends with: the URL, unless its text already is. The space
-// before it stays out of the dim span, which `wrapTextWithAnsi` would leave on a blank line of its
-// own where the URL wraps.
-function spelledUrl({ node, around }: { node: LinkNode; around: Style }): Span[] {
-  if (textOf(node.children) === node.href) return []
-  return [
-    { ...around, text: ' ' },
-    { ...around, tone: 'dim', color: undefined, text: `(${node.href})` },
-  ]
-}
-
-function spansOf({
-  node,
-  around,
-  paint,
-}: {
-  node: TextNode | LinkNode
-  around: Style
-  paint: Paint
-}): Span[] {
-  const style = styleIn({ node, around })
-  const spans = node.children.flatMap((child): Span[] => {
-    if (typeof child !== 'string' && (child.kind === 'Text' || child.kind === 'Link')) {
-      return spansOf({ node: child, around: style, paint })
-    }
-    const text = textOf([child])
-    return text === '' ? [] : [{ ...style, text }]
-  })
-  if (node.kind === 'Text' || !paint.spellsUrls) return spans
-  return [...spans, ...spelledUrl({ node, around })]
-}
 
 function wrapped({ text, width }: { text: string; width: number }): string[] {
   return text.split('\n').flatMap((line) => wrapTextWithAnsi(line, width))
@@ -122,7 +61,7 @@ function textLines({
   width: number
   paint: Paint
 }): string[] {
-  const spans = spansOf({ node, around: NO_STYLE, paint })
+  const spans = flattenTextSpans(node, { spellsUrls: paint.spellsUrls })
   // Styled a line at a time, so a span across a newline is styled on both its lines.
   const lines = spans.map((span) =>
     span.text.split('\n').map((text) => paint.text({ ...span, text })),
@@ -222,44 +161,38 @@ function nodeLines({
   width: number
   paint: Paint
 }): string[] {
-  if (typeof node === 'string') return wrapped({ text: node, width })
-  switch (node.kind) {
-    case 'Text':
-    case 'Link':
-      return textLines({ node, width, paint })
-    case 'Column':
-      return boxed({
-        node,
+  return visitUiNode(node, {
+    string: (text) => wrapped({ text, width }),
+    text: (textNode) => textLines({ node: textNode, width, paint }),
+    link: (linkNode) => textLines({ node: linkNode, width, paint }),
+    stack: (stack) =>
+      boxed({
+        node: stack,
         width,
         paint,
         body: (inner) =>
-          node.children.flatMap((child, index) => [
-            ...(index === 0 ? [] : Array.from({ length: node.gap }, () => '')),
-            ...linesOf({ nodes: [child], width: inner, paint }),
-          ]),
-      })
-    case 'Row':
-      return boxed({
-        node,
+          stack.kind === 'Column'
+            ? stack.children.flatMap((child, index) => [
+                ...(index === 0 ? [] : Array.from({ length: stack.gap }, () => '')),
+                ...linesOf({ nodes: [child], width: inner, paint }),
+              ])
+            : rowLines({ children: stack.children, width: inner, gap: stack.gap, paint }),
+      }),
+    button: (button) =>
+      wrapped({
+        text: paint.button({
+          label: textOf(button.children),
+          hotkey: button.hotkey,
+          isPicked: button === paint.picked,
+        }),
         width,
-        paint,
-        body: (inner) => rowLines({ children: node.children, width: inner, gap: node.gap, paint }),
-      })
-    case 'Button': {
-      const label = textOf(node.children)
-      return wrapped({
-        text: paint.button({ label, hotkey: node.hotkey, isPicked: node === paint.picked }),
-        width,
-      })
-    }
-    case 'Img': {
-      const picture = paint.image({ node, width })
-      return picture === undefined ? wrapped({ text: node.fallback, width }) : [...picture]
-    }
-    case 'Markdown':
-      break
-  }
-  return [...paint.markdown({ text: node.text, width })]
+      }),
+    img: (img) => {
+      const picture = paint.image({ node: img, width })
+      return picture === undefined ? wrapped({ text: img.fallback, width }) : [...picture]
+    },
+    markdown: (md) => [...paint.markdown({ text: md.text, width })],
+  })
 }
 
 export function linesOf({

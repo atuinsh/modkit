@@ -2,14 +2,53 @@ import * as v from 'valibot'
 
 import {
   asRecord,
+  HarnessTools,
+  NATIVE,
+  type Capabilities,
+  type DroppedSupport,
   type Followup,
   type HookedCall,
   type HookedResult,
+  type LoweredSupport,
+  type NativeSupport,
 } from '@atuin/modkit-target/host'
 
 export const HOOK_TOOL = 'hook'
 export const STATUSLINE_TOOL = 'statusline'
-const SHELL_TOOL = 'Bash'
+
+export interface CodexCapabilities extends Capabilities {
+  readonly status: LoweredSupport
+  readonly commands: DroppedSupport
+  readonly panes: DroppedSupport
+  readonly beforeShell: NativeSupport
+  readonly afterShell: NativeSupport
+  readonly beforeTool: NativeSupport
+  readonly afterTool: NativeSupport
+  readonly toolCards: DroppedSupport
+}
+
+export const CODEX_CAPABILITIES: CodexCapabilities = {
+  status: {
+    kind: 'lowered',
+    why: "Codex's status line draws buttons and links as text, which can't be pressed or opened",
+  },
+  commands: {
+    kind: 'dropped',
+    why: "Codex answers a slash command with a prompt, never with a mod's code",
+  },
+  panes: { kind: 'dropped', why: 'Codex draws no panes' },
+  beforeShell: NATIVE,
+  afterShell: NATIVE,
+  beforeTool: NATIVE,
+  afterTool: NATIVE,
+  toolCards: { kind: 'dropped', why: 'Codex draws nothing under a tool call' },
+}
+
+export const CODEX_TOOLS: HarnessTools = new HarnessTools({
+  harness: 'Codex',
+  shell: 'Bash',
+  builtin: ['apply_patch', 'spawn_agent', 'write_stdin', 'request_permissions'],
+})
 
 // Long enough for the user to read and answer an elicitation prompt before Codex aborts the hook.
 const ASKING_TIMEOUT_S = 600
@@ -148,7 +187,7 @@ export class CodexHookEvent {
   get isShellTool(): boolean {
     return (
       (this.#wire.event === 'PreToolUse' || this.#wire.event === 'PostToolUse') &&
-      this.#wire.tool_name === SHELL_TOOL
+      CODEX_TOOLS.isShell(this.#wire.tool_name)
     )
   }
 
@@ -168,7 +207,9 @@ export class CodexHookEvent {
   toCall(): HookedCall | undefined {
     if (this.#wire.event !== 'PreToolUse') return undefined
     const { tool_name: tool, tool_use_id: id, tool_input: input, cwd } = this.#wire
-    if (tool !== SHELL_TOOL) return { kind: 'tool', id, tool, input: asRecord(input), cwd }
+    if (!CODEX_TOOLS.isShell(tool)) {
+      return { kind: 'tool', id, tool: CODEX_TOOLS.toModTool(tool), input: asRecord(input), cwd }
+    }
     const command = extractCommand(input)
     return command === undefined ? undefined : { kind: 'shell', id, command, cwd }
   }
@@ -178,8 +219,16 @@ export class CodexHookEvent {
     if (this.#wire.event !== 'PostToolUse') return undefined
     const { tool_name: tool, tool_use_id: id, tool_input: input, cwd, tool_response } = this.#wire
     const output = stringifyResponse(tool_response)
-    if (tool !== SHELL_TOOL) {
-      return { kind: 'tool', id, tool, input: asRecord(input), cwd, output, failed: exit.failed }
+    if (!CODEX_TOOLS.isShell(tool)) {
+      return {
+        kind: 'tool',
+        id,
+        tool: CODEX_TOOLS.toModTool(tool),
+        input: asRecord(input),
+        cwd,
+        output,
+        failed: exit.failed,
+      }
     }
     const command = extractCommand(input)
     return command === undefined ? undefined : { kind: 'shell', id, command, cwd, output, ...exit }

@@ -1,4 +1,4 @@
-import type { TextNode, Tone, UiNode } from '@atuin/modkit-target/host'
+import { visitUiNode, type TextNode, type Tone, type UiNode } from '@atuin/modkit-target/host'
 
 type LineColor = 'red' | 'green' | 'yellow' | 'status-metadata' | `#${string}`
 
@@ -86,23 +86,20 @@ export class CodexStatusLine {
   }
 
   #renderNode(node: UiNode): LineElement | undefined {
-    if (typeof node === 'string') return preserveSpaces(node)
-    switch (node.kind) {
-      case 'Text':
-        return this.#renderText(node)
-      case 'Row':
-      case 'Column':
-        return { type: 'row', props: { gap: node.gap }, children: this.#renderNodes(node.children) }
-      // Nothing in Codex's status line can be pressed or opened, so each draws as its text.
-      case 'Button':
-      case 'Link':
-        return { type: 'text', children: this.#renderNodes(node.children) }
-      case 'Img':
-        return preserveSpaces(node.fallback)
-      case 'Markdown':
-        break
-    }
-    return preserveSpaces(node.text)
+    return visitUiNode<LineElement | undefined>(node, {
+      string: (text) => preserveSpaces(text),
+      text: (textNode) => this.#renderText(textNode),
+      // Nothing in Codex's status line can be pressed or opened, so buttons and links draw as text.
+      link: (link) => ({ type: 'text', children: this.#renderNodes(link.children) }),
+      stack: (stack) => ({
+        type: 'row',
+        props: { gap: stack.gap },
+        children: this.#renderNodes(stack.children),
+      }),
+      button: (button) => ({ type: 'text', children: this.#renderNodes(button.children) }),
+      img: (img) => preserveSpaces(img.fallback),
+      markdown: (md) => preserveSpaces(md.text),
+    })
   }
 
   #clip(element: LineElement, depth = 0): LineElement | undefined {

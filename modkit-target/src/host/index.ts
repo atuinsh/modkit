@@ -9,6 +9,14 @@
  */
 
 export {
+  NATIVE,
+  type Capabilities,
+  type DroppedSupport,
+  type LoweredSupport,
+  type NativeSupport,
+  type Support,
+} from './capabilities.ts'
+export {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
   NopPaneHost,
@@ -16,10 +24,12 @@ export {
   type PaneHost,
   type PaneOpened,
   type PaneOpening,
+  type RuntimeHosts,
   type ViewHost,
 } from './hosts.ts'
 export { McpResponse } from './mcp-response.ts'
 export { PaneId } from './pane-id.ts'
+export { Result } from './result.ts'
 export {
   ModkitTargetRuntime,
   type ButtonPress,
@@ -27,6 +37,8 @@ export {
   type HookedResult,
   type Repeat,
 } from './runtime.ts'
+export { HarnessTools } from './tools.ts'
+export { buttonKey, flattenTextSpans, visitUiNode, type StyledSpan, type UiVisitor } from './ui.ts'
 export { asRecord, errorMessage } from './values.ts'
 export { failureReporter, ModVerdict, type VerdictOutcome } from './verdict.ts'
 export {

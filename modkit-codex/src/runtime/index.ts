@@ -1,12 +1,10 @@
-import { isPlainObject } from 'es-toolkit/predicate'
+import * as v from 'valibot'
 
-import {
-  INVALID_PARAMS,
-  METHOD_NOT_FOUND,
-  RpcError,
-} from '@atuin/modkit-target-node/runtime/errors'
+import { INVALID_PARAMS, RpcError } from '@atuin/modkit-target-node/runtime/errors'
 import { peerOn, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
-import { asRecord, errorMessage, ModVerdict, type Followup } from '@atuin/modkit-target/host'
+import { RpcMethod } from '@atuin/modkit-target-node/runtime/rpc-method'
+import { RpcRouter } from '@atuin/modkit-target-node/runtime/rpc-router'
+import { errorMessage, ModVerdict, type Followup } from '@atuin/modkit-target/host'
 
 import {
   CodexHookEvent,
@@ -21,7 +19,6 @@ import { CodexStatusLine } from './statusline'
 export type { Served } from './sessions'
 
 const PROTOCOL_VERSION = '2025-06-18'
-
 const STATUSLINE_STATE = 'com.openai/codex-statusline-state'
 
 const ASK_SCHEMA = {
@@ -32,12 +29,78 @@ const ASK_SCHEMA = {
 
 type Json = Readonly<Record<string, unknown>>
 
-function parseConfirmation(result: unknown): boolean | undefined {
-  if (!isPlainObject(result)) return undefined
-  const { action, content }: Json = result
-  if (action !== 'accept' && action !== 'decline' && action !== 'cancel') return undefined
-  return action === 'accept' && isPlainObject(content) && content['run'] === true
-}
+const OptionalParams = v.optional(v.unknown())
+
+const InitializeMethod = RpcMethod.define({
+  name: 'initialize',
+  params: v.optional(
+    v.object({
+      protocolVersion: v.optional(v.string()),
+      capabilities: v.optional(
+        v.object({ elicitation: v.optional(v.record(v.string(), v.unknown())) }),
+      ),
+    }),
+    {},
+  ),
+  result: v.unknown(),
+})
+
+const PingMethod = RpcMethod.define({ name: 'ping', params: OptionalParams, result: v.unknown() })
+
+const ToolsListMethod = RpcMethod.define({
+  name: 'tools/list',
+  params: OptionalParams,
+  result: v.unknown(),
+})
+
+const ToolsCallMethod = RpcMethod.define({
+  name: 'tools/call',
+  params: v.object({ name: v.string(), arguments: v.optional(v.unknown()) }),
+  result: v.unknown(),
+})
+
+const ResourcesListMethod = RpcMethod.define({
+  name: 'resources/list',
+  params: OptionalParams,
+  result: v.unknown(),
+})
+
+const ResourceTemplatesListMethod = RpcMethod.define({
+  name: 'resources/templates/list',
+  params: OptionalParams,
+  result: v.unknown(),
+})
+
+const ResourcesReadMethod = RpcMethod.define({
+  name: 'resources/read',
+  params: v.object({
+    uri: v.string(),
+    _meta: v.optional(
+      v.object({
+        [STATUSLINE_STATE]: v.optional(
+          v.object({
+            thread: v.optional(
+              v.object({
+                id: v.optional(v.string()),
+                workspace: v.optional(v.object({ cwd: v.optional(v.string()) })),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  }),
+  result: v.unknown(),
+})
+
+const ElicitMethod = RpcMethod.define({
+  name: 'elicitation/create',
+  params: v.object({ message: v.string(), requestedSchema: v.unknown() }),
+  result: v.object({
+    action: v.picklist(['accept', 'decline', 'cancel']),
+    content: v.optional(v.record(v.string(), v.unknown())),
+  }),
+})
 
 const statusUri = (plugin: string): string => `ui://${plugin}/statusline`
 
@@ -74,46 +137,28 @@ interface Acted {
 
 const NOTHING: Acted = { decision: { kind: 'none' }, followup: {} }
 
-// The thread a status line read is for, which Codex names in the request's `_meta`.
-function parseThread(params: unknown): { id: string; cwd: string | undefined } | undefined {
-  const { thread } = asRecord(asRecord(asRecord(params)['_meta'])[STATUSLINE_STATE])
-  const { id, workspace } = asRecord(thread)
-  const { cwd } = asRecord(workspace)
-  if (typeof id !== 'string') return undefined
-  return { id, cwd: typeof cwd === 'string' ? cwd : undefined }
-}
-
 class Server {
   readonly #served: Served
   readonly #sessions: Sessions
+  readonly #router: RpcRouter
   #peer: Peer | undefined = undefined
   #canElicit = false
 
   constructor(served: Served) {
     this.#served = served
     this.#sessions = new Sessions(served)
+    this.#router = RpcRouter.create()
+      .handle(InitializeMethod, (params) => this.#initialize(params))
+      .handle(PingMethod, () => ({}))
+      .handle(ToolsListMethod, () => ({ tools: listTools(this.#served) }))
+      .handle(ToolsCallMethod, async (params) => this.#toolCall(params))
+      .handle(ResourcesListMethod, () => this.#resources())
+      .handle(ResourceTemplatesListMethod, () => ({ resourceTemplates: [] }))
+      .handle(ResourcesReadMethod, async (params) => this.#read(params))
   }
 
-  async answer({ method, params }: { method: string; params: unknown }): Promise<unknown> {
-    switch (method) {
-      case 'initialize':
-        return this.#initialize(params)
-      case 'ping':
-        return {}
-      case 'tools/list':
-        return { tools: listTools(this.#served) }
-      case 'tools/call':
-        return this.#toolCall(params)
-      case 'resources/list':
-        return this.#resources()
-      case 'resources/templates/list':
-        return { resourceTemplates: [] }
-      case 'resources/read':
-        return this.#read(params)
-      default:
-        break
-    }
-    throw new RpcError({ code: METHOD_NOT_FOUND, message: `no method ${method}` })
+  async answer(call: { method: string; params: unknown }): Promise<unknown> {
+    return this.#router.dispatch(call)
   }
 
   async run(peer: Peer): Promise<void> {
@@ -122,11 +167,13 @@ class Server {
     this.#sessions[Symbol.dispose]()
   }
 
-  #initialize(params: unknown): Json {
-    const { capabilities, protocolVersion: asked } = asRecord(params)
-    this.#canElicit = isPlainObject(asRecord(capabilities)['elicitation'])
+  #initialize(params: {
+    protocolVersion?: string | undefined
+    capabilities?: { elicitation?: Record<string, unknown> | undefined } | undefined
+  }): Json {
+    this.#canElicit = params.capabilities?.elicitation !== undefined
     return {
-      protocolVersion: typeof asked === 'string' ? asked : PROTOCOL_VERSION,
+      protocolVersion: params.protocolVersion ?? PROTOCOL_VERSION,
       capabilities: { tools: {}, resources: {} },
       serverInfo: { name: `${this.#served.plugin}-mod`, version: this.#served.version },
     }
@@ -135,11 +182,10 @@ class Server {
   async #elicit(ask: string): Promise<boolean | undefined> {
     if (this.#peer === undefined || !this.#canElicit) return undefined
     try {
-      const result = await this.#peer.request({
-        method: 'elicitation/create',
+      const answer = await this.#peer.call(ElicitMethod, {
         params: { message: `${this.#served.plugin}: ${ask}`, requestedSchema: ASK_SCHEMA },
       })
-      return parseConfirmation(result)
+      return answer.action === 'accept' && answer.content?.['run'] === true
     } catch {
       return undefined
     }
@@ -181,10 +227,14 @@ class Server {
     return event.reply({ delivered: live.drain(event.carriesContext), followup, decision })
   }
 
-  async #statusLine(params: unknown): Promise<string> {
-    const thread = parseThread(params)
-    if (thread === undefined) return JSON.stringify(null)
-    const { id, cwd } = thread
+  async #statusLine(
+    thread:
+      | { id?: string | undefined; workspace?: { cwd?: string | undefined } | undefined }
+      | undefined,
+  ): Promise<string> {
+    const id = thread?.id
+    if (id === undefined) return JSON.stringify(null)
+    const cwd = thread?.workspace?.cwd
     // A thread the hooks haven't reached yet, as before its first turn, mounts here.
     const live =
       this.#sessions.known(id) ??
@@ -192,8 +242,13 @@ class Server {
     return JSON.stringify(CodexStatusLine.render(live?.runtime?.statusLine() ?? []))
   }
 
-  async #toolCall(params: unknown): Promise<unknown> {
-    const { name, arguments: args } = asRecord(params)
+  async #toolCall({
+    name,
+    arguments: args,
+  }: {
+    name: string
+    arguments?: unknown
+  }): Promise<unknown> {
     if (name === HOOK_TOOL) {
       try {
         return { content: [{ type: 'text', text: JSON.stringify(await this.#hook(args)) }] }
@@ -206,15 +261,31 @@ class Server {
         content: [{ type: 'text', text: `The status line is ${statusUri(this.#served.plugin)}.` }],
       }
     }
-    throw new RpcError({ code: INVALID_PARAMS, message: `no tool ${String(name)}` })
+    throw new RpcError({ code: INVALID_PARAMS, message: `no tool ${name}` })
   }
 
-  async #read(params: unknown): Promise<unknown> {
-    const { uri } = asRecord(params)
+  async #read(params: {
+    uri: string
+    _meta?:
+      | {
+          [STATUSLINE_STATE]?:
+            | {
+                thread?:
+                  | {
+                      id?: string | undefined
+                      workspace?: { cwd?: string | undefined } | undefined
+                    }
+                  | undefined
+              }
+            | undefined
+        }
+      | undefined
+  }): Promise<unknown> {
+    const { uri, _meta: meta } = params
     if (!this.#served.hasStatus || uri !== statusUri(this.#served.plugin)) {
-      throw new RpcError({ code: INVALID_PARAMS, message: `no resource ${String(uri)}` })
+      throw new RpcError({ code: INVALID_PARAMS, message: `no resource ${uri}` })
     }
-    const text = await this.#statusLine(params)
+    const text = await this.#statusLine(meta?.[STATUSLINE_STATE]?.thread)
     return { contents: [{ uri, mimeType: 'application/json', text }] }
   }
 

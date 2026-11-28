@@ -7,9 +7,8 @@ import {
   StringEnvSchema,
   StringListSchema,
   type StdioServer,
-  type Unreachable,
 } from '@atuin/modkit-target-node/runtime/servers'
-import { errorMessage } from '@atuin/modkit-target/host'
+import { errorMessage, Result } from '@atuin/modkit-target/host'
 
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
@@ -45,28 +44,28 @@ function parseStdioServer({
 }: {
   name: string
   json: unknown
-}): StdioServer | Unreachable {
+}): Result<StdioServer, string> {
   const described = v.safeParse(DescribedSchema, json)
   if (!described.success) {
-    return { reason: `Codex described ${name} in a way this mod can't read` }
+    return Result.err(`Codex described ${name} in a way this mod can't read`)
   }
   const { enabled, transport } = described.output
-  if (enabled === false) return { reason: `${name} is turned off in Codex's config` }
+  if (enabled === false) return Result.err(`${name} is turned off in Codex's config`)
   if (transport.type !== 'stdio') {
-    return {
-      reason: `${name} is an HTTP server, whose login is Codex's own; a mod reaches stdio servers only`,
-    }
+    return Result.err(
+      `${name} is an HTTP server, whose login is Codex's own; a mod reaches stdio servers only`,
+    )
   }
   const { command, args, env, cwd } = transport
-  if (typeof command !== 'string') return { reason: `Codex described ${name} with no command` }
-  return {
+  if (typeof command !== 'string') return Result.err(`Codex described ${name} with no command`)
+  return Result.ok({
     command,
     args: v.parse(StringListSchema, args),
     env: v.parse(StringEnvSchema, env),
     cwd: typeof cwd === 'string' ? cwd : undefined,
-  }
+  })
 }
 
-export async function configuredServer(name: string): Promise<StdioServer | Unreachable> {
+export async function configuredServer(name: string): Promise<Result<StdioServer, string>> {
   return parseStdioServer({ name, json: await codexDescribes(name) })
 }

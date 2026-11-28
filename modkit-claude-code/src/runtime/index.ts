@@ -39,19 +39,21 @@ import {
   McpResponse,
   ModkitTargetRuntime,
   type ButtonNode,
-  type CommandHost,
   type Followup,
   type Harness,
   type HarnessAdapter,
-  type PaneHost,
+  type Images,
+  type Mod,
+  type Options,
   type Repeat,
+  type RuntimeHosts,
   type ShellResult,
   type ToolResult,
   type ToolRow,
   type Verdict,
-  type ViewHost,
 } from '@atuin/modkit-target/host'
 
+import { CLAUDE_CODE_CAPABILITIES, type ClaudeCodeCapabilities } from '../spec'
 import { completionOf } from './answers'
 import { decide, exitCodeOf } from './decide'
 import { Drawing } from './draw'
@@ -214,23 +216,9 @@ function rowOf(props: RenderInput['props']): ToolRow | undefined {
  * Each method takes the {@link ClaudeEngine} of the hook it serves, as {@link engineOf} binds it to
  * that hook's `$`.
  */
-export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
-  protected override readonly panes: PaneHost<ClaudeEngine> = {
-    open: async (engine, { id, title, focus }) =>
-      engine.open({ id: id.toString(), title, ...(focus && { focus }) }),
-    close: async (engine, id) => engine.close({ id: id.toString() }),
-    isShown: async (engine, id) => {
-      const panes = await engine.panes()
-      return panes.some((pane) => id.equals(pane.id) && pane.isShown)
-    },
-  }
-
-  protected override readonly commands: CommandHost<ClaudeEngine> = {
-    register: async (engine, { name, description }) => engine.register({ name, description }),
-  }
-
-  protected override readonly view: ViewHost<ClaudeEngine> = {
-    redraw: async (engine) => engine.bumpView(),
+export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine, ClaudeCodeCapabilities> {
+  constructor({ mod, options, images }: { mod: Mod<Options>; options: Options; images: Images }) {
+    super({ mod, options, images, capabilities: CLAUDE_CODE_CAPABILITIES })
   }
 
   /** The `tool.check` hook for a tool the mod's `beforeTool` names. */
@@ -403,6 +391,26 @@ export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
 
   protected override repeat(engine: ClaudeEngine, { everyMs, tick }: Repeat): void {
     engine.repeat(everyMs, tick)
+  }
+
+  protected override hosts(): RuntimeHosts<ClaudeEngine, ClaudeCodeCapabilities> {
+    return {
+      panes: {
+        open: async (engine, { id, title, focus }) =>
+          engine.open({ id: id.toString(), title, ...(focus && { focus }) }),
+        close: async (engine, id) => engine.close({ id: id.toString() }),
+        isShown: async (engine, id) => {
+          const panes = await engine.panes()
+          return panes.some((pane) => id.equals(pane.id) && pane.isShown)
+        },
+      },
+      commands: {
+        register: async (engine, { name, description }) => engine.register({ name, description }),
+      },
+      view: {
+        redraw: async (engine) => engine.bumpView(),
+      },
+    }
   }
 
   // A Drawing for the surface `e` renders on, whose buttons press on that hook's `$`.

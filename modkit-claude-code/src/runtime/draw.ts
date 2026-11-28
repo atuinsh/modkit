@@ -16,7 +16,9 @@
 import type { Elements, RenderNode } from 'claude-code'
 
 import {
+  buttonKey,
   textOf,
+  visitUiNode,
   type ButtonNode,
   type ImgNode,
   type LinkNode,
@@ -84,23 +86,16 @@ export class Drawing {
     const elements = this.#elements
     return nodes.map((node, index): RenderNode => {
       const key = `${at}.${index}`
-      if (typeof node === 'string') return h(elements.Text, { key }, node)
-      switch (node.kind) {
-        case 'Text':
-          return this.#text(node, key)
-        case 'Link':
-          return h(elements.Text, { key }, this.#link(node, `${key}.0`))
-        case 'Column':
-        case 'Row':
-          return h(elements.Box, { key, ...boxProps(node) }, ...this.nodes(node.children, key))
-        case 'Button':
-          return this.#button(node, key)
-        case 'Img':
-          return this.#image(node, key)
-        case 'Markdown':
-          break
-      }
-      return h(elements.Markdown, { key, text: node.text })
+      return visitUiNode(node, {
+        string: (text) => h(elements.Text, { key }, text),
+        text: (textNode) => this.#text(textNode, key),
+        link: (linkNode) => h(elements.Text, { key }, this.#link(linkNode, `${key}.0`)),
+        stack: (stack) =>
+          h(elements.Box, { key, ...boxProps(stack) }, ...this.nodes(stack.children, key)),
+        button: (button) => this.#button(button, key),
+        img: (img) => this.#image(img, key),
+        markdown: (md) => h(elements.Markdown, { key, text: md.text }),
+      })
     })
   }
 
@@ -155,8 +150,7 @@ export class Drawing {
 
   #button(node: ButtonNode, key: string): RenderNode {
     return h(this.#elements.Button, {
-      // A key or a hotkey names its button for good; a position moves as the list around it does.
-      key: node.key ?? (node.hotkey === undefined ? key : `hotkey:${node.hotkey}`),
+      key: buttonKey(node, key),
       label: textOf(node.children),
       plain: true,
       ...(node.hotkey !== undefined && { hotkey: node.hotkey }),

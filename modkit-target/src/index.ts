@@ -8,7 +8,14 @@
  * @module
  */
 
-export { NATIVE, type Capabilities, type Support } from './capabilities.ts'
+export {
+  NATIVE,
+  type Capabilities,
+  type DroppedSupport,
+  type LoweredSupport,
+  type NativeSupport,
+  type Support,
+} from './host/capabilities.ts'
 export {
   Target,
   TargetBuilder,
@@ -17,6 +24,8 @@ export {
   type TargetBuildContext,
   type TargetBuilt,
 } from './define.ts'
+export { Result } from './host/result.ts'
+export { HarnessTools } from './host/tools.ts'
 export { errorMessage } from './host/values.ts'
 export { imagesSource } from './images.ts'
 export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'

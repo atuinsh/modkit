@@ -6,24 +6,21 @@ import type {
 } from '@earendil-works/pi-coding-agent'
 
 import { NodeTargetRuntime } from '@atuin/modkit-target-node/runtime/node-runtime'
-import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
   ModVerdict,
-  type CommandHost,
   type CommandView,
-  type Failure,
   type HarnessAdapter,
   type Images,
   type Mod,
   type Options,
-  type PaneHost,
+  type RuntimeHosts,
   type ToolRow,
   type UiNode,
-  type ViewHost,
 } from '@atuin/modkit-target/host'
 
-import { createSessionResources } from './harness'
+import { PI_CAPABILITIES, type PiCapabilities } from '../spec'
+import { createSessionResources, type PiSessionResources } from './harness'
 import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks'
 import { linesOf } from './lines'
 import { Overlays } from './overlays'
@@ -43,7 +40,7 @@ export interface Session {
   redrawCards: () => void
 }
 
-export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
+export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilities> {
   readonly #pi: ExtensionAPI
   readonly #plugin: string
   readonly #dir: string
@@ -51,43 +48,12 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
   readonly #registerCommand: (command: CommandView) => void
   readonly #redrawCards: () => void
   readonly #overlays: Overlays
-  #servers: Servers | undefined = undefined
-  #report: ((failure: Failure) => void) | undefined = undefined
+  #resources: PiSessionResources | undefined = undefined
   #statuses = 0
-  #isStopped = false
-
-  protected override readonly panes: PaneHost<ExtensionContext> = {
-    open: (ctx, { id, title, focus }) => {
-      if (ctx.mode !== 'tui') {
-        return { isPlaced: false, reason: 'pi shows panes in its terminal UI' }
-      }
-      this.#overlays.show({ ctx, id: id.toString(), title, body: this.paneBody(id) ?? [], focus })
-      return { isPlaced: true }
-    },
-    close: (_ctx, id) => {
-      this.#overlays.forget(id.toString())
-    },
-    isShown: (_ctx, id) => this.#overlays.has(id.toString()),
-  }
-
-  protected override readonly commands: CommandHost<ExtensionContext> = {
-    register: (_ctx, command) => {
-      this.#registerCommand(command)
-    },
-  }
-
-  protected override readonly view: ViewHost<ExtensionContext> = {
-    redraw: (ctx) => {
-      if (this.#isStopped) return
-      this.#drawStatuses(ctx, this.statuses())
-      this.#overlays.redraw((id) => this.paneBody(id))
-      this.#redrawCards()
-    },
-  }
 
   constructor(session: Session) {
     const { mod, options, images, pi, plugin, dir, state, registerCommand, redrawCards } = session
-    super({ mod, options, images })
+    super({ mod, options, images, capabilities: PI_CAPABILITIES })
     this.#pi = pi
     this.#plugin = plugin
     this.#dir = dir
@@ -102,7 +68,7 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
         void this.dismiss(id)
       },
       report: (failure) => {
-        this.#report?.(failure)
+        this.#resources?.report(failure)
       },
     })
   }
@@ -112,11 +78,10 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
   }
 
   stop(ctx: ExtensionContext): void {
-    this.#isStopped = true
     this[Symbol.dispose]()
     this.#overlays.stop()
     this.#drawStatuses(ctx, [])
-    this.#servers?.[Symbol.dispose]()
+    this.#resources?.[Symbol.dispose]()
   }
 
   endTurn(): void {
@@ -166,17 +131,52 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
   }
 
   protected override adapter(ctx: ExtensionContext): HarnessAdapter {
-    const { harness, servers, report } = createSessionResources({
+    const resources = createSessionResources({
       pi: this.#pi,
       ctx,
       plugin: this.#plugin,
       dir: this.#dir,
       state: this.#state,
-      isStopped: () => this.#isStopped,
     })
-    this.#servers = servers
-    this.#report = report
-    return harness
+    this.#resources = resources
+    return resources.harness
+  }
+
+  protected override hosts(): RuntimeHosts<ExtensionContext, PiCapabilities> {
+    return {
+      panes: {
+        open: (ctx, { id, title, focus }) => {
+          if (ctx.mode !== 'tui') {
+            return { isPlaced: false, reason: 'pi shows panes in its terminal UI' }
+          }
+          this.#overlays.show({
+            ctx,
+            id: id.toString(),
+            title,
+            body: this.paneBody(id) ?? [],
+            focus,
+          })
+          return { isPlaced: true }
+        },
+        close: (_ctx, id) => {
+          this.#overlays.forget(id.toString())
+        },
+        isShown: (_ctx, id) => this.#overlays.has(id.toString()),
+      },
+      commands: {
+        register: (_ctx, command) => {
+          this.#registerCommand(command)
+        },
+      },
+      view: {
+        redraw: (ctx) => {
+          if (this.isDisposed) return
+          this.#drawStatuses(ctx, this.statuses())
+          this.#overlays.redraw((id) => this.paneBody(id))
+          this.#redrawCards()
+        },
+      },
+    }
   }
 
   #statusKey(index: number): string {

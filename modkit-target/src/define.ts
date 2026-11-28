@@ -1,12 +1,8 @@
 import * as v from 'valibot'
 
-import type { Capabilities } from './capabilities.ts'
-import {
-  DefinedTarget,
-  type KnownTools,
-  type TargetBuildContext,
-  type TargetBuilt,
-} from './defined-target.ts'
+import { DefinedTarget, type TargetBuildContext, type TargetBuilt } from './defined-target.ts'
+import type { Capabilities } from './host/capabilities.ts'
+import type { HarnessTools } from './host/tools.ts'
 import type { ModkitTarget } from './target.ts'
 
 export type { ArtifactWriter, TargetBuildContext, TargetBuilt } from './defined-target.ts'
@@ -21,7 +17,7 @@ export class TargetBuilder<Options> {
   readonly #name: string
   readonly #capabilities: Capabilities
   readonly #options: v.GenericSchema<unknown, Options>
-  readonly #tools: KnownTools | undefined
+  readonly #tools: HarnessTools | undefined
 
   constructor({
     name,
@@ -32,7 +28,7 @@ export class TargetBuilder<Options> {
     name: string
     capabilities: Capabilities
     options: v.GenericSchema<unknown, Options>
-    tools: KnownTools | undefined
+    tools: HarnessTools | undefined
   }) {
     this.#name = name
     this.#capabilities = capabilities
@@ -51,12 +47,12 @@ export class TargetBuilder<Options> {
   }
 
   /** Declare built-in tools this harness provides so missing-tool notes are emitted automatically. */
-  knownTools(harness: string, has: ReadonlySet<string>): TargetBuilder<Options> {
+  knownTools(tools: HarnessTools): TargetBuilder<Options> {
     return new TargetBuilder({
       name: this.#name,
       capabilities: this.#capabilities,
       options: this.#options,
-      tools: { harness, has },
+      tools,
     })
   }
 

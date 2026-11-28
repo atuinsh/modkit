@@ -4,7 +4,7 @@ import { isPlainObject } from 'es-toolkit/predicate'
 
 import type { ToolRow, UiNode } from '@atuin/modkit-target/host'
 
-import { modToolOf } from './hooks'
+import { PI_TOOLS } from '../spec'
 import { linesOf } from './lines'
 import { paintOf } from './paint'
 
@@ -46,7 +46,7 @@ export class Cards {
     next: () => ToolRenderers | undefined
   }): ToolRenderers | undefined {
     const base = next()
-    const name = modToolOf(tool)
+    const name = PI_TOOLS.toModTool(tool)
     if (base === undefined || !this.#tools.includes(name)) return base
     const own = base.renderResult
     return {

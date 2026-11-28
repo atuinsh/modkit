@@ -1,25 +1,16 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
+import { SessionPool } from '@atuin/modkit-target-node/runtime/session-pool'
 import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
-import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
-import {
-  failureReporter,
-  type HarnessAdapter,
-  type Images,
-  type Mod,
-  type Options,
-} from '@atuin/modkit-target/host'
+import type { Tags } from '@atuin/modkit-target-node/runtime/store'
+import type { Images, Mod, Options } from '@atuin/modkit-target/host'
 
 import { configuredServer } from './configured'
-import { LiveSession, type SessionState } from './live-session'
-import { CodexRuntime } from './runtime'
+import { LiveSession } from './live-session'
 
 export type { LiveSession } from './live-session'
-
-const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 
 export interface Served {
   mod: Mod<Options>
@@ -36,7 +27,7 @@ export class Sessions implements Disposable {
   readonly #dir: string
   readonly #settings: SettingsSchema
   readonly #servers: Servers
-  readonly #live = new Map<string, LiveSession>()
+  readonly #pool = new SessionPool<LiveSession>()
 
   constructor(served: Served) {
     this.#served = served
@@ -50,68 +41,33 @@ export class Sessions implements Disposable {
   }
 
   known(id: string): LiveSession | undefined {
-    return this.#live.get(id)
+    return this.#pool.get(id)
   }
 
   async open({ id, cwd }: { id: string; cwd: string }): Promise<LiveSession> {
-    const known = this.#live.get(id)
+    const known = this.#pool.get(id)
     if (known !== undefined) known.updateCwd(cwd)
-    const live = known ?? this.#start({ id, cwd })
+    const live =
+      known ??
+      this.#pool.getOrCreate(id, () =>
+        LiveSession.start({
+          id,
+          cwd,
+          dir: this.#dir,
+          plugin: this.#served.plugin,
+          mod: this.#served.mod,
+          images: this.#served.images,
+          stateTags: this.#served.state,
+          settingsSchema: this.#settings,
+          servers: this.#servers,
+        }),
+      )
     await live.opened
     return live
   }
 
   [Symbol.dispose](): void {
-    for (const live of this.#live.values()) live[Symbol.dispose]()
+    this.#pool[Symbol.dispose]()
     this.#servers[Symbol.dispose]()
-  }
-
-  #start({ id, cwd }: { id: string; cwd: string }): LiveSession {
-    const { plugin, mod, images } = this.#served
-    const state: SessionState = { id, cwd, notes: [], context: [] }
-    const settings = this.#settings.loadFile(join(this.#dir, 'settings.json'))
-    for (const problem of settings.problems) state.notes.push(`${plugin}: ${problem}`)
-    const runtime = settings.isOk
-      ? new CodexRuntime({ mod, options: settings.options, images })
-      : undefined
-    const opened = runtime?.open({ harness: this.#buildHarness(state) }) ?? Promise.resolve()
-    const live = new LiveSession({ state, runtime, opened })
-    this.#live.set(id, live)
-    return live
-  }
-
-  #buildHarness(state: SessionState): HarnessAdapter {
-    const report = failureReporter({
-      plugin: this.#served.plugin,
-      notify: (line) => {
-        state.notes.push(line)
-      },
-      log: (line) => {
-        process.stderr.write(`${line}\n`)
-      },
-    })
-    const store = fileStore({
-      dir: join(this.#dir, 'sessions'),
-      session: state.id,
-      tags: this.#served.state,
-      report,
-    })
-    return NodeHarness.builder({
-      sessionId: state.id,
-      cwd: () => state.cwd,
-      servers: this.#servers,
-      store,
-      report,
-    })
-      .withNotify((text) => {
-        state.notes.push(text)
-        return 'queued'
-      })
-      .withInject(async (text) => {
-        state.context.push(text)
-        return 'queued'
-      })
-      .withModelRefusal(NO_MODEL)
-      .build()
   }
 }

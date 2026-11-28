@@ -23,6 +23,7 @@ import {
   type UiNode,
 } from '@atuin/modkit/host'
 
+import type { Capabilities } from './capabilities.ts'
 import {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
@@ -30,6 +31,7 @@ import {
   type Awaitable,
   type CommandHost,
   type PaneHost,
+  type RuntimeHosts,
   type ViewHost,
 } from './hosts.ts'
 import { PaneId } from './pane-id.ts'
@@ -68,18 +70,24 @@ export type HookedResult =
 const paneKey = (id: string | PaneId): string => (typeof id === 'string' ? id : id.toString())
 
 /**
- * A mod's session, which every target runs the same way: it mounts the mod when the session starts,
- * keeps the panes the mod shows open, ticks it, and answers the harness's hooks and the person's
- * commands and button presses.
+ * A mod's session, which every target runs the same way: single-flight mount on `start`,
+ * capability-enforced surface hosts, pane syncing, ticks, and hook dispatch.
  *
- * A target implements `adapter` and `repeat`, and overrides `panes`, `commands`, or `view` only for
- * the surfaces its harness provides (each defaults to a no-op host).
+ * Parameterizing by `Caps extends Capabilities` ties the target's shared `CAPABILITIES` constant
+ * to its runtime hosts at compile time: non-dropped `panes` and `commands` must be supplied by
+ * {@link hosts}, while dropped ones receive `Nop*` hosts populated with their declared `why`.
  */
-export abstract class ModkitTargetRuntime<Engine> {
+export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Capabilities> {
   readonly #mod: Mod<Options>
   readonly #options: Options
   readonly #images: Images
+  readonly #capabilities: Caps
+  #panes: PaneHost<Engine>
+  #commands: CommandHost<Engine> = NOP_COMMAND_HOST
+  #view: ViewHost<Engine> = NOP_VIEW_HOST
   #mounted: Mounted | undefined = undefined
+  #opening: Promise<void> | undefined = undefined
+  #isDisposed = false
   #report: HarnessAdapter['report'] = REPORT_NOTHING
   #shown: Shown = NOTHING_SHOWN
   // True while a command or a button press runs its synchronous part, up to its first `await`.
@@ -87,24 +95,39 @@ export abstract class ModkitTargetRuntime<Engine> {
   // with keyboard focus and the relaxed placement rules an interaction gets.
   #isAnswering = false
 
-  /** Pane surface host; defaults to {@link NopPaneHost}. */
-  protected readonly panes: PaneHost<Engine> = new NopPaneHost()
-
-  /** Command registration host; defaults to {@link NOP_COMMAND_HOST}. */
-  protected readonly commands: CommandHost<Engine> = NOP_COMMAND_HOST
-
-  /** View redraw host; defaults to {@link NOP_VIEW_HOST}. */
-  protected readonly view: ViewHost<Engine> = NOP_VIEW_HOST
-
-  constructor({ mod, options, images }: { mod: Mod<Options>; options: Options; images: Images }) {
+  constructor({
+    mod,
+    options,
+    images,
+    capabilities,
+  }: {
+    mod: Mod<Options>
+    options: Options
+    images: Images
+    capabilities: Caps
+  }) {
     this.#mod = mod
     this.#options = options
     this.#images = images
+    this.#capabilities = capabilities
+    this.#panes = new NopPaneHost(
+      capabilities.panes.kind === 'dropped' ? capabilities.panes.why : undefined,
+    )
   }
 
-  /** Whether the session started, so the mod answers the harness's hooks. */
+  /** Whether the session started and has not been disposed. */
   protected get hasStarted(): boolean {
-    return this.#mounted !== undefined
+    return this.#mounted !== undefined && !this.#isDisposed
+  }
+
+  /** Whether the session has been torn down. */
+  protected get isDisposed(): boolean {
+    return this.#isDisposed
+  }
+
+  /** Active pane host (guaranteed real when `Caps['panes']` is not `'dropped'`). */
+  protected get panes(): PaneHost<Engine> {
+    return this.#panes
   }
 
   /** The adapter the mod's handlers reach the harness through for the session. */
@@ -113,40 +136,25 @@ export abstract class ModkitTargetRuntime<Engine> {
   /** Have the harness call `repeat.tick` every `repeat.everyMs` for the rest of the session. */
   protected abstract repeat(engine: Engine, repeat: Repeat): void
 
+  /** Provide the surface hosts required by `Caps`. */
+  protected abstract hosts(): RuntimeHosts<Engine, Caps>
+
   /**
-   * Mount the mod for a session that started: register its commands, show its panes, start its
-   * tick, and redraw the harness each time its state changes.
+   * Single-flight mount of the mod for a session: concurrent calls share one startup promise.
    */
   protected async start(engine: Engine): Promise<void> {
-    const adapter = await this.adapter(engine)
-    this.#report = (failure) => {
-      adapter.report(failure)
-    }
-    this.#shown = NOTHING_SHOWN
-    const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
-    this.#mounted = mounted
-    mounted.subscribe(() => {
-      void this.view.redraw(engine)
-      if (!this.#isAnswering) this.#syncPanes(engine, false)
-    })
-    this.#syncPanes(engine, false)
-    for (const command of mounted.view().commands) {
-      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
-      await this.commands.register(engine, command)
-    }
-    this.repeat(engine, {
-      everyMs: TICK_MS,
-      tick: () => {
-        void mounted.tick()
-      },
-    })
-    await mounted.event('session.start')
-    await this.view.redraw(engine)
+    this.#opening ??= this.#mount(engine)
+    return this.#opening
+  }
+
+  /** Mark the session torn down so late subscriptions stop redrawing or syncing panes. */
+  protected disposeSession(): void {
+    this.#isDisposed = true
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
   protected turnEnded(): void {
-    void this.#mounted?.event('turn.end')
+    if (!this.#isDisposed) void this.#mounted?.event('turn.end')
   }
 
   /** The mod's verdict on a shell command before it runs. */
@@ -224,6 +232,50 @@ export abstract class ModkitTargetRuntime<Engine> {
     await this.#mounted?.closed(key)
   }
 
+  async #mount(engine: Engine): Promise<void> {
+    this.#bindHosts()
+    const adapter = await this.adapter(engine)
+    this.#report = (failure) => {
+      adapter.report(failure)
+    }
+    this.#shown = NOTHING_SHOWN
+    const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
+    this.#mounted = mounted
+    mounted.subscribe(() => {
+      if (this.#isDisposed) return
+      void this.#view.redraw(engine)
+      if (!this.#isAnswering) this.#syncPanes(engine, false)
+    })
+    this.#syncPanes(engine, false)
+    for (const command of mounted.view().commands) {
+      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
+      await this.#commands.register(engine, command)
+    }
+    this.repeat(engine, {
+      everyMs: TICK_MS,
+      tick: () => {
+        if (!this.#isDisposed) void mounted.tick()
+      },
+    })
+    await mounted.event('session.start')
+    if (!this.#isDisposed) await this.#view.redraw(engine)
+  }
+
+  #bindHosts(): void {
+    const provided: {
+      readonly panes?: PaneHost<Engine>
+      readonly commands?: CommandHost<Engine>
+      readonly view?: ViewHost<Engine>
+    } = this.hosts()
+    this.#panes =
+      provided.panes ??
+      new NopPaneHost(
+        this.#capabilities.panes.kind === 'dropped' ? this.#capabilities.panes.why : undefined,
+      )
+    this.#commands = provided.commands ?? NOP_COMMAND_HOST
+    this.#view = provided.view ?? NOP_VIEW_HOST
+  }
+
   // Answer an interaction of the person's with `start`, the handler it runs: the panes its
   // synchronous part shows open on `engine`, the interaction's, and take the keyboard.
   async #answering<T>(engine: Engine, start: () => Promise<T>): Promise<T> {
@@ -241,17 +293,17 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   async #toggled(engine: Engine, { id, title }: { id: PaneId; title: string }): Promise<string> {
-    if (await this.panes.isShown(engine, id)) {
-      await this.panes.close(engine, id)
+    if (await this.#panes.isShown(engine, id)) {
+      await this.#panes.close(engine, id)
       return `${title} closed.`
     }
-    const opened = await this.panes.open(engine, { id, title, focus: true })
+    const opened = await this.#panes.open(engine, { id, title, focus: true })
     return opened.isPlaced ? `${title} opened.` : `${title} waits: ${opened.reason}`
   }
 
   #syncPanes(engine: Engine, isAnswer: boolean): void {
     const mounted = this.#mounted
-    if (mounted === undefined) return
+    if (mounted === undefined || this.#isDisposed) return
     const { shown, changes } = nextShown({ shown: this.#shown, rendered: mounted.view().panes })
     // Kept before any call goes out, so a render while they're under way sees them made.
     this.#shown = shown
@@ -262,8 +314,8 @@ export abstract class ModkitTargetRuntime<Engine> {
       const id = PaneId.parse(change.id)
       const changed =
         change.kind === 'close'
-          ? Promise.resolve(this.panes.close(engine, id))
-          : Promise.resolve(this.panes.open(engine, { id, title: change.title, focus: isAnswer }))
+          ? Promise.resolve(this.#panes.close(engine, id))
+          : Promise.resolve(this.#panes.open(engine, { id, title: change.title, focus: isAnswer }))
       changed.catch(fail)
     }
   }
