@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@atuin/modkit-target-node": "workspace:*",
-    "es-toolkit": "catalog:",
+    "smol-toml": "^1.9.1",
     "valibot": "catalog:"
   },
   "devDependencies": {
