@@ -38,6 +38,8 @@ jobs:
       # Each example builds for every target it lists, which is what checks the targets end to end.
       - name: Examples
         run: pnpm examples
+      - name: Docs
+        run: pnpm docs:build
       - name: Knip
         run: pnpm knip
       - name: Codespell

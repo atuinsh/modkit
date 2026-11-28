@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Astro loads the site's config and collections itself; nothing emits declarations from them.
+    "isolatedDeclarations": false,
+    "declaration": false
+  },
+  // `astro sync` writes `.astro/types.d.ts`, which declares the `astro:*` modules.
+  "include": [".astro/types.d.ts", "astro.config.ts", "src/**/*.ts"]
+}

@@ -2,6 +2,7 @@
 packages:
   - 'modkit*'
   - 'examples/*'
+  - 'docs'
 
 # Only install versions at least 3 days old: most malicious releases are pulled within hours.
 minimumReleaseAge: 4320
