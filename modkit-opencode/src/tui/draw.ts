@@ -6,7 +6,8 @@ export type Paint = { tone: Tone | 'accent' | 'border' } | { hex: Hex }
 
 export interface Span {
   text: string
-  fg?: Paint
+  // Never left to opentui, whose default is white in every theme.
+  fg: Paint
   bg?: Paint
   bold: boolean
   /** The URL the span opens, drawn underlined as part of a link. */
@@ -52,23 +53,20 @@ const PLAIN: Style = {
   href: undefined,
 }
 
-function fgOf(style: Style): Paint | undefined {
+function fgOf(style: Style): Paint {
   if (style.color !== undefined) return { hex: style.color }
   if (style.tone !== 'plain') return { tone: style.tone }
   // A link draws in the accent buttons do, unless its text is colored.
-  return style.href === undefined ? undefined : { tone: 'accent' }
+  return style.href === undefined ? { tone: 'plain' } : { tone: 'accent' }
 }
 
-const spanOf = ({ text, style }: { text: string; style: Style }): Span => {
-  const fg = fgOf(style)
-  return {
-    text,
-    bold: style.bold,
-    ...(fg !== undefined && { fg }),
-    ...(style.background !== undefined && { bg: { hex: style.background } }),
-    ...(style.href !== undefined && { href: style.href }),
-  }
-}
+const spanOf = ({ text, style }: { text: string; style: Style }): Span => ({
+  text,
+  fg: fgOf(style),
+  bold: style.bold,
+  ...(style.background !== undefined && { bg: { hex: style.background } }),
+  ...(style.href !== undefined && { href: style.href }),
+})
 
 function plainOf(node: NodeJson): string {
   if (typeof node === 'string') return node

@@ -58,7 +58,7 @@ const lineProps = (flow: Flow) => (flow === 'line' ? { flexShrink: 0 } : {})
 
 function spanned({ span, shared, flow }: { span: Span; shared: Shared; flow: Flow }): JSX.Element {
   const props = {
-    ...(span.fg !== undefined && { fg: shared.color(span.fg) }),
+    fg: shared.color(span.fg),
     ...(span.bg !== undefined && { bg: shared.color(span.bg) }),
     ...(flow === 'line' && { flexShrink: 0, wrapMode: 'none' as const }),
   }
@@ -98,7 +98,7 @@ function pictured({
   )
   if (protocol === 'blocks') {
     return drawn({
-      spec: { tag: 'text', spans: [{ text: spec.fallback, bold: false }] },
+      spec: { tag: 'text', spans: [{ text: spec.fallback, fg: { tone: 'plain' }, bold: false }] },
       shared,
       flow,
     })
