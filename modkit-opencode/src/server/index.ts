@@ -2,12 +2,18 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import type { Plugin } from '@opencode/plugin'
-import { isPlainObject } from 'es-toolkit/predicate'
 
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { SettingsSchema } from '@atuin/modkit-target-node/runtime/settings'
 
-import { contractOf, type ViewJson } from '../contract.ts'
+import {
+  contractOf,
+  parseCloseInput,
+  parsePressInput,
+  parseRunInput,
+  parseSessionInput,
+  type ViewJson,
+} from '../contract.ts'
 import { hookCalls } from './calls.ts'
 import { opencodeServerOf } from './mcp.ts'
 import type { Served } from './served.ts'
@@ -20,13 +26,6 @@ const RUN_ENDS = new Set([
   'session.execution.failed',
   'session.execution.interrupted',
 ])
-
-function stringIn({ value, key }: { value: unknown; key: string }): string {
-  const found: unknown = isPlainObject(value) ? value[key] : undefined
-  return typeof found === 'string' ? found : ''
-}
-
-const sessionIn = (input: unknown): string => stringIn({ value: input, key: 'sessionID' })
 
 const dataDir = (): string => process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local', 'share')
 
@@ -41,7 +40,7 @@ async function followEvents({
 }): Promise<void> {
   for await (const event of ctx.event.subscribe()) {
     if (signal.aborted) return
-    const id = sessionIn(event.data)
+    const id = parseSessionInput(event.data)?.sessionID ?? ''
     // A session mounts the mod, and tells it the session started, the first time it is seen.
     if (id !== '' && event.type === 'session.created') void sessions.live(id)
     if (id !== '' && RUN_ENDS.has(event.type)) void endTurn({ sessions, id })
@@ -64,22 +63,30 @@ interface Handlers {
 
 const handlersOf = (sessions: Sessions): Handlers => ({
   view: async (input) => {
-    const live = await sessions.live(sessionIn(input))
+    const req = parseSessionInput(input)
+    if (req === undefined) return NO_VIEW
+    const live = await sessions.live(req.sessionID)
     return live?.runtime.drawn().json ?? NO_VIEW
   },
   press: async (input) => {
-    const live = await sessions.live(sessionIn(input))
-    live?.runtime.pressed(live.session, stringIn({ value: input, key: 'button' }))
+    const req = parsePressInput(input)
+    if (req === undefined) return {}
+    const live = await sessions.live(req.sessionID)
+    live?.runtime.pressed(live.session, req.button)
     return {}
   },
   run: async (input) => {
-    const live = await sessions.live(sessionIn(input))
-    const said = await live?.runtime.run(live.session, stringIn({ value: input, key: 'command' }))
+    const req = parseRunInput(input)
+    if (req === undefined) return {}
+    const live = await sessions.live(req.sessionID)
+    const said = await live?.runtime.run(live.session, req.command)
     return said === undefined || said === '' ? {} : { text: said }
   },
   close: async (input) => {
-    const live = await sessions.live(sessionIn(input))
-    await live?.runtime.close(live.session, stringIn({ value: input, key: 'pane' }))
+    const req = parseCloseInput(input)
+    if (req === undefined) return {}
+    const live = await sessions.live(req.sessionID)
+    await live?.runtime.close(live.session, req.pane)
     return {}
   },
 })

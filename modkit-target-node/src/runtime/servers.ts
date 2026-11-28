@@ -14,8 +14,10 @@ import {
 import { peerOn, type Peer } from './rpc.ts'
 
 const PROTOCOL_VERSION = '2025-06-18'
-const START_MS = 30_000
-const CALL_MS = 120_000
+const START_TIMEOUT_S = 30
+const CALL_TIMEOUT_S = 120
+const START_TIMEOUT = Temporal.Duration.from({ seconds: START_TIMEOUT_S })
+const CALL_TIMEOUT = Temporal.Duration.from({ seconds: CALL_TIMEOUT_S })
 
 /** Valibot schema for an optional list of strings, falling back to `[]`. */
 export const StringListSchema: v.GenericSchema<unknown, string[]> = v.fallback(
@@ -75,7 +77,7 @@ async function connect({
       capabilities: {},
       clientInfo: { name: 'modkit', version: '0' },
     },
-    timeout: { ms: START_MS, what: `starting ${name}` },
+    timeout: { duration: START_TIMEOUT, what: `starting ${name}` },
   })
   try {
     await initialized
@@ -113,7 +115,7 @@ export class Servers implements Disposable {
       const result = await peer.request({
         method: 'tools/call',
         params: { name: tool, arguments: input ?? {} },
-        timeout: { ms: CALL_MS, what: `${server}'s ${tool}` },
+        timeout: { duration: CALL_TIMEOUT, what: `${server}'s ${tool}` },
       })
       return McpResponse.parse(result).toResult()
     } catch (error) {
@@ -121,15 +123,11 @@ export class Servers implements Disposable {
     }
   }
 
-  close(): void {
+  [Symbol.dispose](): void {
     // Set first, so a call still under way starts no server after this pass.
     this.#isClosed = true
     for (const connecting of this.#connections.values()) void Servers.#killed(connecting)
     this.#connections.clear()
-  }
-
-  [Symbol.dispose](): void {
-    this.close()
   }
 
   static async #killed(connecting: Promise<Connection>): Promise<void> {

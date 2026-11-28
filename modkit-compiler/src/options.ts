@@ -19,9 +19,6 @@ const fail = ({ message, node }: { message: string; node: Node }): Read => ({
   diagnostics: [diagnosticAt({ code: 'option-type', message, node })],
 })
 
-const isDiagnostic = (value: OptionDecl | Diagnostic): value is Diagnostic => 'code' in value
-const isOption = (value: OptionDecl | Diagnostic): value is OptionDecl => !isDiagnostic(value)
-
 /** The settings parameter of a mod's setup function, whose props are the mod's settings. */
 class SettingsParameter {
   readonly #project: Project
@@ -76,8 +73,8 @@ class SettingsParameter {
       return [setting.option()]
     })
     return {
-      options: read.filter((one) => isOption(one)),
-      diagnostics: read.filter((one) => isDiagnostic(one)),
+      options: read.flatMap((one) => (one.isOk ? [one.option] : [])),
+      diagnostics: read.flatMap((one) => (one.isOk ? [] : [one.diagnostic])),
     }
   }
 

@@ -60,17 +60,19 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
     this.#state = state
     this.#registerCommand = registerCommand
     this.#redrawCards = redrawCards
-    this.#overlays = new Overlays({
-      press: ({ ctx, button }) => {
-        this.press(ctx, { button, surface: 'terminal' })
-      },
-      dismiss: (id) => {
-        void this.dismiss(id)
-      },
-      report: (failure) => {
-        this.#resources?.report(failure)
-      },
-    })
+    this.#overlays = this.own(
+      new Overlays({
+        press: ({ ctx, button }) => {
+          this.press(ctx, { button, surface: 'terminal' })
+        },
+        dismiss: (id) => {
+          void this.dismiss(id)
+        },
+        report: (failure) => {
+          this.#resources?.report(failure)
+        },
+      }),
+    )
   }
 
   async startSession(ctx: ExtensionContext): Promise<void> {
@@ -79,9 +81,7 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
 
   stop(ctx: ExtensionContext): void {
     this[Symbol.dispose]()
-    this.#overlays.stop()
     this.#drawStatuses(ctx, [])
-    this.#resources?.[Symbol.dispose]()
   }
 
   endTurn(): void {
@@ -131,13 +131,15 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
   }
 
   protected override adapter(ctx: ExtensionContext): HarnessAdapter {
-    const resources = createSessionResources({
-      pi: this.#pi,
-      ctx,
-      plugin: this.#plugin,
-      dir: this.#dir,
-      state: this.#state,
-    })
+    const resources = this.own(
+      createSessionResources({
+        pi: this.#pi,
+        ctx,
+        plugin: this.#plugin,
+        dir: this.#dir,
+        state: this.#state,
+      }),
+    )
     this.#resources = resources
     return resources.harness
   }

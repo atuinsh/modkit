@@ -31,7 +31,7 @@ export default defineConfig([
   {
     cwd: 'modkit-target',
     entry: { host: 'src/host/index.ts' },
-    tsconfig: 'tsconfig.host.json',
+    tsconfig: 'src/host/tsconfig.json',
     platform: 'neutral',
     dts,
   },

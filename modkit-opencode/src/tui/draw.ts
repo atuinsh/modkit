@@ -1,8 +1,8 @@
 import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
 
-import { parseViewJson, type NodeJson, type ViewJson } from '../contract.ts'
+import { parseRunOutput, parseViewJson, type NodeJson, type ViewJson } from '../contract.ts'
 
-export { EMPTY_VIEW } from '../contract.ts'
+export { EMPTY_VIEW, parseRunOutput } from '../contract.ts'
 
 export type Paint = { tone: Tone | 'accent' | 'border' } | { hex: Hex }
 
@@ -55,29 +55,34 @@ const PLAIN: Style = {
   href: undefined,
 }
 
-function fgOf(style: Style): Paint {
+type Inline = Extract<NodeJson, { kind: 'Text' | 'Link' }>
+
+const isInline = (node: NodeJson): node is Inline =>
+  typeof node !== 'string' && (node.kind === 'Text' || node.kind === 'Link')
+
+function resolveForeground(style: Style): Paint {
   if (style.color !== undefined) return { hex: style.color }
   if (style.tone !== 'plain') return { tone: style.tone }
   // A link draws in the accent buttons do, unless its text is colored.
   return style.href === undefined ? { tone: 'plain' } : { tone: 'accent' }
 }
 
-const spanOf = ({ text, style }: { text: string; style: Style }): Span => ({
+const buildSpan = ({ text, style }: { text: string; style: Style }): Span => ({
   text,
-  fg: fgOf(style),
+  fg: resolveForeground(style),
   bold: style.bold,
   ...(style.background !== undefined && { bg: { hex: style.background } }),
   ...(style.href !== undefined && { href: style.href }),
 })
 
-function plainOf(node: NodeJson): string {
+function plainText(node: NodeJson): string {
   if (typeof node === 'string') return node
   switch (node.kind) {
     case 'Text':
     case 'Link':
     case 'Column':
     case 'Row':
-      return node.children.map((child) => plainOf(child)).join('')
+      return node.children.map((child) => plainText(child)).join('')
     case 'Button':
       return node.label
     case 'Img':
@@ -88,13 +93,7 @@ function plainOf(node: NodeJson): string {
   return node.text
 }
 
-type Inline = Extract<NodeJson, { kind: 'Text' | 'Link' }>
-
-const isInline = (node: NodeJson): node is Inline =>
-  typeof node !== 'string' && (node.kind === 'Text' || node.kind === 'Link')
-
-// The style `node`'s children are drawn in, inside `around`.
-function styleIn({ node, around }: { node: Inline; around: Style }): Style {
+function cascadeStyle({ node, around }: { node: Inline; around: Style }): Style {
   if (node.kind === 'Link') return { ...around, href: node.href }
   return {
     tone: node.tone === 'plain' ? around.tone : node.tone,
@@ -105,29 +104,7 @@ function styleIn({ node, around }: { node: Inline; around: Style }): Style {
   }
 }
 
-function spansOf({
-  node,
-  around,
-  spellsUrls,
-}: {
-  node: NodeJson
-  around: Style
-  spellsUrls: boolean
-}): Span[] {
-  if (!isInline(node)) {
-    const text = plainOf(node)
-    return text === '' ? [] : [spanOf({ text, style: around })]
-  }
-  const style = styleIn({ node, around })
-  const spans = node.children.flatMap((child) =>
-    spansOf({ node: child, around: style, spellsUrls }),
-  )
-  if (node.kind === 'Text' || !spellsUrls || plainOf(node) === node.href) return spans
-  const url = { ...around, tone: 'dim' as const, color: undefined }
-  return [...spans, spanOf({ text: ` (${node.href})`, style: url })]
-}
-
-const buttonSpans = ({
+const buildButtonSpans = ({
   label,
   hotkey,
   hasKeys,
@@ -142,8 +119,7 @@ const buttonSpans = ({
   { text: label, fg: { tone: 'accent' }, bold: false },
 ]
 
-// The box a `Column` or `Row` draws `children` in.
-function boxSpec({
+function buildBoxSpec({
   node,
   children,
 }: {
@@ -170,34 +146,85 @@ function boxSpec({
   }
 }
 
-/**
- * Specs drawing `nodes`, with the hotkeys beside buttons when `hasKeys`, and each link's URL after
- * its text when `spellsUrls`, for a terminal that opens no links.
- */
-export function specsOf({
-  nodes,
-  hasKeys,
-  spellsUrls,
-}: {
-  nodes: readonly NodeJson[]
-  hasKeys: boolean
-  spellsUrls: boolean
-}): Spec[] {
-  return nodes.map((node): Spec => {
+/** Translates serialized {@link NodeJson} trees into OpenTUI {@link Spec}s and hotkey maps. */
+export class OpenTuiView {
+  readonly #hasKeys: boolean
+  readonly #spellsUrls: boolean
+
+  private constructor({ hasKeys, spellsUrls }: { hasKeys: boolean; spellsUrls: boolean }) {
+    this.#hasKeys = hasKeys
+    this.#spellsUrls = spellsUrls
+  }
+
+  /** Parse an RPC `view` payload into a validated {@link ViewJson}. */
+  static parse(answer: unknown): ViewJson {
+    return parseViewJson(answer)
+  }
+
+  /** Parse an RPC `run` reply text. */
+  static parseRunReply(answer: unknown): string {
+    return parseRunOutput(answer)
+  }
+
+  /** Render `nodes` into OpenTUI specs. */
+  static render({
+    nodes,
+    hasKeys,
+    spellsUrls,
+  }: {
+    nodes: readonly NodeJson[]
+    hasKeys: boolean
+    spellsUrls: boolean
+  }): Spec[] {
+    return new OpenTuiView({ hasKeys, spellsUrls }).#renderNodes(nodes)
+  }
+
+  /** Collect every button hotkey in `nodes` (first occurrence wins) via exhaustive traversal. */
+  static hotkeys(nodes: readonly NodeJson[]): Map<string, string> {
+    const found = new Map<string, string>()
+    const walk = (node: NodeJson): void => {
+      if (typeof node === 'string') return
+      switch (node.kind) {
+        case 'Markdown':
+        case 'Img':
+          return
+        case 'Button':
+          if (node.hotkey !== undefined && !found.has(node.hotkey)) found.set(node.hotkey, node.id)
+          return
+        case 'Text':
+        case 'Link':
+        case 'Column':
+        case 'Row':
+          for (const child of node.children) walk(child)
+      }
+    }
+    for (const node of nodes) walk(node)
+    return found
+  }
+
+  #renderNodes(nodes: readonly NodeJson[]): Spec[] {
+    return nodes.map((node) => this.#renderNode(node))
+  }
+
+  #renderNode(node: NodeJson): Spec {
     if (typeof node === 'string') {
-      return { tag: 'text', spans: [spanOf({ text: node, style: PLAIN })] }
+      return { tag: 'text', spans: [buildSpan({ text: node, style: PLAIN })] }
     }
     switch (node.kind) {
       case 'Text':
       case 'Link':
-        return { tag: 'text', spans: spansOf({ node, around: PLAIN, spellsUrls }) }
+        return { tag: 'text', spans: this.#collectSpans(node, PLAIN) }
       case 'Column':
       case 'Row':
-        return boxSpec({ node, children: specsOf({ nodes: node.children, hasKeys, spellsUrls }) })
+        return buildBoxSpec({ node, children: this.#renderNodes(node.children) })
       case 'Button':
         return {
           tag: 'text',
-          spans: buttonSpans({ label: node.label, hotkey: node.hotkey, hasKeys }),
+          spans: buildButtonSpans({
+            label: node.label,
+            hotkey: node.hotkey,
+            hasKeys: this.#hasKeys,
+          }),
         }
       case 'Img': {
         const { png, columns, rows, fallback } = node
@@ -207,23 +234,17 @@ export function specsOf({
         break
     }
     return { tag: 'markdown', content: node.text }
-  })
-}
-
-export function hotkeysIn(nodes: readonly NodeJson[]): Map<string, string> {
-  const found = new Map<string, string>()
-  const walk = (node: NodeJson): void => {
-    if (typeof node === 'string' || node.kind === 'Markdown' || node.kind === 'Img') return
-    if (node.kind === 'Button') {
-      if (node.hotkey !== undefined && !found.has(node.hotkey)) found.set(node.hotkey, node.id)
-      return
-    }
-    for (const child of node.children) walk(child)
   }
-  for (const node of nodes) walk(node)
-  return found
-}
 
-export function viewOf(answer: unknown): ViewJson {
-  return parseViewJson(answer)
+  #collectSpans(node: NodeJson, around: Style): Span[] {
+    if (!isInline(node)) {
+      const text = plainText(node)
+      return text === '' ? [] : [buildSpan({ text, style: around })]
+    }
+    const style = cascadeStyle({ node, around })
+    const spans = node.children.flatMap((child) => this.#collectSpans(child, style))
+    if (node.kind === 'Text' || !this.#spellsUrls || plainText(node) === node.href) return spans
+    const url = { ...around, tone: 'dim' as const, color: undefined }
+    return [...spans, buildSpan({ text: ` (${node.href})`, style: url })]
+  }
 }

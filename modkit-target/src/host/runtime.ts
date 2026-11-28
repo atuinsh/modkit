@@ -15,6 +15,7 @@ import {
   mount,
   nextShown,
   NOTHING_SHOWN,
+  PaneId,
   type ButtonNode,
   type HarnessAdapter,
   type Images,
@@ -34,10 +35,9 @@ import {
   type RuntimeHosts,
   type ViewHost,
 } from './hosts.ts'
-import { PaneId } from './pane-id.ts'
 
 // How often a session refreshes the mod's resources.
-const TICK_MS = 1000
+const TICK = Temporal.Duration.from({ seconds: 1 })
 
 // Until a session starts, a failure has nowhere to be reported.
 const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
@@ -77,7 +77,10 @@ const paneKey = (id: string | PaneId): string => (typeof id === 'string' ? id : 
  * to its runtime hosts at compile time: non-dropped `panes` and `commands` must be supplied by
  * {@link hosts}, while dropped ones receive `Nop*` hosts populated with their declared `why`.
  */
-export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Capabilities> {
+export abstract class ModkitTargetRuntime<
+  Engine,
+  Caps extends Capabilities = Capabilities,
+> implements Disposable {
   readonly #mod: Mod<Options>
   readonly #options: Options
   readonly #images: Images
@@ -147,9 +150,10 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     return this.#opening
   }
 
-  /** Mark the session torn down so late subscriptions stop redrawing or syncing panes. */
-  protected disposeSession(): void {
+  /** Mark the session torn down, stopping queries and suppressing further redraws or pane syncs. */
+  [Symbol.dispose](): void {
     this.#isDisposed = true
+    this.#mounted?.[Symbol.dispose]()
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
@@ -201,7 +205,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
   protected paneBody(id: string | PaneId): readonly UiNode[] | undefined {
     const key = paneKey(id)
     const view = this.#mounted?.view()
-    const command = view?.commands.find((one) => PaneId.fromCommand(one.name).equals(key))
+    const command = view?.commands.find((one) => one.pane?.id.equals(key) === true)
     return command?.pane?.body ?? view?.panes.find((pane) => pane.id === key)?.body
   }
 
@@ -216,7 +220,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     if (command.pane === undefined) {
       return (await this.#answering(engine, async () => mounted.ran(name))) ?? ''
     }
-    return this.#toggled(engine, { id: PaneId.fromCommand(name), title: command.pane.title })
+    return this.#toggled(engine, { id: command.pane.id, title: command.pane.title })
   }
 
   /** Answer the person pressing one of the mod's buttons, on the engine of the hook that drew it. */
@@ -232,9 +236,16 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     await this.#mounted?.closed(key)
   }
 
+  // Read through a method so TypeScript does not keep `#isDisposed` narrowed to `false` across `await`.
+  #stopped(): boolean {
+    return this.#isDisposed
+  }
+
   async #mount(engine: Engine): Promise<void> {
+    if (this.#stopped()) return
     this.#bindHosts()
     const adapter = await this.adapter(engine)
+    if (this.#stopped()) return
     this.#report = (failure) => {
       adapter.report(failure)
     }
@@ -242,23 +253,29 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
     this.#mounted = mounted
     mounted.subscribe(() => {
-      if (this.#isDisposed) return
+      if (this.#stopped()) return
       void this.#view.redraw(engine)
       if (!this.#isAnswering) this.#syncPanes(engine, false)
     })
     this.#syncPanes(engine, false)
-    for (const command of mounted.view().commands) {
-      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
-      await this.#commands.register(engine, command)
-    }
+    await this.#registerCommands(engine, mounted)
+    if (this.#stopped()) return
     this.repeat(engine, {
-      everyMs: TICK_MS,
+      everyMs: TICK.total('millisecond'),
       tick: () => {
-        if (!this.#isDisposed) void mounted.tick()
+        if (!this.#stopped()) void mounted.tick()
       },
     })
     await mounted.event('session.start')
-    if (!this.#isDisposed) await this.#view.redraw(engine)
+    if (!this.#stopped()) await this.#view.redraw(engine)
+  }
+
+  async #registerCommands(engine: Engine, mounted: Mounted): Promise<void> {
+    for (const command of mounted.view().commands) {
+      if (this.#stopped()) return
+      // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
+      await this.#commands.register(engine, command)
+    }
   }
 
   #bindHosts(): void {

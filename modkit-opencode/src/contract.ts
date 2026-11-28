@@ -156,6 +156,37 @@ export function parseViewJson(raw: unknown): ViewJson {
   return parsed.success ? parsed.output : EMPTY_VIEW
 }
 
+const SessionInputSchema = v.object({ sessionID: v.string() })
+const PressInputSchema = v.object({ sessionID: v.string(), button: v.string() })
+const RunInputSchema = v.object({ sessionID: v.string(), command: v.string() })
+const CloseInputSchema = v.object({ sessionID: v.string(), pane: v.string() })
+const RunOutputSchema = v.object({ text: v.optional(v.string()) })
+
+export function parseSessionInput(raw: unknown): { sessionID: string } | undefined {
+  const parsed = v.safeParse(SessionInputSchema, raw)
+  return parsed.success ? parsed.output : undefined
+}
+
+export function parsePressInput(raw: unknown): { sessionID: string; button: string } | undefined {
+  const parsed = v.safeParse(PressInputSchema, raw)
+  return parsed.success ? parsed.output : undefined
+}
+
+export function parseRunInput(raw: unknown): { sessionID: string; command: string } | undefined {
+  const parsed = v.safeParse(RunInputSchema, raw)
+  return parsed.success ? parsed.output : undefined
+}
+
+export function parseCloseInput(raw: unknown): { sessionID: string; pane: string } | undefined {
+  const parsed = v.safeParse(CloseInputSchema, raw)
+  return parsed.success ? parsed.output : undefined
+}
+
+export function parseRunOutput(raw: unknown): string {
+  const parsed = v.safeParse(RunOutputSchema, raw)
+  return parsed.success ? (parsed.output.text ?? '') : ''
+}
+
 // A JSON Schema, which opencode takes as an open record.
 interface Text {
   readonly [key: string]: unknown

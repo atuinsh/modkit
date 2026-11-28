@@ -32,11 +32,12 @@ function isDue({
   return everyMs !== undefined && now - record.at >= everyMs
 }
 
-export class Queries {
+export class Queries implements Disposable {
   readonly #adapter: HarnessAdapter
   readonly #write: RenderScope['write']
   #registered = new Map<string, QueryRegistration>()
   #isMounted = false
+  #isDisposed = false
   readonly #fetching = new Map<string, Fetching>()
 
   constructor({ adapter, write }: { adapter: HarnessAdapter; write: RenderScope['write'] }) {
@@ -44,7 +45,14 @@ export class Queries {
     this.#write = write
   }
 
+  /** Stop scheduling or retrying queries once the mounted session has been torn down. */
+  [Symbol.dispose](): void {
+    this.#isDisposed = true
+    this.#registered.clear()
+  }
+
   register(registrations: readonly QueryRegistration[]): void {
+    if (this.#isDisposed) return
     const registered = new Map<string, QueryRegistration>()
     for (const one of registrations) {
       const earlier = registered.get(one.query.id)
@@ -64,6 +72,7 @@ export class Queries {
   }
 
   async refreshDue(event?: HarnessEvent): Promise<void> {
+    if (this.#isDisposed) return
     const listening = [...this.#registered.values()].flatMap((one) =>
       event !== undefined && isAsked(one) && one.query.on?.includes(event) === true
         ? [one.query.id]
@@ -75,6 +84,7 @@ export class Queries {
   }
 
   async refresh(id: string): Promise<void> {
+    if (this.#isDisposed) return
     const under = this.#fetching.get(id)
     if (under !== undefined) {
       under.again = true
@@ -111,26 +121,47 @@ export class Queries {
         fetching.again = false
         // oxlint-disable-next-line no-await-in-loop -- the next fetch is the one asked for during this
         await this.#fetchOnce(id)
-      } while (isAskedAgain(fetching) || this.#isStale(id))
+      } while (!this.#isStopped() && (isAskedAgain(fetching) || this.#isStale(id)))
     } finally {
       this.#fetching.delete(id)
     }
   }
 
+  // Read through a method so TypeScript does not keep `#isDisposed` narrowed to `false` across `await`.
+  #isStopped(): boolean {
+    return this.#isDisposed
+  }
+
   // A render that changed the input while its fetch ran wants the new input's value.
   #isStale(id: string): boolean {
+    if (this.#isDisposed) return false
     const asked = this.#registered.get(id)
     if (asked === undefined || !isAsked(asked)) return false
     return recordOf(this.#adapter.store.get(id))?.input !== asked.key
   }
 
   async #fetchOnce(id: string): Promise<void> {
+    if (this.#isDisposed) return
     const asked = this.#registered.get(id)
     if (asked === undefined || !isAsked(asked)) return
-    const { query, key } = asked
+    const { key } = asked
     const kept = recordOf(this.#adapter.store.get(id))
     const fetched = await this.#fetched(asked)
-    if (this.#registered.get(id)?.key !== key) return
+    if (this.#isStopped() || this.#registered.get(id)?.key !== key) return
+    this.#commit({ id, key, kept, fetched })
+  }
+
+  #commit({
+    id,
+    key,
+    kept,
+    fetched,
+  }: {
+    id: string
+    key: string
+    kept: QueryRecord | undefined
+    fetched: { isOk: true; value: unknown } | { isOk: false; error: unknown }
+  }): void {
     const at = this.#adapter.now()
     if (fetched.isOk) {
       this.#write({ key: id, stored: { value: { input: key, at, value: fetched.value } } })
@@ -139,7 +170,7 @@ export class Queries {
     this.#adapter.report({ phase: 'query', error: fetched.error })
     const value = kept?.input === key ? kept.value : undefined
     this.#write({
-      key: query.id,
+      key: id,
       stored: { value: { input: key, at, ...(value !== undefined && { value }) } },
     })
   }

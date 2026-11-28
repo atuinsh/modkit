@@ -27,23 +27,19 @@ interface SessionState {
 export class LiveSession implements Disposable {
   readonly #state: SessionState
   readonly #runtime: CodexRuntime | undefined
-  readonly #store: FileStore | undefined
   readonly #opened: Promise<void>
 
   private constructor({
     state,
     runtime,
-    store,
     opened,
   }: {
     state: SessionState
     runtime: CodexRuntime | undefined
-    store: FileStore | undefined
     opened: Promise<void>
   }) {
     this.#state = state
     this.#runtime = runtime
-    this.#store = store
     this.#opened = opened
   }
 
@@ -72,12 +68,7 @@ export class LiveSession implements Disposable {
     const settings = settingsSchema.loadFile(join(dir, 'settings.json'))
     for (const problem of settings.problems) state.notes.push(`${plugin}: ${problem}`)
     if (!settings.isOk) {
-      return new LiveSession({
-        state,
-        runtime: undefined,
-        store: undefined,
-        opened: Promise.resolve(),
-      })
+      return new LiveSession({ state, runtime: undefined, opened: Promise.resolve() })
     }
     const { harness, store } = LiveSession.#buildHarness({
       state,
@@ -87,7 +78,7 @@ export class LiveSession implements Disposable {
       servers,
     })
     const runtime = new CodexRuntime({ mod, options: settings.options, images })
-    return new LiveSession({ state, runtime, store, opened: runtime.open({ harness }) })
+    return new LiveSession({ state, runtime, opened: runtime.open({ harness, store }) })
   }
 
   static #buildHarness({
@@ -162,7 +153,6 @@ export class LiveSession implements Disposable {
   }
 
   [Symbol.dispose](): void {
-    this.#store?.[Symbol.dispose]()
     this.#runtime?.[Symbol.dispose]()
   }
 }

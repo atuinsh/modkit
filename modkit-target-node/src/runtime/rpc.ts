@@ -13,10 +13,8 @@ interface Call {
   params?: unknown
 }
 
-const MS_PER_SECOND = 1000
-
 interface Timeout {
-  ms: number
+  duration: Temporal.Duration
   what: string
 }
 
@@ -123,8 +121,8 @@ class LinePeer implements Peer {
     if (timeout === undefined) return answered
     const timer = new AbortController()
     const late = async (): Promise<never> => {
-      await sleep(timeout.ms, undefined, { signal: timer.signal })
-      throw new Error(`${timeout.what} took longer than ${timeout.ms / MS_PER_SECOND}s`)
+      await sleep(timeout.duration.total('millisecond'), undefined, { signal: timer.signal })
+      throw new Error(`${timeout.what} took longer than ${timeout.duration.total('second')}s`)
     }
     try {
       return await Promise.race([answered, late()])

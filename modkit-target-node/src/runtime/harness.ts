@@ -10,7 +10,7 @@ import type {
 } from '@atuin/modkit-target/host'
 
 import { copy } from './clipboard.ts'
-import { projectRootOf, run } from './run.ts'
+import { findProjectRoot, run } from './run.ts'
 import type { Servers } from './servers.ts'
 
 /** Base dependencies required to construct a Node/Bun {@link HarnessAdapter}. */
@@ -87,7 +87,7 @@ export class NodeHarnessBuilder {
     return {
       session: { id: sessionId },
       cwd: async () => resolveCwd(),
-      root: async () => projectRootOf(resolveCwd()),
+      root: async () => findProjectRoot(resolveCwd()),
       env: async (name) => process.env[name],
       run: async (argv, options) => run({ argv, options, cwd: resolveCwd() }),
       mcp: async (call) => servers.call(call),

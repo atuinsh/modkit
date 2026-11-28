@@ -1,7 +1,6 @@
-import type { CommandView } from '@atuin/modkit/host'
+import type { CommandView, PaneId } from '@atuin/modkit/host'
 
 import type { Capabilities, DroppedSupport, Support } from './capabilities.ts'
-import type { PaneId } from './pane-id.ts'
 
 export type Awaitable<T> = T | Promise<T>
 
