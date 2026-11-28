@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -22,6 +23,9 @@ import { STATUSLINE_TOOL } from '../protocol.ts'
 const execFileAsync = promisify(execFile)
 
 const JSON_INDENT_SPACES = 2
+
+/** How much of a workspace's hash its marketplace's name carries. */
+const WORKSPACE_HASH_CHARS = 6
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, JSON_INDENT_SPACES)}\n`
 
@@ -86,8 +90,11 @@ class CodexDev implements DevHarness {
     ]
   }
 
+  // A workspace's own, `modkit-dev-atuin-3fa2b1`: Codex's config is the user's, so another
+  // `modkit dev` of the same mod, from another checkout, registers beside this one, not over it.
   get #marketplace(): string {
-    return `modkit-dev-${this.#plugin}`
+    const hash = createHash('sha256').update(this.#scratch).digest('hex')
+    return `modkit-dev-${this.#plugin}-${hash.slice(0, WORKSPACE_HASH_CHARS)}`
   }
 
   get #selector(): string {
