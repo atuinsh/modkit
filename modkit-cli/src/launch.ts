@@ -44,7 +44,8 @@ async function commandOf({
   const landed = await place.landed()
   if (landed === undefined) return `${name} starts once a build of it lands`
   const listed = await build.listed()
-  const target = listed?.find((one) => one.name === name)
+  if (!listed.outcome.isOk) return listed.outcome.error
+  const target = listed.outcome.value.find((one) => one.name === name)
   if (target === undefined) return `modkit.targets no longer lists ${name}, so it gets no harness`
   const out = join(build.out, name)
   const { plugin, hasStatus } = landed

@@ -20,8 +20,6 @@ import * as v from 'valibot'
 
 import type { Env } from '@atuin/modkit-target'
 
-import { readIfAny } from './files.ts'
-
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
 
@@ -74,11 +72,6 @@ export class Dekit {
       task,
     ])
     return `${JSON.stringify({ tasks: Object.fromEntries(entries) }, null, JSON_INDENT_SPACES)}\n`
-  }
-
-  /** The project's `dekit.yaml`, if it has one. */
-  async config(): Promise<string | undefined> {
-    return readIfAny(this.#config)
   }
 
   /** Write the project's `dekit.yaml`, which a runner reads as it starts. */

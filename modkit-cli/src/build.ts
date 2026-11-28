@@ -9,6 +9,7 @@ import {
   errorMessage,
   gapText,
   ModPackage,
+  Result,
   type CompiledMod,
   type Gap,
   type ListedTarget,
@@ -21,9 +22,11 @@ function shown(path: string): string {
   return near === '' ? '.' : near
 }
 
+const formatted = (diagnostics: readonly Diagnostic[]): string =>
+  diagnostics.map((one) => formatDiagnostic({ ...one, file: shown(one.file) })).join('\n')
+
 function failed(diagnostics: readonly Diagnostic[]): void {
-  const lines = diagnostics.map((one) => formatDiagnostic({ ...one, file: shown(one.file) }))
-  console.error(lines.join('\n'))
+  console.error(formatted(diagnostics))
 }
 
 const gapNote = (gap: Gap): string => `  ${gapText(gap)} (accepted in package.json)`
@@ -79,18 +82,12 @@ export class Build {
     return this.#package.dir
   }
 
-  /** The targets the mod's package.json lists, or none when it can't be read, saying why. */
-  async listed(): Promise<readonly ListedTarget[] | undefined> {
+  /** The targets the mod's package.json lists, or why they can't be read. */
+  async listed(): Promise<Result<readonly ListedTarget[], string>> {
     const targets = await this.#package.targets().catch((error: unknown) => errorMessage(error))
-    if (typeof targets === 'string') {
-      console.error(targets)
-      return undefined
-    }
-    if (!targets.isOk) {
-      failed(targets.diagnostics)
-      return undefined
-    }
-    return targets.value
+    if (typeof targets === 'string') return Result.err(targets)
+    if (!targets.isOk) return Result.err(formatted(targets.diagnostics))
+    return Result.ok(targets.value)
   }
 
   /**

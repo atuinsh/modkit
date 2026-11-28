@@ -10,6 +10,7 @@ import { basename, join } from 'node:path'
 
 import type { Build } from './build.ts'
 import { readIfAny } from './files.ts'
+import { DevRequest } from './request.ts'
 import { TargetPlace } from './target-place.ts'
 
 /** The dekit project's directory of a `modkit dev` run, and the files in it. */
@@ -24,6 +25,17 @@ export class DevLayout {
   /** The layout of `modkit dev` runs of `build`'s mod into `build`'s out directory. */
   static for(build: Build): DevLayout {
     return new DevLayout(join(build.out, '.dev', basename(build.dir)))
+  }
+
+  /** What the run in the project asked for, if one has run in it. */
+  async request(): Promise<DevRequest | undefined> {
+    const text = await readIfAny(this.#request)
+    return text === undefined ? undefined : DevRequest.parse(text)
+  }
+
+  /** Keep `request` as what the run in the project asks for, which its tasks read. */
+  async keepRequest(request: DevRequest): Promise<void> {
+    await writeFile(this.#request, request.toString())
   }
 
   /** Where the target `name` keeps what its harness needs. */
@@ -55,6 +67,10 @@ export class DevLayout {
     const report = await readIfAny(this.#report)
     await rm(this.#report, { force: true })
     return report
+  }
+
+  get #request(): string {
+    return join(this.root, 'request.json')
   }
 
   get #report(): string {
