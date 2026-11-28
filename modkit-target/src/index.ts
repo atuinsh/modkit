@@ -9,9 +9,20 @@
  */
 
 export { NATIVE, type Capabilities, type Support } from './capabilities.ts'
+export {
+  Target,
+  TargetBuilder,
+  type ArtifactWriter,
+  type NamedTargetBuilder,
+  type TargetBuildContext,
+  type TargetBuilt,
+} from './define.ts'
+export { errorMessage } from './host/values.ts'
 export { imagesSource } from './images.ts'
 export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
 export { ModPackage } from './package.ts'
+export { PluginName } from './plugin-name.ts'
+export { TargetRef } from './target-ref.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
 export {
   pluginNameOf,

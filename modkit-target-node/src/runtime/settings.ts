@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { isPlainObject } from 'es-toolkit/predicate'
 import * as v from 'valibot'
 
@@ -23,7 +25,13 @@ export type Settings =
 
 const StringsSchema = v.array(v.string())
 
-function heldBy({ decl, value }: { decl: SettingDecl; value: unknown }): OptionValue | undefined {
+function parseValue({
+  decl,
+  value,
+}: {
+  decl: SettingDecl
+  value: unknown
+}): OptionValue | undefined {
   switch (decl.kind) {
     case 'string':
       if (typeof value !== 'string') return undefined
@@ -45,26 +53,27 @@ const KIND_WORDS: Readonly<Record<SettingDecl['kind'], string>> = {
   boolean: 'true or false',
 }
 
-const wanted = (decl: SettingDecl): string =>
+const expectedTypeText = (decl: SettingDecl): string =>
   decl.kind === 'string' && decl.choices !== undefined
     ? `one of ${decl.choices.map((choice) => JSON.stringify(choice)).join(', ')}`
     : KIND_WORDS[decl.kind]
 
-function parsed(text: string): unknown {
+function readJsonFile(path: string): unknown {
   try {
-    return JSON.parse(text)
-  } catch {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return {}
     return undefined
   }
 }
 
-interface Read {
+interface ParsedEntry {
   decl: SettingDecl
   value: OptionValue | undefined
   problem: string[]
 }
 
-function readOf({
+function parseEntry({
   decl,
   given,
   where,
@@ -72,54 +81,59 @@ function readOf({
   decl: SettingDecl
   given: unknown
   where: string
-}): Read {
-  const value = given === undefined ? undefined : heldBy({ decl, value: given })
+}): ParsedEntry {
+  const value = given === undefined ? undefined : parseValue({ decl, value: given })
   const problem =
     given !== undefined && value === undefined
-      ? [`${where} sets ${decl.name} to ${JSON.stringify(given)}, but it takes ${wanted(decl)}`]
+      ? [
+          `${where} sets ${decl.name} to ${JSON.stringify(given)}, but it takes ${expectedTypeText(decl)}`,
+        ]
       : []
   return { decl, value: value ?? decl.default, problem }
 }
 
-export function settingsOf({
-  decls,
-  given,
-  where,
-}: {
-  decls: readonly SettingDecl[]
-  given: unknown
-  where: string
-}): Settings {
-  if (!isPlainObject(given)) {
-    const defaults = settingsOf({ decls, given: {}, where })
-    const problem = `${where} isn't a JSON object of settings, so it was ignored`
-    return { ...defaults, problems: [problem, ...defaults.problems] }
-  }
-  const json: Readonly<Record<string, unknown>> = given
-  const known = new Set(decls.map((decl) => decl.name))
-  const unknown = Object.keys(json)
-    .filter((name) => !known.has(name))
-    .map((name) => `${where} sets ${name}, which this mod has no setting for`)
-  const read = decls.map((decl) => readOf({ decl, given: json[decl.name], where }))
-  const problems = [...unknown, ...read.flatMap((one) => one.problem)]
-  const missing = read
-    .filter((one) => one.value === undefined && one.decl.isRequired)
-    .map((one) => `this mod needs ${one.decl.name} set in ${where}, as ${wanted(one.decl)}`)
-  if (missing.length > 0) return { isOk: false, problems: [...problems, ...missing] }
-  const options = Object.fromEntries(
-    read.flatMap((one) => (one.value === undefined ? [] : [[one.decl.name, one.value]])),
-  )
-  return { isOk: true, options, problems }
-}
+/** Validating schema for a mod's user settings, loaded from a JSON file or an inline object. */
+export class SettingsSchema {
+  readonly #decls: readonly SettingDecl[]
 
-export function settingsFrom({
-  decls,
-  text,
-  path,
-}: {
-  decls: readonly SettingDecl[]
-  text: string | undefined
-  path: string
-}): Settings {
-  return settingsOf({ decls, given: text === undefined ? {} : parsed(text), where: path })
+  private constructor(decls: readonly SettingDecl[]) {
+    this.#decls = decls
+  }
+
+  /** Construct a schema from compiler-emitted {@link SettingDecl} entries. */
+  static from(decls: readonly SettingDecl[]): SettingsSchema {
+    return new SettingsSchema(decls)
+  }
+
+  /** Parse and validate `given` against this schema, anchoring problems to `where`. */
+  parse(given: unknown, where: string): Settings {
+    if (!isPlainObject(given)) {
+      const defaults = this.parse({}, where)
+      const problem = `${where} isn't a JSON object of settings, so it was ignored`
+      return { ...defaults, problems: [problem, ...defaults.problems] }
+    }
+    const json: Readonly<Record<string, unknown>> = given
+    const known = new Set(this.#decls.map((decl) => decl.name))
+    const unknown = Object.keys(json)
+      .filter((name) => !known.has(name))
+      .map((name) => `${where} sets ${name}, which this mod has no setting for`)
+    const entries = this.#decls.map((decl) => parseEntry({ decl, given: json[decl.name], where }))
+    const problems = [...unknown, ...entries.flatMap((one) => one.problem)]
+    const missing = entries
+      .filter((one) => one.value === undefined && one.decl.isRequired)
+      .map(
+        (one) =>
+          `this mod needs ${one.decl.name} set in ${where}, as ${expectedTypeText(one.decl)}`,
+      )
+    if (missing.length > 0) return { isOk: false, problems: [...problems, ...missing] }
+    const options = Object.fromEntries(
+      entries.flatMap((one) => (one.value === undefined ? [] : [[one.decl.name, one.value]])),
+    )
+    return { isOk: true, options, problems }
+  }
+
+  /** Read a JSON settings file from `path` (treating a missing file as `{}`) and validate it. */
+  loadFile(path: string): Settings {
+    return this.parse(readJsonFile(path), path)
+  }
 }

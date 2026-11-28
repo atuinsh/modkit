@@ -9,15 +9,26 @@
  */
 
 export {
+  NOP_COMMAND_HOST,
+  NOP_VIEW_HOST,
+  NopPaneHost,
+  type CommandHost,
+  type PaneHost,
+  type PaneOpened,
+  type PaneOpening,
+  type ViewHost,
+} from './hosts.ts'
+export { McpResponse } from './mcp-response.ts'
+export { PaneId } from './pane-id.ts'
+export {
   ModkitTargetRuntime,
   type ButtonPress,
   type HookedCall,
   type HookedResult,
-  type PaneOpened,
-  type PaneOpening,
   type Repeat,
 } from './runtime.ts'
-export { failureReporter, resolveVerdict, type VerdictOutcome } from './verdict.ts'
+export { asRecord, errorMessage } from './values.ts'
+export { failureReporter, ModVerdict, type VerdictOutcome } from './verdict.ts'
 export {
   textOf,
   type ButtonNode,

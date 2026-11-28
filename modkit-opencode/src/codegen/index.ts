@@ -1,21 +1,10 @@
-import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { genExport, genImport, genObjectFromValues, genString } from 'knitwork'
-import * as v from 'valibot'
 
-import {
-  imagesSource,
-  ModkitTarget,
-  NATIVE,
-  pluginNameOf,
-  type BuildInput,
-  type Built,
-  type Capabilities,
-  type ModInfo,
-} from '@atuin/modkit-target'
-import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
+import { imagesSource, NATIVE, Target, type ModkitTarget } from '@atuin/modkit-target'
+import { bundle, settingDecl, stateTags } from '@atuin/modkit-target-node/codegen'
 
 const SERVER = fileURLToPath(new URL('../server/index.ts', import.meta.url))
 const CONTRACT = fileURLToPath(new URL('../contract.ts', import.meta.url))
@@ -39,67 +28,42 @@ const OPENCODE_TOOLS: ReadonlySet<string> = new Set([
   'write',
 ])
 
-const JSON_INDENT_SPACES = 2
-
-const json = (value: unknown): string => `${JSON.stringify(value, null, JSON_INDENT_SPACES)}\n`
 const source = (lines: readonly string[]): string => [...lines, ''].join('\n')
 
-const packageJsonOf = ({ plugin, mod }: { plugin: string; mod: ModInfo }): unknown => ({
-  name: plugin,
-  version: mod.version,
-  description: mod.description,
-  type: 'module',
-  ...(mod.author !== undefined && { author: mod.author.name }),
-  exports: { '.': './server.js', './tui': './tui.tsx', './rpc': './mod.js' },
-})
-
-async function writeTui({
+function emitTui({
   dir,
-  out,
-  plugin,
+  pluginName,
+  emit,
 }: {
   dir: string
-  out: string
-  plugin: string
-}): Promise<void> {
+  pluginName: string
+  emit: {
+    write: (task: (out: string) => Promise<void>) => void
+    copy: (path: string, from: string) => void
+  }
+}): void {
   const shared = source([
     genImport(CONTRACT, ['contractOf']),
     '',
-    `export const PLUGIN = ${genString(plugin)}`,
+    `export const PLUGIN = ${genString(pluginName)}`,
     'export const CONTRACT = contractOf(PLUGIN)',
   ])
-  await bundle({ dir, entry: shared, file: join(out, 'mod.js'), platform: 'neutral' })
-  const draw = source([genExport(DRAW, '*')])
-  await bundle({ dir, entry: draw, file: join(out, 'draw.js'), platform: 'neutral' })
-  await copyFile(TUI, join(out, 'tui.tsx'))
+  emit.write(async (dest) =>
+    bundle({ dir, entry: shared, file: join(dest, 'mod.js'), platform: 'neutral' }),
+  )
+  emit.write(async (dest) =>
+    bundle({
+      dir,
+      entry: source([genExport(DRAW, '*')]),
+      file: join(dest, 'draw.js'),
+      platform: 'neutral',
+    }),
+  )
+  emit.copy('tui.tsx', TUI)
 }
 
-const notesOf = ({
-  out,
-  plugin,
-  hasSettings,
-}: {
-  out: string
-  plugin: string
-  hasSettings: boolean
-}): string[] => [
-  `opencode loads ${plugin} once ${out} is in the plugins of opencode.json`,
-  ...(hasSettings
-    ? [
-        `${plugin}'s settings go in its entry's options: { "package": "${out}", "options": { ... } }`,
-      ]
-    : []),
-]
-
-// No options of a mod's yet for opencode, so its section holds only the gaps it accepts.
-const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
-  v.strictObject({}),
-  v.transform(() => undefined),
-)
-
-class OpencodeTarget extends ModkitTarget<undefined> {
-  override readonly name = 'opencode'
-  override readonly capabilities: Capabilities = {
+export const target: ModkitTarget<undefined> = Target.define('opencode')
+  .capabilities({
     status: {
       kind: 'lowered',
       why: "opencode's footer draws a button as text, which can't be pressed",
@@ -114,36 +78,42 @@ class OpencodeTarget extends ModkitTarget<undefined> {
     beforeTool: NATIVE,
     afterTool: NATIVE,
     toolCards: { kind: 'dropped', why: "opencode draws nothing under a tool's row" },
-  }
-  override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
-
-  override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools, images } = compiled
-    const plugin = pluginNameOf(mod.name)
+  })
+  .knownTools('opencode', OPENCODE_TOOLS)
+  .build(({ compiled, dir, out, plugin, emit }) => {
+    const { mod, entry, state, options, images } = compiled
+    const pluginName = plugin.toString()
     const served = {
-      plugin,
-      settings: options.map((option) => settingOf(option)),
-      state: tagsOf(state),
+      plugin: pluginName,
+      settings: options.map((option) => settingDecl(option)),
+      state: stateTags(state),
     }
-    await mkdir(out, { recursive: true })
     const server = source([
-      genImport(SERVER, ['serverOf']),
+      genImport(SERVER, ['createOpencodeServer']),
       genImport(entry, 'mod'),
       '',
-      `export default serverOf({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
+      `export default createOpencodeServer({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
     ])
-    await bundle({ dir, entry: server, file: join(out, 'server.js'), external: PROVIDED })
-    await writeTui({ dir, out, plugin })
-    await writeFile(join(out, 'package.json'), json(packageJsonOf({ plugin, mod })))
+    emit.write(async (dest) =>
+      bundle({ dir, entry: server, file: join(dest, 'server.js'), external: PROVIDED }),
+    )
+    emitTui({ dir, pluginName, emit })
+    emit.json('package.json', {
+      name: pluginName,
+      version: mod.version,
+      description: mod.description,
+      type: 'module',
+      ...(mod.author !== undefined && { author: mod.author.name }),
+      exports: { '.': './server.js', './tui': './tui.tsx', './rpc': './mod.js' },
+    })
     return {
-      isOk: true,
-      plugin,
       notes: [
-        ...notesOf({ out, plugin, hasSettings: options.length > 0 }),
-        ...missingToolNotes({ tools, harness: 'opencode', has: OPENCODE_TOOLS }),
+        `opencode loads ${pluginName} once ${out} is in the plugins of opencode.json`,
+        ...(options.length > 0
+          ? [
+              `${pluginName}'s settings go in its entry's options: { "package": "${out}", "options": { ... } }`,
+            ]
+          : []),
       ],
     }
-  }
-}
-
-export const target: ModkitTarget<undefined> = new OpencodeTarget()
+  })

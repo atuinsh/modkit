@@ -1,16 +1,25 @@
-import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
+import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
+import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
 import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
-import type { Images, Mod, Options } from '@atuin/modkit-target/host'
+import {
+  failureReporter,
+  type HarnessAdapter,
+  type Images,
+  type Mod,
+  type Options,
+} from '@atuin/modkit-target/host'
 
-import { serverNameOf } from '../protocol'
 import { configuredServer } from './configured'
-import { harnessFor, type SessionState } from './harness'
-import { CodexRuntime, type CodexSession } from './runtime'
+import { LiveSession, type SessionState } from './live-session'
+import { CodexRuntime } from './runtime'
+
+export type { LiveSession } from './live-session'
+
+const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 
 export interface Served {
   mod: Mod<Options>
@@ -22,86 +31,87 @@ export interface Served {
   hasStatus: boolean
 }
 
-export interface Live {
-  state: SessionState
-  runtime: CodexRuntime | undefined
-  opened: Promise<void>
-  repeats: NodeJS.Timeout[]
-}
-
-const modDirOf = (plugin: string): string =>
-  join(process.env['CODEX_HOME'] ?? join(homedir(), '.codex'), 'modkit', plugin)
-
-function readText(path: string): string | undefined {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
-export class Sessions {
+export class Sessions implements Disposable {
   readonly #served: Served
   readonly #dir: string
+  readonly #settings: SettingsSchema
   readonly #servers: Servers
-  readonly #live = new Map<string, Live>()
+  readonly #live = new Map<string, LiveSession>()
 
   constructor(served: Served) {
     this.#served = served
-    this.#dir = modDirOf(served.plugin)
-    this.#servers = new Servers({ find: configuredServer, own: serverNameOf(served.plugin) })
+    this.#dir = join(
+      process.env['CODEX_HOME'] ?? join(homedir(), '.codex'),
+      'modkit',
+      served.plugin,
+    )
+    this.#settings = SettingsSchema.from(served.settings)
+    this.#servers = new Servers({ find: configuredServer, own: `${served.plugin}-mod` })
   }
 
-  known(id: string): Live | undefined {
+  known(id: string): LiveSession | undefined {
     return this.#live.get(id)
   }
 
-  async open({ id, cwd }: { id: string; cwd: string }): Promise<Live> {
+  async open({ id, cwd }: { id: string; cwd: string }): Promise<LiveSession> {
     const known = this.#live.get(id)
-    if (known !== undefined) known.state.cwd = cwd
-    const live = known ?? this.#started({ id, cwd })
+    if (known !== undefined) known.updateCwd(cwd)
+    const live = known ?? this.#start({ id, cwd })
     await live.opened
     return live
   }
 
-  close(): void {
-    for (const { repeats } of this.#live.values()) {
-      for (const repeat of repeats) clearInterval(repeat)
-    }
-    this.#servers.close()
+  [Symbol.dispose](): void {
+    for (const live of this.#live.values()) live[Symbol.dispose]()
+    this.#servers[Symbol.dispose]()
   }
 
-  #started({ id, cwd }: { id: string; cwd: string }): Live {
+  #start({ id, cwd }: { id: string; cwd: string }): LiveSession {
     const { plugin, mod, images } = this.#served
     const state: SessionState = { id, cwd, notes: [], context: [] }
-    const path = join(this.#dir, 'settings.json')
-    const settings = settingsFrom({ decls: this.#served.settings, text: readText(path), path })
+    const settings = this.#settings.loadFile(join(this.#dir, 'settings.json'))
     for (const problem of settings.problems) state.notes.push(`${plugin}: ${problem}`)
-    const repeats: NodeJS.Timeout[] = []
     const runtime = settings.isOk
       ? new CodexRuntime({ mod, options: settings.options, images })
       : undefined
-    const opened = runtime?.open({ harness: this.#harnessFor(state), repeats }) ?? Promise.resolve()
-    const live: Live = { state, runtime, opened, repeats }
+    const opened = runtime?.open({ harness: this.#buildHarness(state) }) ?? Promise.resolve()
+    const live = new LiveSession({ state, runtime, opened })
     this.#live.set(id, live)
     return live
   }
 
-  #harnessFor(state: SessionState): CodexSession['harness'] {
-    return harnessFor({
+  #buildHarness(state: SessionState): HarnessAdapter {
+    const report = failureReporter({
       plugin: this.#served.plugin,
-      session: state,
-      servers: this.#servers,
-      storeFor: (report) =>
-        fileStore({
-          dir: join(this.#dir, 'sessions'),
-          session: state.id,
-          tags: this.#served.state,
-          report,
-        }),
+      notify: (line) => {
+        state.notes.push(line)
+      },
       log: (line) => {
         process.stderr.write(`${line}\n`)
       },
     })
+    const store = fileStore({
+      dir: join(this.#dir, 'sessions'),
+      session: state.id,
+      tags: this.#served.state,
+      report,
+    })
+    return NodeHarness.builder({
+      sessionId: state.id,
+      cwd: () => state.cwd,
+      servers: this.#servers,
+      store,
+      report,
+    })
+      .withNotify((text) => {
+        state.notes.push(text)
+        return 'queued'
+      })
+      .withInject(async (text) => {
+        state.context.push(text)
+        return 'queued'
+      })
+      .withModelRefusal(NO_MODEL)
+      .build()
   }
 }

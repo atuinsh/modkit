@@ -1,20 +1,17 @@
 import type { Plugin } from '@opencode/plugin'
 
-import { copy } from '@atuin/modkit-target-node/runtime/clipboard'
+import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
 import { modelFor } from '@atuin/modkit-target-node/runtime/models'
-import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import type {
-  Completion,
-  CompletionRequest,
-  Delivery,
-  Failure,
-  HarnessAdapter,
-  Store,
+import {
+  errorMessage,
+  type Completion,
+  type CompletionRequest,
+  type Delivery,
+  type Failure,
+  type HarnessAdapter,
+  type Store,
 } from '@atuin/modkit-target/host'
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 async function completeWith({
   ctx,
@@ -42,7 +39,7 @@ async function completeWith({
     const detail = `${model.provider}/${model.id} replied with no text`
     return { isAnswered: false, reason: 'empty-reply', detail }
   } catch (error) {
-    return { isAnswered: false, reason: 'api-error', detail: messageOf(error) }
+    return { isAnswered: false, reason: 'api-error', detail: errorMessage(error) }
   }
 }
 
@@ -72,7 +69,7 @@ export interface Reached {
   servers: Servers
 }
 
-export function harnessFor({
+export function buildHarness({
   reached: { ctx, plugin, cwd, servers },
   id,
   store,
@@ -86,26 +83,15 @@ export function harnessFor({
   report: (failure: Failure) => void
 }): HarnessAdapter {
   let injected = 0
-  return {
-    session: { id },
-    cwd: async () => cwd,
-    root: async () => projectRootOf(cwd),
-    env: async (name) => process.env[name],
-    run: async (argv, options) => run({ argv, options, cwd }),
-    mcp: async (call) => servers.call(call),
-    complete: async (request) => completeWith({ ctx, request }),
-    // The server part runs on the person's machine, so its clipboard is theirs.
-    copy: async (text) => copy(text),
-    notify: (text) => {
+  return NodeHarness.builder({ sessionId: id, cwd, servers, store, report })
+    .withComplete(async (request) => completeWith({ ctx, request }))
+    .withNotify((text) => {
       notify(text)
       return 'now'
-    },
-    inject: async (text) => {
+    })
+    .withInject(async (text) => {
       injected += 1
       return injectInto({ ctx, id, key: `${plugin}-${injected}`, text })
-    },
-    now: () => Date.now(),
-    store,
-    report,
-  }
+    })
+    .build()
 }

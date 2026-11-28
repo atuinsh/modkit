@@ -29,36 +29,32 @@ import type {
   ToolCheckResult,
   Events,
 } from 'claude-code'
-import { isPlainObject } from 'es-toolkit/predicate'
 import { readEnv } from 'modkit-claude:env'
 import { bumpView, load, plugin, readView, save } from 'modkit-claude:state'
 
 import {
+  asRecord,
+  errorMessage,
   failureReporter,
+  McpResponse,
   ModkitTargetRuntime,
   type ButtonNode,
-  type CommandView,
+  type CommandHost,
   type Followup,
   type Harness,
   type HarnessAdapter,
-  type PaneOpened,
-  type PaneOpening,
+  type PaneHost,
   type Repeat,
   type ShellResult,
   type ToolResult,
   type ToolRow,
   type Verdict,
+  type ViewHost,
 } from '@atuin/modkit-target/host'
 
-import { completionOf, mcpResultOf } from './answers'
+import { completionOf } from './answers'
 import { decide, exitCodeOf } from './decide'
 import { Drawing } from './draw'
-
-const recordOf = (value: unknown): Readonly<Record<string, unknown>> =>
-  isPlainObject(value) ? value : {}
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'> {
   return {
@@ -68,16 +64,16 @@ function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'
           input === undefined
             ? await $.mcp.call(server, tool)
             : await $.mcp.call(server, tool, { ...input })
-        return mcpResultOf(result)
+        return McpResponse.parse(result).toResult()
       } catch (error) {
-        return { isOk: false, reason: messageOf(error) }
+        return { isOk: false, reason: errorMessage(error) }
       }
     },
     complete: async (request) => {
       try {
         return completionOf(await $.model.complete(request))
       } catch (error) {
-        return { isAnswered: false, reason: 'refused', detail: messageOf(error) }
+        return { isAnswered: false, reason: 'refused', detail: errorMessage(error) }
       }
     },
     copy: async (text, where) => {
@@ -205,7 +201,7 @@ function rowOf(props: RenderInput['props']): ToolRow | undefined {
   return {
     id,
     tool,
-    input: recordOf(input),
+    input: asRecord(input),
     isRunning: isRunning === true,
     failed: isErrored === true,
   }
@@ -219,6 +215,24 @@ function rowOf(props: RenderInput['props']): ToolRow | undefined {
  * that hook's `$`.
  */
 export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
+  protected override readonly panes: PaneHost<ClaudeEngine> = {
+    open: async (engine, { id, title, focus }) =>
+      engine.open({ id: id.toString(), title, ...(focus && { focus }) }),
+    close: async (engine, id) => engine.close({ id: id.toString() }),
+    isShown: async (engine, id) => {
+      const panes = await engine.panes()
+      return panes.some((pane) => id.equals(pane.id) && pane.isShown)
+    },
+  }
+
+  protected override readonly commands: CommandHost<ClaudeEngine> = {
+    register: async (engine, { name, description }) => engine.register({ name, description }),
+  }
+
+  protected override readonly view: ViewHost<ClaudeEngine> = {
+    redraw: async (engine) => engine.bumpView(),
+  }
+
   /** The `tool.check` hook for a tool the mod's `beforeTool` names. */
   async checkTool(
     engine: ClaudeEngine,
@@ -227,7 +241,7 @@ export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
   ): Promise<Result<'tool.check'>> {
     const verdict = await next(e)
     if (!this.hasStarted) return verdict
-    const input = recordOf(e.input)
+    const input = asRecord(e.input)
     const call = { id: e.tool_use_id ?? '', tool: e.tool, input, cwd: await engine.cwd() }
     return decided(engine, {
       verdict,
@@ -310,7 +324,7 @@ export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
     next: Next<'tool.check'>,
   ): Promise<Result<'tool.check'>> {
     const verdict = await next(e)
-    const { command } = recordOf(e.input)
+    const { command } = asRecord(e.input)
     if (!this.hasStarted || typeof command !== 'string') return verdict
     const call = { id: e.tool_use_id ?? '', command, cwd: await engine.cwd() }
     return decided(engine, {
@@ -385,33 +399,6 @@ export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine> {
 
   protected override async adapter(engine: ClaudeEngine): Promise<HarnessAdapter> {
     return engine.harness()
-  }
-
-  protected override async redraw(engine: ClaudeEngine): Promise<unknown> {
-    return engine.bumpView()
-  }
-
-  protected override async openPane(
-    engine: ClaudeEngine,
-    { id, title, focus }: PaneOpening,
-  ): Promise<PaneOpened> {
-    return engine.open({ id, title, ...(focus && { focus }) })
-  }
-
-  protected override async closePane(engine: ClaudeEngine, id: string): Promise<unknown> {
-    return engine.close({ id })
-  }
-
-  protected override async isPaneShown(engine: ClaudeEngine, id: string): Promise<boolean> {
-    const panes = await engine.panes()
-    return panes.some((pane) => pane.id === id && pane.isShown)
-  }
-
-  protected override async registerCommand(
-    engine: ClaudeEngine,
-    { name, description }: CommandView,
-  ): Promise<unknown> {
-    return engine.register({ name, description })
   }
 
   protected override repeat(engine: ClaudeEngine, { everyMs, tick }: Repeat): void {

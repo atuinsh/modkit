@@ -1,31 +1,12 @@
 /**
- * Translators from Claude Code MCP and model-completion responses to `@atuin/modkit` result types.
+ * Translators from Claude Code model-completion responses to `@atuin/modkit` result types.
  *
  * @module
  */
 
-import type { McpToolResult, ModelCompleteResult } from 'claude-code'
+import type { ModelCompleteResult } from 'claude-code'
 
-import type { Completion, McpResult } from '@atuin/modkit-target/host'
-
-const textOf = (result: McpToolResult): string =>
-  result.content.flatMap((block) => (block.type === 'text' ? [block.text ?? ''] : [])).join('\n')
-
-/**
- * Convert a Claude Code {@link McpToolResult} into a modkit {@link McpResult}, joining text blocks
- * with `\n`.
- */
-export function mcpResultOf(result: McpToolResult): McpResult {
-  const text = textOf(result)
-  if (result.isError) {
-    return { isOk: false, reason: text === '' ? 'the tool failed and said nothing more' : text }
-  }
-  return {
-    isOk: true,
-    text,
-    ...(result.structuredContent !== undefined && { structured: result.structuredContent }),
-  }
-}
+import type { Completion } from '@atuin/modkit-target/host'
 
 const NO_TEXT = {
   'empty-reply': 'the model replied with no text',
