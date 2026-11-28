@@ -55,11 +55,11 @@ export const NOP_COMMAND_HOST: CommandHost<unknown> = { register: NOOP }
 /** No-op {@link ViewHost} for pull-based or headless harnesses. */
 export const NOP_VIEW_HOST: ViewHost<unknown> = { redraw: NOOP }
 
-type PaneHostRequirement<Engine, S extends Support> = S extends DroppedSupport
+type PaneHostRequirement<Engine, S extends Support> = [S] extends [DroppedSupport]
   ? { readonly panes?: never }
   : { readonly panes: PaneHost<Engine> }
 
-type CommandHostRequirement<Engine, S extends Support> = S extends DroppedSupport
+type CommandHostRequirement<Engine, S extends Support> = [S] extends [DroppedSupport]
   ? { readonly commands?: never }
   : { readonly commands: CommandHost<Engine> }
 

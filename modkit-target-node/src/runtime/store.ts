@@ -81,8 +81,10 @@ export class FileStore implements Store, Disposable {
   }
 
   set(key: string, value: Stored): void {
-    if (this.#isClosed) return
+    // Keep the in-memory record current so an in-flight query sees its input stored and terminates,
+    // while skipping disk writes after disposal so it never overwrites a subsequent session's file.
     this.#stored.set(key, value)
+    if (this.#isClosed) return
     try {
       mkdirSync(this.#dir, { recursive: true })
       const tagged = Object.fromEntries(
