@@ -9,9 +9,11 @@
  * @module
  */
 
-import { randomUUID } from 'node:crypto'
-import { accessSync, constants } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
+
+import which from 'which'
 
 import {
   errorMessage,
@@ -23,27 +25,12 @@ import {
 
 import type { Build, TargetBuild } from './build.ts'
 import { Dekit } from './dekit.ts'
-import { digestOf, Landed } from './landed.ts'
+import { Landed } from './landed.ts'
 import type { DevLayout } from './layout.ts'
 import type { TargetPlace } from './target-place.ts'
 
 /** How a harness comes onto a build: not at all, by loading it itself, or by a restart. */
 type Way = 'kept' | 'reloaded' | 'started'
-
-// Where `program` is on `env`'s `PATH`, if it is.
-function pathTo({ program, env }: { program: string; env: Env }): string | undefined {
-  return (env['PATH'] ?? '')
-    .split(delimiter)
-    .map((dir) => join(dir, program))
-    .find((path) => {
-      try {
-        accessSync(path, constants.X_OK)
-        return true
-      } catch {
-        return false
-      }
-    })
-}
 
 /**
  * A target's harness: the dekit task it runs in, and the build it last landed there.
@@ -83,7 +70,7 @@ export class HarnessTask implements AsyncDisposable {
     }
     const { out, plugin, hasStatus } = build
     const harness = await this.#harnessFor(build)
-    const digest = await digestOf({ dir: out, skipped: harness.writes })
+    const digest = await HarnessTask.#digest({ out, harness })
     const way = await this.#wayOnto({ harness, digest })
     if (way === 'kept') return
     if (way === 'started') await harness.built()
@@ -111,8 +98,8 @@ export class HarnessTask implements AsyncDisposable {
       return 1
     }
     const { program, args, env } = command.outcome.value
-    const path = pathTo({ program, env: this.#env })
-    if (path === undefined) {
+    const path = which.sync(program, { path: this.#env['PATH'] ?? '', nothrow: true })
+    if (path === null) {
       console.error(`${program} is not on PATH, so ${this.name} gets no harness`)
       return 1
     }
@@ -152,13 +139,33 @@ export class HarnessTask implements AsyncDisposable {
       scratch: this.#place.scratch,
       env: this.#env,
     })
-    const digest = await digestOf({ dir: out, skipped: harness.writes })
+    const digest = await HarnessTask.#digest({ out, harness })
     if (digest !== landed.digest) {
       return Result.err(
         `${this.name}: not started, since a build that never landed wrote over the ${landed.time} one; the next build that does starts it`,
       )
     }
     return Result.ok(harness.command({ id: landed.session }))
+  }
+
+  // A digest of every file of the build in `out` but those `harness` writes itself, by path and
+  // contents.
+  static async #digest({ out, harness }: { out: string; harness: DevHarness }): Promise<string> {
+    const isWritten = (path: string): boolean =>
+      harness.writes.some((one) => path === one || path.startsWith(`${one}/`))
+    const entries = await readdir(out, { recursive: true, withFileTypes: true })
+    const files = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(out, join(entry.parentPath, entry.name)))
+      .filter((path) => !isWritten(path))
+      .toSorted()
+    const contents = await Promise.all(files.map(async (file) => readFile(join(out, file))))
+    const hash = createHash('sha256')
+    for (const [index, file] of files.entries()) {
+      hash.update(`${file}\0`)
+      hash.update(contents[index] ?? '')
+    }
+    return hash.digest('hex')
   }
 
   #failed(): void {

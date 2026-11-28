@@ -30,10 +30,22 @@ const JSON_INDENT_SPACES = 2
 
 const RunnerStatus = v.object({ status: v.string() })
 
-const TaskList = v.object({ tasks: v.array(v.object({ path: v.string(), state: v.string() })) })
+// What `dekit ls` says a task is in. A state a later dekit adds reads as `other`, which counts as
+// not running, so the next build starts the task again rather than leaving it.
+const TaskStateSchema = v.union([
+  v.picklist(['idle', 'starting', 'ready', 'running', 'stopping', 'exited', 'backoff', 'done']),
+  v.pipe(
+    v.string(),
+    v.transform(() => 'other' as const),
+  ),
+])
 
-// What `dekit ls` calls a task whose process runs; `idle`, `exited` and `done` are the rest.
-const UP_STATES: ReadonlySet<string> = new Set(['starting', 'ready', 'running'])
+const TaskList = v.object({
+  tasks: v.array(v.object({ path: v.string(), state: TaskStateSchema })),
+})
+
+/** What a task of a dekit project is in. */
+type TaskState = v.InferOutput<typeof TaskStateSchema>
 
 /** A task of a project's `dekit.yaml`. */
 export interface DekitTask {
@@ -103,7 +115,25 @@ export class Dekit {
   async isUp(path: string): Promise<boolean> {
     const list = v.parse(TaskList, JSON.parse(await this.#run(['ls', '--json'])))
     const task = list.tasks.find((one) => one.path === path)
-    return task !== undefined && UP_STATES.has(task.state)
+    return task !== undefined && Dekit.#isUp(task.state)
+  }
+
+  // Whether a task in `state` has its process running; a stopping one is on its way out.
+  static #isUp(state: TaskState): boolean {
+    switch (state) {
+      case 'starting':
+      case 'ready':
+      case 'running':
+        return true
+      case 'idle':
+      case 'stopping':
+      case 'exited':
+      case 'backoff':
+      case 'done':
+      case 'other':
+        break
+    }
+    return false
   }
 
   /**
