@@ -52,6 +52,32 @@ interface Connection extends Disposable {
   child: ChildProcess
 }
 
+async function spawnServer({
+  name,
+  server,
+  signal,
+}: {
+  name: string
+  server: StdioServer
+  signal: AbortSignal
+}): Promise<ChildProcess> {
+  if (signal.aborted) throw new Error('the session ended')
+  const child = spawn(server.command, [...server.args], {
+    cwd: server.cwd,
+    env: { ...process.env, ...server.env },
+    stdio: ['pipe', 'pipe', 'ignore'],
+  })
+  // Absorb any late `error` event if `once` detaches its listener on abort before spawn settles.
+  child.on('error', () => undefined)
+  try {
+    await once(child, 'spawn', { signal })
+    return child
+  } catch (error) {
+    child.kill()
+    throw new Error(`couldn't start ${name}: ${errorMessage(error)}`, { cause: error })
+  }
+}
+
 async function connect({
   name,
   server,
@@ -61,16 +87,10 @@ async function connect({
   server: StdioServer
   signal: AbortSignal
 }): Promise<Connection> {
-  const child = spawn(server.command, [...server.args], {
-    cwd: server.cwd,
-    env: { ...process.env, ...server.env },
-    stdio: ['pipe', 'pipe', 'ignore'],
-  })
-  try {
-    await once(child, 'spawn', { signal })
-  } catch (error) {
+  const child = await spawnServer({ name, server, signal })
+  if (child.stdout === null || child.stdin === null) {
     child.kill()
-    throw new Error(`couldn't start ${name}: ${errorMessage(error)}`, { cause: error })
+    throw new Error(`couldn't pipe stdio for ${name}`)
   }
   const peer = peerOn({ input: child.stdout, output: child.stdin })
   const initialized = peer.request({

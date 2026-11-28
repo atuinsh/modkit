@@ -167,8 +167,8 @@ class LinePeer implements Peer {
     }
     combined?.addEventListener('abort', onAbort, { once: true })
     this.#pending.set(id, { resolve, reject })
-    this.#send({ id, method, ...(params !== undefined && { params }) })
     try {
+      this.#send({ id, method, ...(params !== undefined && { params }) })
       return await promise
     } finally {
       combined?.removeEventListener('abort', onAbort)
