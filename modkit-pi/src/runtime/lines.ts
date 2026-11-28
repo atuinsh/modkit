@@ -5,6 +5,7 @@ import {
   type Border,
   type ButtonNode,
   type Hex,
+  type LinkNode,
   type TextNode,
   type Tone,
   type UiNode,
@@ -19,6 +20,9 @@ export interface Paint {
   button: (button: { label: string; hotkey: string | undefined; isPicked: boolean }) => string
   // The button the keyboard is on, which enter presses.
   picked?: ButtonNode | undefined
+  // Whether a link's text is followed by its URL: where the terminal opens no links, and the
+  // nodes are drawn with room for it.
+  spellsUrls: boolean
   markdown: (markdown: { text: string; width: number }) => readonly string[]
 }
 
@@ -28,7 +32,10 @@ interface Span {
   bold: boolean
   color: Hex | undefined
   background: Hex | undefined
+  href: string | undefined
 }
+
+type Style = Omit<Span, 'text'>
 
 const EDGES: Readonly<Record<Border, readonly [string, string, string, string, string, string]>> = {
   single: ['┌', '┐', '┘', '└', '─', '│'],
@@ -41,11 +48,12 @@ const EDGES: Readonly<Record<Border, readonly [string, string, string, string, s
 // A box has a left side and a right one.
 const SIDES = 2
 
-const NO_STYLE: Omit<Span, 'text'> = {
+const NO_STYLE: Style = {
   tone: 'plain',
   bold: false,
   color: undefined,
   background: undefined,
+  href: undefined,
 }
 
 const padded = ({ line, width }: { line: string; width: number }): string =>
@@ -54,20 +62,48 @@ const padded = ({ line, width }: { line: string; width: number }): string =>
 const widest = (lines: readonly string[]): number =>
   Math.max(0, ...lines.map((line) => visibleWidth(line)))
 
-function spansOf({ node, around }: { node: TextNode; around: Omit<Span, 'text'> }): Span[] {
-  const style = {
+// The style `node`'s children are drawn in, inside `around`.
+function styleIn({ node, around }: { node: TextNode | LinkNode; around: Style }): Style {
+  if (node.kind === 'Link') return { ...around, href: node.href }
+  return {
     tone: node.tone === 'plain' ? around.tone : node.tone,
     bold: node.bold || around.bold,
     color: node.color ?? around.color,
     background: node.background ?? around.background,
+    href: around.href,
   }
-  return node.children.flatMap((child): Span[] => {
-    if (typeof child !== 'string' && child.kind === 'Text') {
-      return spansOf({ node: child, around: style })
+}
+
+// What a link whose URL is spelled out ends with: the URL, unless its text already is. The space
+// before it stays out of the dim span, which `wrapTextWithAnsi` would leave on a blank line of its
+// own where the URL wraps.
+function spelledUrl({ node, around }: { node: LinkNode; around: Style }): Span[] {
+  if (textOf(node.children) === node.href) return []
+  return [
+    { ...around, text: ' ' },
+    { ...around, tone: 'dim', color: undefined, text: `(${node.href})` },
+  ]
+}
+
+function spansOf({
+  node,
+  around,
+  paint,
+}: {
+  node: TextNode | LinkNode
+  around: Style
+  paint: Paint
+}): Span[] {
+  const style = styleIn({ node, around })
+  const spans = node.children.flatMap((child): Span[] => {
+    if (typeof child !== 'string' && (child.kind === 'Text' || child.kind === 'Link')) {
+      return spansOf({ node: child, around: style, paint })
     }
     const text = textOf([child])
     return text === '' ? [] : [{ ...style, text }]
   })
+  if (node.kind === 'Text' || !paint.spellsUrls) return spans
+  return [...spans, ...spelledUrl({ node, around })]
 }
 
 function wrapped({ text, width }: { text: string; width: number }): string[] {
@@ -79,11 +115,11 @@ function textLines({
   width,
   paint,
 }: {
-  node: TextNode
+  node: TextNode | LinkNode
   width: number
   paint: Paint
 }): string[] {
-  const spans = spansOf({ node, around: NO_STYLE })
+  const spans = spansOf({ node, around: NO_STYLE, paint })
   // Styled a line at a time, so a span across a newline is styled on both its lines.
   const lines = spans.map((span) =>
     span.text.split('\n').map((text) => paint.text({ ...span, text })),
@@ -186,6 +222,7 @@ function nodeLines({
   if (typeof node === 'string') return wrapped({ text: node, width })
   switch (node.kind) {
     case 'Text':
+    case 'Link':
       return textLines({ node, width, paint })
     case 'Column':
       return boxed({

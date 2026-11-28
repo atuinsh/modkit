@@ -217,7 +217,7 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   #drawStatuses(ctx: ExtensionContext, statuses: readonly (readonly UiNode[])[]): void {
     if (!ctx.hasUI) return
-    const paint = paintOf({ theme: ctx.ui.theme, hasKeys: false })
+    const paint = paintOf({ theme: ctx.ui.theme, hasKeys: false, isLine: true })
     for (const [index, status] of statuses.entries()) {
       const line = linesOf({ nodes: status, width: STATUS_COLUMNS, paint }).join(' ')
       ctx.ui.setStatus(this.#statusKey(index), line === '' ? undefined : line)

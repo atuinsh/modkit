@@ -180,7 +180,7 @@ export class Overlays {
       pane: pane.state,
       isFocused: () => pane.handle?.isFocused() === true,
       height: () => this.#layoutOf(id).room,
-      paint: (hasKeys) => paintOf({ theme, hasKeys }),
+      paint: (hasKeys) => paintOf({ theme, hasKeys, isLine: false }),
       press: (button) => {
         this.#press({ ctx, button })
       },

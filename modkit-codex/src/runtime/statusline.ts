@@ -65,7 +65,9 @@ function elementOf(node: UiNode): LineElement | undefined {
     case 'Row':
     case 'Column':
       return { type: 'row', props: { gap: node.gap }, children: elementsOf(node.children) }
+    // Nothing in Codex's status line can be pressed or opened, so each draws as its text.
     case 'Button':
+    case 'Link':
       return { type: 'text', children: elementsOf(node.children) }
     case 'Markdown':
       break

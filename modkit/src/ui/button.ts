@@ -3,7 +3,7 @@ import * as v from 'valibot'
 import type { Surface } from '../harness/types'
 import { primitive, type Component, type ModNode } from '../runtime/element'
 import { CallbackSchema } from '../runtime/schema'
-import type { UiNode } from './node'
+import { nodesIn, type UiNode } from './node'
 
 /** Context passed to `Button`'s `onPress` handler when the user activates a button. */
 export interface Press {
@@ -33,13 +33,18 @@ export interface ButtonProps {
 export const Button: Component<ButtonProps> = primitive({
   name: 'Button',
   schema: v.object({ hotkey: v.optional(v.string()), onPress: CallbackSchema }),
-  node: ({ props, key, children, scope }) => ({
-    kind: 'Button',
-    ...(key !== undefined && { key }),
-    hotkey: props.hotkey,
-    children,
-    press: scope.action(props.onPress),
-  }),
+  node: ({ props, key, children, scope }) => {
+    if (nodesIn(children).some((node) => typeof node !== 'string' && node.kind === 'Link')) {
+      throw new TypeError('a <Button> holds no <Link>: one click would press it and open the link')
+    }
+    return {
+      kind: 'Button',
+      ...(key !== undefined && { key }),
+      hotkey: props.hotkey,
+      children,
+      press: scope.action(props.onPress),
+    }
+  },
   text: ({ node, textOf }) =>
     `${node.hotkey === undefined ? '' : `[${node.hotkey}] `}${textOf(node.children)}`,
 })

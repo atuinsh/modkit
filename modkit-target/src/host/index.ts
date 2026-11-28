@@ -24,6 +24,7 @@ export {
   type CommandView,
   type Failure,
   type HarnessAdapter,
+  type LinkNode,
   type MarkdownNode,
   type PaneView,
   type Phase,

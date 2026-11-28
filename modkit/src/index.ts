@@ -33,10 +33,11 @@ export type {
   Border,
   ButtonProps,
   Hex,
+  LinkProps,
   MarkdownProps,
   Press,
   StackProps,
   TextProps,
   Tone,
 } from './ui/index'
-export { Button, Column, Markdown, Row, Text } from './ui/index'
+export { Button, Column, Link, Markdown, Row, Text } from './ui/index'

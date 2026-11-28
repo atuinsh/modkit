@@ -1,10 +1,10 @@
 /**
  * Translator from `@atuin/modkit` {@link UiNode} trees to Claude Code `h()` render nodes.
  *
- * Claude Code's `Text` element only accepts strings and nested `Text` elements, so non-`Text`
- * children inside a `Text` node are flattened via `textOf()`, while bare strings outside a `Text`
- * node are wrapped in one. Every emitted element receives a deterministic key (`at.<index>`, or
- * explicit `key` / `hotkey:<k>` on buttons).
+ * Claude Code's `Text` element only accepts strings and inline elements (nested `Text`s and
+ * `Link`s), so other children inside a `Text` or `Link` node are flattened via `textOf()`, while
+ * bare strings and `Link`s outside a `Text` node are wrapped in one. Every emitted element receives
+ * a deterministic key (`at.<index>`, or explicit `key` / `hotkey:<k>` on buttons).
  *
  * @module
  */
@@ -14,6 +14,7 @@ import type { Elements, RenderNode } from 'claude-code'
 import {
   textOf,
   type ButtonNode,
+  type LinkNode,
   type StackNode,
   type TextNode,
   type Tone,
@@ -82,6 +83,8 @@ export class Drawing {
       switch (node.kind) {
         case 'Text':
           return this.#text(node, key)
+        case 'Link':
+          return h(elements.Text, { key }, this.#link(node, `${key}.0`))
         case 'Column':
         case 'Row':
           return h(elements.Box, { key, ...boxProps(node) }, ...this.nodes(node.children, key))
@@ -94,12 +97,31 @@ export class Drawing {
     })
   }
 
+  // What a `Text` or a `Link` holds: strings, and `Text`s and `Link`s as elements of their own.
+  #inline(nodes: readonly UiNode[], key: string): RenderNode[] {
+    return nodes.map((node, index) => {
+      if (typeof node === 'string') return node
+      switch (node.kind) {
+        case 'Text':
+          return this.#text(node, `${key}.${index}`)
+        case 'Link':
+          return this.#link(node, `${key}.${index}`)
+        case 'Column':
+        case 'Row':
+        case 'Button':
+        case 'Markdown':
+          break
+      }
+      return textOf([node])
+    })
+  }
+
+  #link(node: LinkNode, key: string): RenderNode {
+    return h(this.#elements.Link, { key, href: node.href }, ...this.#inline(node.children, key))
+  }
+
   #text(node: TextNode, key: string): RenderNode {
-    const children = node.children.map((child, index) =>
-      typeof child === 'string' || child.kind !== 'Text'
-        ? textOf([child])
-        : this.#text(child, `${key}.${index}`),
-    )
+    const children = this.#inline(node.children, key)
     const props = {
       key,
       ...toneProps(node.tone),

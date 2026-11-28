@@ -76,7 +76,7 @@ class CodexTarget extends ModkitTarget<undefined> {
   override readonly capabilities: Capabilities = {
     status: {
       kind: 'lowered',
-      why: "Codex's status line draws a button as text, which can't be pressed",
+      why: "Codex's status line draws buttons and links as text, which can't be pressed or opened",
     },
     commands: {
       kind: 'dropped',
