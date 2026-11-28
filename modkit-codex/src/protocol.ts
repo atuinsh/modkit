@@ -2,7 +2,6 @@ import * as v from 'valibot'
 
 import {
   asRecord,
-  Duration,
   HarnessTools,
   NATIVE,
   type Capabilities,
@@ -53,7 +52,7 @@ export const CODEX_TOOLS: HarnessTools = new HarnessTools({
 
 // Long enough for the user to read and answer an elicitation prompt before Codex aborts the hook.
 const ASKING_TIMEOUT_S = 600
-const ASKING_TIMEOUT = Duration.seconds(ASKING_TIMEOUT_S)
+const ASKING_TIMEOUT = Temporal.Duration.from({ seconds: ASKING_TIMEOUT_S })
 
 export type HookEventName =
   | 'SessionStart'
@@ -90,7 +89,7 @@ const TOOL = {
 interface HookSpec {
   readonly fields: Readonly<Record<string, unknown>>
   readonly carriesContext: boolean
-  readonly timeout?: Duration
+  readonly timeout?: Temporal.Duration
 }
 
 const HOOKS = {
@@ -122,7 +121,7 @@ const HookSchema = v.variant('event', [
 
 type WireHookEvent = v.InferOutput<typeof HookSchema>
 
-export const hookTimeout = (event: HookEventName): Duration | undefined => {
+export const hookTimeout = (event: HookEventName): Temporal.Duration | undefined => {
   const spec: HookSpec = HOOKS[event]
   return spec.timeout
 }

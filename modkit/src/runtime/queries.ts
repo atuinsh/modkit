@@ -32,7 +32,7 @@ function isDue({
   return everyMs !== undefined && now - record.at >= everyMs
 }
 
-export class Queries {
+export class Queries implements Disposable {
   readonly #adapter: HarnessAdapter
   readonly #write: RenderScope['write']
   #registered = new Map<string, QueryRegistration>()
@@ -46,7 +46,7 @@ export class Queries {
   }
 
   /** Stop scheduling or retrying queries once the mounted session has been torn down. */
-  dispose(): void {
+  [Symbol.dispose](): void {
     this.#isDisposed = true
     this.#registered.clear()
   }

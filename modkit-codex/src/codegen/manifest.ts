@@ -58,7 +58,7 @@ function buildHook({ server, event }: { server: string; event: HookEventName }):
     server,
     tool: HOOK_TOOL,
     input: hookInputTemplate(event),
-    ...(timeout !== undefined && { timeout: timeout.seconds }),
+    ...(timeout !== undefined && { timeout: timeout.total('second') }),
   }
 }
 

@@ -84,13 +84,9 @@ export class Overlays implements Disposable {
     this.#tui?.requestRender()
   }
 
-  stop(): void {
+  [Symbol.dispose](): void {
     for (const pane of this.#panes.values()) pane.close?.()
     this.#panes.clear()
-  }
-
-  [Symbol.dispose](): void {
-    this.stop()
   }
 
   #layoutOf(id: string): { below: number; room: number | undefined } {

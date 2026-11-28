@@ -3,7 +3,7 @@
  *
  * This is the only module in the compiler that imports TypeScript directly, keeping unstable API
  * changes confined to one file. Opening a {@link Project} spawns a background `tsgo` process that
- * lives until {@link Project.close} is called.
+ * lives until it is disposed.
  *
  * @module
  */
@@ -43,8 +43,8 @@ export {
   type Type,
 } from 'typescript/unstable/sync'
 
-/** An open TypeScript project backed by a `tsgo` process. Call {@link close} when finished. */
-export interface Project {
+/** An open TypeScript project backed by a `tsgo` process. Dispose via `using` or `[Symbol.dispose]()`. */
+export interface Project extends Disposable {
   /** Absolute path to the project's `tsconfig.json`. */
   readonly tsconfig: string
   /** Directory containing `tsconfig.json`. */
@@ -55,8 +55,6 @@ export interface Project {
   readonly files: readonly SourceFile[]
   /** Return an updated {@link Project} snapshot reflecting on-disk edits to `files`. */
   refresh: (files: readonly string[]) => Project
-  /** Shut down the underlying `tsgo` process. */
-  close: () => void
 }
 
 function projectOf({
@@ -90,13 +88,13 @@ function projectOf({
         tsconfig,
         snapshot: api.updateSnapshot({ fileChanges: { changed: [...changed] } }),
       }),
-    close: () => {
+    [Symbol.dispose]: () => {
       api.close()
     },
   }
 }
 
-/** Open a TypeScript {@link Project} configured by `tsconfig`. Caller must call `close()`. */
+/** Open a TypeScript {@link Project} configured by `tsconfig`. Dispose via `using` when finished. */
 export function openProject({ tsconfig }: { tsconfig: string }): Project {
   const api = new API({ cwd: dirname(tsconfig) })
   return projectOf({ api, tsconfig, snapshot: api.updateSnapshot({ openProjects: [tsconfig] }) })

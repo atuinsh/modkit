@@ -8,7 +8,7 @@
     "./host": "./src/host/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p . && tsc -p tsconfig.host.json"
+    "typecheck": "tsc -p . && tsc -p src/host"
   },
   "dependencies": {
     "@atuin/modkit-compiler": "workspace:*",

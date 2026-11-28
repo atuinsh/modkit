@@ -3,7 +3,7 @@ import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { asRecord, errorMessage, type Duration } from '@atuin/modkit-target/host'
+import { asRecord, errorMessage } from '@atuin/modkit-target/host'
 
 import { INTERNAL_ERROR, METHOD_NOT_FOUND, RpcError } from './errors.ts'
 import type { RpcMethod } from './rpc-method.ts'
@@ -14,7 +14,7 @@ interface Call {
 }
 
 interface Timeout {
-  duration: Duration
+  duration: Temporal.Duration
   what: string
 }
 
@@ -121,8 +121,8 @@ class LinePeer implements Peer {
     if (timeout === undefined) return answered
     const timer = new AbortController()
     const late = async (): Promise<never> => {
-      await sleep(timeout.duration.ms, undefined, { signal: timer.signal })
-      throw new Error(`${timeout.what} took longer than ${timeout.duration.seconds}s`)
+      await sleep(timeout.duration.total('millisecond'), undefined, { signal: timer.signal })
+      throw new Error(`${timeout.what} took longer than ${timeout.duration.total('second')}s`)
     }
     try {
       return await Promise.race([answered, late()])

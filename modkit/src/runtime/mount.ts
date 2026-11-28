@@ -27,7 +27,7 @@ export interface View {
 }
 
 /** Running mod instance driven by a harness target. */
-export interface Mounted {
+export interface Mounted extends Disposable {
   /** Return the latest rendered {@link View}. */
   view(): View
   beforeShell(call: ShellCall): Promise<Verdict>
@@ -43,8 +43,6 @@ export interface Mounted {
   closed(id: string): Promise<void>
   /** Register `listener` to run after each state-driven re-render. Returns an unsubscribe fn. */
   subscribe(listener: () => void): () => void
-  /** Stop queries and clear listeners when the session ends. */
-  dispose(): void
 }
 
 const NOTHING: Rendered = {
@@ -168,9 +166,9 @@ class MountedMod implements Mounted {
     }
   }
 
-  dispose(): void {
+  [Symbol.dispose](): void {
     this.#isDisposed = true
-    this.#queries.dispose()
+    this.#queries[Symbol.dispose]()
     this.#listeners.clear()
   }
 

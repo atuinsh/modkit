@@ -137,7 +137,7 @@ interface Acted {
 
 const NOTHING: Acted = { decision: { kind: 'none' }, followup: {} }
 
-class Server {
+class Server implements Disposable {
   readonly #served: Served
   readonly #sessions: Sessions
   readonly #router: RpcRouter
@@ -164,6 +164,9 @@ class Server {
   async run(peer: Peer): Promise<void> {
     this.#peer = peer
     await peer.closed
+  }
+
+  [Symbol.dispose](): void {
     this.#sessions[Symbol.dispose]()
   }
 
@@ -297,11 +300,11 @@ class Server {
 }
 
 export async function serve(served: Served): Promise<void> {
-  const server = new Server(served)
+  using server = new Server(served)
   const peer = peerOn({
     input: process.stdin,
     output: process.stdout,
     onRequest: async (call) => server.answer(call),
   })
-  return server.run(peer)
+  await server.run(peer)
 }

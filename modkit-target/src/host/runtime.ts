@@ -25,7 +25,6 @@ import {
 } from '@atuin/modkit/host'
 
 import type { Capabilities } from './capabilities.ts'
-import { Duration } from './duration.ts'
 import {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
@@ -38,7 +37,7 @@ import {
 } from './hosts.ts'
 
 // How often a session refreshes the mod's resources.
-const TICK = Duration.seconds(1)
+const TICK = Temporal.Duration.from({ seconds: 1 })
 
 // Until a session starts, a failure has nowhere to be reported.
 const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
@@ -78,7 +77,10 @@ const paneKey = (id: string | PaneId): string => (typeof id === 'string' ? id : 
  * to its runtime hosts at compile time: non-dropped `panes` and `commands` must be supplied by
  * {@link hosts}, while dropped ones receive `Nop*` hosts populated with their declared `why`.
  */
-export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Capabilities> {
+export abstract class ModkitTargetRuntime<
+  Engine,
+  Caps extends Capabilities = Capabilities,
+> implements Disposable {
   readonly #mod: Mod<Options>
   readonly #options: Options
   readonly #images: Images
@@ -149,9 +151,9 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
   }
 
   /** Mark the session torn down, stopping queries and suppressing further redraws or pane syncs. */
-  protected disposeSession(): void {
+  [Symbol.dispose](): void {
     this.#isDisposed = true
-    this.#mounted?.dispose()
+    this.#mounted?.[Symbol.dispose]()
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
@@ -259,7 +261,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     await this.#registerCommands(engine, mounted)
     if (this.#stopped()) return
     this.repeat(engine, {
-      everyMs: TICK.ms,
+      everyMs: TICK.total('millisecond'),
       tick: () => {
         if (!this.#stopped()) void mounted.tick()
       },

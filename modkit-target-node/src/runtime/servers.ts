@@ -4,7 +4,6 @@ import { once } from 'node:events'
 import * as v from 'valibot'
 
 import {
-  Duration,
   errorMessage,
   McpResponse,
   type McpCall,
@@ -17,8 +16,8 @@ import { peerOn, type Peer } from './rpc.ts'
 const PROTOCOL_VERSION = '2025-06-18'
 const START_TIMEOUT_S = 30
 const CALL_TIMEOUT_S = 120
-const START_TIMEOUT = Duration.seconds(START_TIMEOUT_S)
-const CALL_TIMEOUT = Duration.seconds(CALL_TIMEOUT_S)
+const START_TIMEOUT = Temporal.Duration.from({ seconds: START_TIMEOUT_S })
+const CALL_TIMEOUT = Temporal.Duration.from({ seconds: CALL_TIMEOUT_S })
 
 /** Valibot schema for an optional list of strings, falling back to `[]`. */
 export const StringListSchema: v.GenericSchema<unknown, string[]> = v.fallback(
@@ -124,15 +123,11 @@ export class Servers implements Disposable {
     }
   }
 
-  close(): void {
+  [Symbol.dispose](): void {
     // Set first, so a call still under way starts no server after this pass.
     this.#isClosed = true
     for (const connecting of this.#connections.values()) void Servers.#killed(connecting)
     this.#connections.clear()
-  }
-
-  [Symbol.dispose](): void {
-    this.close()
   }
 
   static async #killed(connecting: Promise<Connection>): Promise<void> {

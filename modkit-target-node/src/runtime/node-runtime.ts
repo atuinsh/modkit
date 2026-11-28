@@ -4,50 +4,38 @@ import { Timers } from './timers.ts'
 
 /**
  * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning interval timers and registered
- * {@link Disposable} resources (torn down in LIFO order via {@link Symbol.dispose}).
+ * {@link Disposable} resources via a native {@link DisposableStack}.
  */
-export abstract class NodeTargetRuntime<Engine, Caps extends Capabilities = Capabilities>
-  extends ModkitTargetRuntime<Engine, Caps>
-  implements Disposable
-{
+export abstract class NodeTargetRuntime<
+  Engine,
+  Caps extends Capabilities = Capabilities,
+> extends ModkitTargetRuntime<Engine, Caps> {
   readonly #timers = new Timers()
-  readonly #owned: Disposable[] = []
+  readonly #stack = new DisposableStack()
+
+  constructor(init: ConstructorParameters<typeof ModkitTargetRuntime<Engine, Caps>>[0]) {
+    super(init)
+    this.#stack.use(this.#timers)
+  }
 
   /** Register a {@link Disposable} resource to be torn down in LIFO order when this runtime disposes. */
   protected own<T extends Disposable>(resource: T): T {
-    if (this.isDisposed) {
+    if (this.#stack.disposed) {
       resource[Symbol.dispose]()
       return resource
     }
-    this.#owned.push(resource)
-    return resource
+    return this.#stack.use(resource)
   }
 
   protected override repeat(_engine: Engine, { everyMs, tick }: Repeat): void {
     this.#timers.schedule({ everyMs, tick })
   }
 
-  [Symbol.dispose](): void {
-    const errors: unknown[] = []
-    const attempt = (fn: () => void): void => {
-      try {
-        fn()
-      } catch (error) {
-        errors.push(error)
-      }
+  override [Symbol.dispose](): void {
+    try {
+      super[Symbol.dispose]()
+    } finally {
+      this.#stack.dispose()
     }
-    attempt(() => {
-      this.disposeSession()
-    })
-    attempt(() => {
-      this.#timers[Symbol.dispose]()
-    })
-    for (const resource of this.#owned.splice(0).toReversed()) {
-      attempt(() => {
-        resource[Symbol.dispose]()
-      })
-    }
-    if (errors.length === 1) throw errors[0]
-    if (errors.length > 1) throw new AggregateError(errors, 'multiple resources failed to dispose')
   }
 }

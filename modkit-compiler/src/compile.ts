@@ -126,10 +126,6 @@ export function compile({
     const mod = modInfo(dir)
     return { isOk: false, diagnostics: isDiagnostic(mod) ? [mod, tsconfig] : [tsconfig] }
   }
-  const project = openProject({ tsconfig })
-  try {
-    return compiledIn({ project, dir, targetPackages })
-  } finally {
-    project.close()
-  }
+  using project = openProject({ tsconfig })
+  return compiledIn({ project, dir, targetPackages })
 }

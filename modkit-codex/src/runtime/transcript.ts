@@ -50,16 +50,12 @@ const recordedExit = ({ text, id }: { text: string; id: string }): Exit | undefi
 
 async function tailOf(path: string): Promise<string | undefined> {
   try {
-    const file = await open(path, 'r')
-    try {
-      const { size } = await file.stat()
-      const length = Math.min(size, TAIL_BYTES)
-      const buffer = Buffer.alloc(length)
-      await file.read({ buffer, position: size - length })
-      return buffer.toString('utf8')
-    } finally {
-      await file.close()
-    }
+    await using file = await open(path, 'r')
+    const { size } = await file.stat()
+    const length = Math.min(size, TAIL_BYTES)
+    const buffer = Buffer.alloc(length)
+    await file.read({ buffer, position: size - length })
+    return buffer.toString('utf8')
   } catch {
     return undefined
   }
