@@ -11,7 +11,8 @@ import { delimiter, join } from 'node:path'
 import type { DevCommand, Env } from '@atuin/modkit-target'
 
 import type { Build } from './build.ts'
-import { clock, digestOf, Landed, slugOf } from './landed.ts'
+import { clock, digestOf } from './landed.ts'
+import { DevLayout } from './layout.ts'
 
 // Where `program` is on `env`'s `PATH`, if it is.
 function pathTo({ program, env }: { program: string; env: Env }): string | undefined {
@@ -39,15 +40,15 @@ async function commandOf({
   name: string
   env: Env
 }): Promise<DevCommand | string> {
-  const { dev } = build
-  const landed = await Landed.read(Landed.pathOf({ dev, name }))
+  const place = DevLayout.for(build).target(name)
+  const landed = await place.landed()
   if (landed === undefined) return `${name} starts once a build of it lands`
   const listed = await build.listed()
   const target = listed?.find((one) => one.name === name)
   if (target === undefined) return `modkit.targets no longer lists ${name}, so it gets no harness`
   const out = join(build.out, name)
   const { plugin, hasStatus } = landed
-  const harness = target.dev({ out, plugin, hasStatus, scratch: join(dev, slugOf(name)), env })
+  const harness = target.dev({ out, plugin, hasStatus, scratch: place.scratch, env })
   const digest = await digestOf({ dir: out, skipped: harness.writes })
   if (digest !== landed.digest) {
     return `${name}: not started, since a build that never landed wrote over the ${clock(landed.at)} one; the next build that does starts it`

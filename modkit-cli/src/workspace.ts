@@ -9,14 +9,12 @@
  * @module
  */
 
-import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-
 import { errorMessage, type Env } from '@atuin/modkit-target'
 
 import type { Build, TargetBuild } from './build.ts'
 import type { Dekit } from './dekit.ts'
 import { HarnessTask } from './harness-task.ts'
+import type { DevLayout } from './layout.ts'
 
 // The errors a disposal threw, which a stack chains into a `SuppressedError` when several do.
 const unchained = (error: unknown): unknown[] =>
@@ -27,6 +25,7 @@ const unchained = (error: unknown): unknown[] =>
 /** What a workspace runs on. */
 export interface WorkspaceInput {
   build: Build
+  layout: DevLayout
   dekit: Dekit
   /** The targets that get a harness, which the mod's package.json lists. */
   names: readonly string[]
@@ -45,8 +44,10 @@ export class Workspace {
 
   constructor(input: WorkspaceInput) {
     this.#input = input
-    const { dekit, env } = input
-    this.#tasks = input.names.map((name) => this.#stack.use(new HarnessTask({ name, dekit, env })))
+    const { layout, dekit, env } = input
+    this.#tasks = input.names.map((name) =>
+      this.#stack.use(new HarnessTask({ place: layout.target(name), dekit, env })),
+    )
   }
 
   /** Build the mod on every save, bringing the harnesses onto each build. */
@@ -61,15 +62,10 @@ export class Workspace {
     )
   }
 
-  /** Where a quit that left something to undo says what, in the dekit project's `root`. */
-  static unclosedPathOf(root: string): string {
-    return join(root, 'unclosed.txt')
-  }
-
   /**
    * Undo what the harnesses registered, then exit.
    *
-   * A harness that fails to undo it exits non-zero, saying why in {@link Workspace.unclosedPathOf}.
+   * A harness that fails to undo it exits non-zero, keeping why in {@link DevLayout.report}.
    */
   async close(): Promise<never> {
     this.#closing ??= this.#closed()
@@ -84,8 +80,7 @@ export class Workspace {
     if (failed.length === 0) process.exit(0)
     const report = [...failed, 'modkit dev quit, but the above is still to undo by hand'].join('\n')
     console.error(report)
-    // This task's screen goes with dekit as it quits, so `modkit dev` prints the report after.
-    await writeFile(Workspace.unclosedPathOf(this.#input.dekit.root), `${report}\n`)
+    await this.#input.layout.report(report)
     process.exit(1)
   }
 

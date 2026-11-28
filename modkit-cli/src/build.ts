@@ -1,4 +1,4 @@
-import { basename, join, relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 import { watch } from 'chokidar'
 import { uniqBy } from 'es-toolkit/array'
@@ -77,14 +77,6 @@ export class Build {
   /** The mod's package directory. */
   get dir(): string {
     return this.#package.dir
-  }
-
-  /**
-   * Where `modkit dev` keeps its dekit project, and what it keeps beside the builds:
-   * `<out>/.dev/<the mod's directory name>`, which dekit shows as the project's name.
-   */
-  get dev(): string {
-    return join(this.#out, '.dev', basename(this.#package.dir))
   }
 
   /** The targets the mod's package.json lists, or none when it can't be read, saying why. */

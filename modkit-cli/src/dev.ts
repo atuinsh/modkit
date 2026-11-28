@@ -10,7 +10,6 @@
  * @module
  */
 
-import { mkdir, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import * as v from 'valibot'
@@ -19,9 +18,8 @@ import type { Env } from '@atuin/modkit-target'
 
 import { Build } from './build.ts'
 import { Dekit, type DekitTask } from './dekit.ts'
-import { readIfAny } from './files.ts'
-import { Landed, slugOf } from './landed.ts'
 import { launch } from './launch.ts'
+import { DevLayout } from './layout.ts'
 import { Workspace } from './workspace.ts'
 
 /** What the `dev` command is run with. */
@@ -35,7 +33,7 @@ export interface DevArgs {
 const WITHOUT_HARNESSES = 'run modkit build --watch to rebuild on save without them'
 
 // The path of the `modkit-logs` task, which no target's task can take: a bare target's name holds
-// no `.`, and a scoped one's {@link slugOf} starts with `_40`.
+// no `.`, and a scoped one's slug ({@link TargetPlace.slug}) starts with `_40`.
 const LOGS_PATH = 'modkit.logs'
 
 // The targets `--only` names, or every one the mod lists; why not, when it names one it doesn't.
@@ -60,10 +58,12 @@ function pickedOf({
 // this command again as it was run, under tsx or not, with every argument resolved.
 function tasksOf({
   build,
+  layout,
   cwd,
   names,
 }: {
   build: Build
+  layout: DevLayout
   cwd: string
   names: readonly string[]
 }): DekitTask[] {
@@ -81,7 +81,7 @@ function tasksOf({
     autostart: true,
   }
   const harnesses = names.map((name) => ({
-    path: slugOf(name),
+    path: layout.target(name).slug,
     label: name,
     cmd,
     cwd,
@@ -95,18 +95,18 @@ function tasksOf({
 // Writes the project for a runner to start on: no record of a build any harness landed, and no
 // tasks a quit kept.
 async function written({
+  layout,
   dekit,
   config,
   names,
 }: {
+  layout: DevLayout
   dekit: Dekit
   config: string
   names: readonly string[]
 }): Promise<void> {
   await dekit.configure(config)
-  const records = names.map((name) => Landed.pathOf({ dev: dekit.root, name }))
-  const stale = [...records, Workspace.unclosedPathOf(dekit.root)]
-  await Promise.all(stale.map(async (path) => rm(path, { force: true })))
+  await layout.reset(names)
   await dekit.forgetSaved()
 }
 
@@ -148,20 +148,21 @@ function flagsOf(config: string): string | undefined {
 // Readies the project to attach to: written for a runner to start on, or, when one runs, written
 // as this run would write it; false when it runs with other arguments, saying so.
 async function readied({
+  layout,
   dekit,
   config,
   names,
   dir,
 }: {
+  layout: DevLayout
   dekit: Dekit
   config: string
   names: readonly string[]
   dir: string
 }): Promise<boolean> {
-  // A project directory that doesn't exist is an error to dekit, even to say no runner runs there.
-  await mkdir(dekit.root, { recursive: true })
+  await layout.make()
   if (!(await dekit.isRunning())) {
-    await written({ dekit, config, names })
+    await written({ layout, dekit, config, names })
     return true
   }
   // Attaching to the one running would leave this run's arguments unused.
@@ -177,7 +178,7 @@ async function readied({
 
 // Attaches to `dekit` until it quits or is detached from, returning the exit code: non-zero when
 // the quit left something to undo, which the `modkit-logs` task reported.
-async function attached(dekit: Dekit): Promise<number> {
+async function attached({ layout, dekit }: { layout: DevLayout; dekit: Dekit }): Promise<number> {
   const code = await dekit.attach()
   if (await dekit.isRunning()) {
     console.log(
@@ -185,11 +186,9 @@ async function attached(dekit: Dekit): Promise<number> {
     )
     return code
   }
-  const path = Workspace.unclosedPathOf(dekit.root)
-  const unclosed = await readIfAny(path)
+  const unclosed = await layout.takeReport()
   if (unclosed === undefined) return code
   process.stderr.write(unclosed)
-  await rm(path, { force: true })
   return 1
 }
 
@@ -205,10 +204,11 @@ async function opened({ args, env }: { args: DevArgs; env: Env }): Promise<numbe
   const build = Build.of(args)
   const names = await namesOf({ build, only: args.only })
   if (names === undefined) return 1
-  const dekit = new Dekit({ root: build.dev, env })
-  const config = Dekit.configOf(tasksOf({ build, cwd: resolve(args.cwd ?? '.'), names }))
-  if (!(await readied({ dekit, config, names, dir: build.dir }))) return 1
-  return attached(dekit)
+  const layout = DevLayout.for(build)
+  const dekit = new Dekit({ root: layout.root, env })
+  const config = Dekit.configOf(tasksOf({ build, layout, cwd: resolve(args.cwd ?? '.'), names }))
+  if (!(await readied({ layout, dekit, config, names, dir: build.dir }))) return 1
+  return attached({ layout, dekit })
 }
 
 /** Run the `dev` command, returning its exit code once it returns at all. */
@@ -227,7 +227,8 @@ export async function dev({ args, env }: { args: DevArgs; env: Env }): Promise<n
     return 1
   }
   const names = (args.only ?? '').split(',').filter((name) => name !== '')
-  const dekit = new Dekit({ root: build.dev, env: started })
-  await new Workspace({ build, dekit, names, env: started }).run()
+  const layout = DevLayout.for(build)
+  const dekit = new Dekit({ root: layout.root, env: started })
+  await new Workspace({ build, layout, dekit, names, env: started }).run()
   return 0
 }

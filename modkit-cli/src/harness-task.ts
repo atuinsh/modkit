@@ -7,13 +7,13 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
 
 import { errorMessage, type DevHarness, type Env } from '@atuin/modkit-target'
 
 import type { TargetBuild } from './build.ts'
 import type { Dekit } from './dekit.ts'
-import { clock, digestOf, Landed, slugOf } from './landed.ts'
+import { clock, digestOf, Landed } from './landed.ts'
+import type { TargetPlace } from './target-place.ts'
 
 /** How a harness comes onto a build: not at all, by loading it itself, or by a restart. */
 type Way = 'kept' | 'reloaded' | 'started'
@@ -25,21 +25,21 @@ type Way = 'kept' | 'reloaded' | 'started'
  * failed when that fails.
  */
 export class HarnessTask implements AsyncDisposable {
-  readonly #name: string
+  readonly #place: TargetPlace
   readonly #dekit: Dekit
   readonly #env: Env
   readonly #session = randomUUID()
   #harness: { dev: DevHarness; plugin: string } | undefined
   #loaded: Landed | undefined
 
-  constructor({ name, dekit, env }: { name: string; dekit: Dekit; env: Env }) {
-    this.#name = name
+  constructor({ place, dekit, env }: { place: TargetPlace; dekit: Dekit; env: Env }) {
+    this.#place = place
     this.#dekit = dekit
     this.#env = env
   }
 
   get name(): string {
-    return this.#name
+    return this.#place.name
   }
 
   /** Bring the harness onto `build`, which is of this task's target, and keep it on its last. */
@@ -57,24 +57,24 @@ export class HarnessTask implements AsyncDisposable {
     const session = this.#session
     const landed = new Landed({ digest, plugin, hasStatus, session, at: new Date() })
     // The harness's task reads the record as it starts, so it is written before the restart.
-    await landed.write(Landed.pathOf({ dev: this.#dekit.root, name: this.#name }))
+    await this.#place.land(landed)
     this.#loaded = landed
-    if (way === 'started') await this.#dekit.restart(slugOf(this.#name))
-    console.log(`${this.#name}: ${way} on the ${clock(landed.at)} build`)
+    if (way === 'started') await this.#dekit.restart(this.#place.slug)
+    console.log(`${this.name}: ${way} on the ${clock(landed.at)} build`)
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
     try {
       await this.#harness?.dev[Symbol.asyncDispose]()
     } catch (error) {
-      throw new Error(`${this.#name}: ${errorMessage(error)}`, { cause: error })
+      throw new Error(`${this.name}: ${errorMessage(error)}`, { cause: error })
     }
   }
 
   #failed(): void {
     const loaded = this.#loaded
     const on = loaded === undefined ? 'none to start on yet' : `still on the ${clock(loaded.at)}`
-    console.error(`${this.#name}: build failed; ${on}`)
+    console.error(`${this.name}: build failed; ${on}`)
   }
 
   // The harness readied for the build's plugin. A mod renamed in its package.json builds under a
@@ -87,7 +87,7 @@ export class HarnessTask implements AsyncDisposable {
   }: Extract<TargetBuild, { isOk: true }>): Promise<DevHarness> {
     if (this.#harness?.plugin === plugin) return this.#harness.dev
     await this.#harness?.dev[Symbol.asyncDispose]()
-    const dev = target.dev({ out, plugin, hasStatus, scratch: this.#scratch, env: this.#env })
+    const dev = target.dev({ out, plugin, hasStatus, scratch: this.#place.scratch, env: this.#env })
     this.#harness = { dev, plugin }
     this.#loaded = undefined
     return dev
@@ -95,13 +95,9 @@ export class HarnessTask implements AsyncDisposable {
 
   async #wayOnto({ harness, digest }: { harness: DevHarness; digest: string }): Promise<Way> {
     // A harness that exited is started again on any build.
-    const loaded = (await this.#dekit.isUp(slugOf(this.#name))) ? this.#loaded : undefined
+    const loaded = (await this.#dekit.isUp(this.#place.slug)) ? this.#loaded : undefined
     if (loaded === undefined) return 'started'
     if (digest === loaded.digest) return 'kept'
     return harness.reload === 'watched' ? 'reloaded' : 'started'
-  }
-
-  get #scratch(): string {
-    return join(this.#dekit.root, slugOf(this.#name))
   }
 }
