@@ -27,25 +27,25 @@ export {
 export { Result } from './host/result.ts'
 export { HarnessTools } from './host/tools.ts'
 export { errorMessage } from './host/values.ts'
-export { imagesSource } from './images.ts'
-export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
+export { Gap } from './gap.ts'
+export { ImageBundle } from './images.ts'
+export { ListedTarget, type Checked } from './listed-target.ts'
 export { ModPackage } from './package.ts'
 export { PluginName } from './plugin-name.ts'
 export { TargetRef } from './target-ref.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
-export {
-  pluginNameOf,
-  type Author,
-  type Diagnostic,
-  type Field,
-  type HookNeeds,
-  type ImageDecl,
-  type Item,
-  type ModInfo,
-  type ModpartName,
-  type OptionDecl,
-  type OptionKind,
-  type Shape,
-  type StateDecl,
-  type StateKind,
+export type {
+  Author,
+  Diagnostic,
+  Field,
+  HookNeeds,
+  ImageDecl,
+  Item,
+  ModInfo,
+  ModpartName,
+  OptionDecl,
+  OptionKind,
+  Shape,
+  StateDecl,
+  StateKind,
 } from '@atuin/modkit-compiler'

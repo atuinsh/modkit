@@ -1,8 +1,8 @@
 import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
 
-import { parseRunOutput, parseViewJson, type NodeJson, type ViewJson } from '../contract.ts'
+import { OpencodeContract, type NodeJson, type ViewJson } from '../contract.ts'
 
-export { EMPTY_VIEW, parseRunOutput } from '../contract.ts'
+export { EMPTY_VIEW } from '../contract.ts'
 
 export type Paint = { tone: Tone | 'accent' | 'border' } | { hex: Hex }
 
@@ -158,12 +158,12 @@ export class OpenTuiView {
 
   /** Parse an RPC `view` payload into a validated {@link ViewJson}. */
   static parse(answer: unknown): ViewJson {
-    return parseViewJson(answer)
+    return OpencodeContract.parseView(answer)
   }
 
   /** Parse an RPC `run` reply text. */
   static parseRunReply(answer: unknown): string {
-    return parseRunOutput(answer)
+    return OpencodeContract.parseRunOutput(answer)
   }
 
   /** Render `nodes` into OpenTUI specs. */

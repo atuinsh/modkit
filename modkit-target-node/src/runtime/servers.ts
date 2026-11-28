@@ -11,7 +11,7 @@ import {
   type Result,
 } from '@atuin/modkit-target/host'
 
-import { peerOn, type Peer } from './rpc.ts'
+import { RpcPeer, type Peer } from './rpc.ts'
 
 const PROTOCOL_VERSION = '2025-06-18'
 const START_TIMEOUT_S = 30
@@ -92,7 +92,7 @@ async function connect({
     child.kill()
     throw new Error(`couldn't pipe stdio for ${name}`)
   }
-  const peer = peerOn({ input: child.stdout, output: child.stdin })
+  const peer = RpcPeer.on({ input: child.stdout, output: child.stdin })
   const initialized = peer.request({
     method: 'initialize',
     params: {

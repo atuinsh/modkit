@@ -65,66 +65,64 @@ function failedRun({ command, error }: { command: string; error: unknown }): Run
   }
 }
 
-/** Run `command` with `args` and return its UTF-8 stdout, rejecting on non-zero exit or spawn failure. */
-export async function execFileStdout({
-  command,
-  args,
-  cwd,
-  signal,
-}: {
-  command: string
-  args: readonly string[]
-  cwd?: string
-  signal?: AbortSignal
-}): Promise<string> {
-  const { stdout } = await execFileRaw({
+/** Bound child-process runner tied to a session's working directory and cancellation signal. */
+export class ProcessRunner {
+  readonly #cwd: () => string
+  readonly #signal: AbortSignal | undefined
+
+  constructor({ cwd, signal }: { cwd: string | (() => string); signal?: AbortSignal }) {
+    this.#cwd = typeof cwd === 'function' ? cwd : () => cwd
+    this.#signal = signal
+  }
+
+  /** Run `command` with `args` and return its UTF-8 stdout, rejecting on non-zero exit or spawn failure. */
+  static async stdout({
     command,
     args,
-    ...(cwd !== undefined && { cwd }),
-    ...(signal !== undefined && { signal }),
-  })
-  return stdout
-}
-
-export async function run({
-  argv,
-  options,
-  cwd,
-  signal,
-}: {
-  argv: readonly string[]
-  options: RunOptions | undefined
-  cwd: string
-  signal?: AbortSignal
-}): Promise<RunResult> {
-  const [command, ...args] = argv
-  if (command === undefined) throw new Error('harness.run was given no command')
-  const combined = combineSignals({ signal, timeoutMs: options?.timeoutMs })
-  try {
-    const { stdout, stderr } = await execFileRaw({
+    cwd,
+    signal,
+  }: {
+    command: string
+    args: readonly string[]
+    cwd?: string
+    signal?: AbortSignal
+  }): Promise<string> {
+    const { stdout } = await execFileRaw({
       command,
       args,
-      cwd: options?.cwd ?? cwd,
-      ...(combined !== undefined && { signal: combined }),
-    })
-    return { exitCode: 0, stdout, stderr }
-  } catch (error) {
-    return failedRun({ command, error })
-  }
-}
-
-// The checkout `cwd` is in, or `cwd` itself outside one, for a harness that names only a directory.
-export async function findProjectRoot(cwd: string, signal?: AbortSignal): Promise<string> {
-  try {
-    const found = await run({
-      argv: ['git', 'rev-parse', '--show-toplevel'],
-      options: undefined,
-      cwd,
+      ...(cwd !== undefined && { cwd }),
       ...(signal !== undefined && { signal }),
     })
-    const root = found.stdout.trim()
-    return found.exitCode === 0 && root !== '' ? root : cwd
-  } catch {
-    return cwd
+    return stdout
+  }
+
+  /** Execute `argv` directly without a shell, respecting session cancellation and `options.timeoutMs`. */
+  async run(argv: readonly string[], options?: RunOptions): Promise<RunResult> {
+    const [command, ...args] = argv
+    if (command === undefined) throw new Error('harness.run was given no command')
+    const combined = combineSignals({ signal: this.#signal, timeoutMs: options?.timeoutMs })
+    try {
+      const { stdout, stderr } = await execFileRaw({
+        command,
+        args,
+        cwd: options?.cwd ?? this.#cwd(),
+        ...(combined !== undefined && { signal: combined }),
+      })
+      return { exitCode: 0, stdout, stderr }
+    } catch (error) {
+      return failedRun({ command, error })
+    }
+  }
+
+  /** Resolve the git checkout root of the current working directory, falling back to `cwd`. */
+  async projectRoot(): Promise<string> {
+    const cwd = this.#cwd()
+    try {
+      const found = await this.run(['git', 'rev-parse', '--show-toplevel'])
+      const root = found.stdout.trim()
+      return found.exitCode === 0 && root !== '' ? root : cwd
+    } catch {
+      return cwd
+    }
   }
 }

@@ -16,6 +16,7 @@ export {
   type NativeSupport,
   type Support,
 } from './capabilities.ts'
+export { FailureReporter } from './failure-reporter.ts'
 export {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
@@ -37,16 +38,9 @@ export {
   type Repeat,
 } from './runtime.ts'
 export { HarnessTools } from './tools.ts'
-export {
-  buttonKey,
-  collectButtons,
-  flattenTextSpans,
-  visitUiNode,
-  type StyledSpan,
-  type UiVisitor,
-} from './ui.ts'
+export { UiTree, type StyledSpan, type UiVisitor } from './ui.ts'
 export { asRecord, errorMessage, isPlainRecord } from './values.ts'
-export { failureReporter, ModVerdict, type VerdictOutcome } from './verdict.ts'
+export { ModVerdict, type VerdictOutcome } from './verdict.ts'
 export {
   PaneId,
   textOf,

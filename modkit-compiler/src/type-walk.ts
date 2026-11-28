@@ -3,8 +3,8 @@ import {
   ElementFlags,
   SignatureKind,
   SymbolFlags,
+  TsProject,
   TypeFlags,
-  hasAnyFlag,
   isBooleanLiteralType,
   isIntersectionType,
   isNumberLiteralType,
@@ -86,10 +86,12 @@ export class TypeWalk {
       return { kind: 'union', of: type.getTypes().map((member) => this.shapeOf(member)) }
     }
     if (isIntersectionType(type)) {
-      const brand = type.getTypes().find((member) => hasAnyFlag({ type: member, flags: PRIMITIVE }))
+      const brand = type
+        .getTypes()
+        .find((member) => TsProject.hasAnyFlag({ type: member, flags: PRIMITIVE }))
       return brand === undefined ? this.#objectShapeOf(type) : this.shapeOf(brand)
     }
-    if (!hasAnyFlag({ type, flags: TypeFlags.Object })) {
+    if (!TsProject.hasAnyFlag({ type, flags: TypeFlags.Object })) {
       return this.#refuse(this.#checker.typeToString(type))
     }
     return this.#containerShapeOf(type)
@@ -121,7 +123,7 @@ export class TypeWalk {
     if (!isUnionType(type)) return this.shapeOf(type)
     const present = type
       .getTypes()
-      .filter((member) => !hasAnyFlag({ type: member, flags: TypeFlags.Undefined }))
+      .filter((member) => !TsProject.hasAnyFlag({ type: member, flags: TypeFlags.Undefined }))
     return { kind: 'union', of: present.map((member) => this.shapeOf(member)) }
   }
 
@@ -168,21 +170,21 @@ export class TypeWalk {
   }
 
   #primitiveOf(type: Type): Shape | undefined {
-    if (hasAnyFlag({ type, flags: TypeFlags.Null })) return { kind: 'null' }
-    if (hasAnyFlag({ type, flags: TypeFlags.Boolean })) return { kind: 'boolean' }
+    if (TsProject.hasAnyFlag({ type, flags: TypeFlags.Null })) return { kind: 'null' }
+    if (TsProject.hasAnyFlag({ type, flags: TypeFlags.Boolean })) return { kind: 'boolean' }
     if (
-      hasAnyFlag({
+      TsProject.hasAnyFlag({
         type,
         flags: TypeFlags.String | TypeFlags.TemplateLiteral | TypeFlags.StringMapping,
       })
     ) {
       return { kind: 'string' }
     }
-    if (hasAnyFlag({ type, flags: TypeFlags.Number })) return { kind: 'number' }
+    if (TsProject.hasAnyFlag({ type, flags: TypeFlags.Number })) return { kind: 'number' }
     if (isStringLiteralType(type) || isNumberLiteralType(type) || isBooleanLiteralType(type)) {
       return { kind: 'literal', value: type.value }
     }
-    const refused = REFUSED.find(([flags]) => hasAnyFlag({ type, flags }))
+    const refused = REFUSED.find(([flags]) => TsProject.hasAnyFlag({ type, flags }))
     return refused === undefined ? undefined : this.#refuse(refused[1])
   }
 

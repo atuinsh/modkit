@@ -15,25 +15,31 @@ const ConfigSchema = v.object({
   environment: StringEnvSchema,
 })
 
-export function opencodeServerOf({
-  name,
-  configured,
-}: {
-  name: string
-  configured: readonly (readonly [string, unknown])[]
-}): Result<StdioServer, string> {
-  const config = v.safeParse(ConfigSchema, configured.find(([named]) => named === name)?.[1])
-  if (!config.success) return Result.err(`opencode's config names no ${name} MCP server`)
-  const { disabled, enabled, type, command, environment } = config.output
-  if (disabled === true || enabled === false) {
-    return Result.err(`${name} is turned off in opencode's config`)
+/** Resolver for local stdio MCP servers declared in opencode's configuration. */
+export class OpencodeMcpConfig {
+  readonly #configured: readonly (readonly [string, unknown])[]
+
+  constructor(configured: readonly (readonly [string, unknown])[]) {
+    this.#configured = configured
   }
-  if (type !== 'local') {
-    return Result.err(
-      `${name} is a remote server, whose login is opencode's own; a mod reaches local servers only`,
+
+  resolve(name: string): Result<StdioServer, string> {
+    const config = v.safeParse(
+      ConfigSchema,
+      this.#configured.find(([named]) => named === name)?.[1],
     )
+    if (!config.success) return Result.err(`opencode's config names no ${name} MCP server`)
+    const { disabled, enabled, type, command, environment } = config.output
+    if (disabled === true || enabled === false) {
+      return Result.err(`${name} is turned off in opencode's config`)
+    }
+    if (type !== 'local') {
+      return Result.err(
+        `${name} is a remote server, whose login is opencode's own; a mod reaches local servers only`,
+      )
+    }
+    const [program, ...args] = command
+    if (program === undefined) return Result.err(`opencode's config gives ${name} no command`)
+    return Result.ok({ command: program, args, env: environment, cwd: undefined })
   }
-  const [program, ...args] = command
-  if (program === undefined) return Result.err(`opencode's config gives ${name} no command`)
-  return Result.ok({ command: program, args, env: environment, cwd: undefined })
 }

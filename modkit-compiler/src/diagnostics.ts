@@ -61,38 +61,59 @@ function placeOf({ file, position }: { file: SourceFile; position: number }): Pl
   return { file: file.fileName, line: line + 1, column: character + 1 }
 }
 
-/** The {@link Place} where AST `node` starts. */
-export function placeAt(node: Node): Place {
-  const file = node.getSourceFile()
-  return placeOf({ file, position: node.getStart(file) })
+/** Bound wrapper and constructors for compiler {@link Diagnostic} values. */
+export class ModDiagnostic {
+  readonly #value: Diagnostic
+
+  constructor(value: Diagnostic) {
+    this.#value = value
+  }
+
+  /** The 1-based {@link Place} where AST `node` starts. */
+  static placeAt(node: Node): Place {
+    const file = node.getSourceFile()
+    return placeOf({ file, position: node.getStart(file) })
+  }
+
+  /** Build a {@link Diagnostic} anchored at the start of AST `node`. */
+  static at({
+    code,
+    message,
+    node,
+  }: {
+    code: DiagnosticCode
+    message: string
+    node: Node
+  }): Diagnostic {
+    return { code, message, ...ModDiagnostic.placeAt(node) }
+  }
+
+  /** Build a {@link Diagnostic} anchored at line 1, column 1 of `file`. */
+  static atFile({
+    code,
+    message,
+    file,
+  }: {
+    code: DiagnosticCode
+    message: string
+    file: string
+  }): Diagnostic {
+    return { code, message, file, line: 1, column: 1 }
+  }
+
+  /** Convert a TypeScript diagnostic in `file` into a modkit `'type-error'` {@link Diagnostic}. */
+  static fromTypeScript({ error, file }: { error: TsDiagnostic; file: SourceFile }): Diagnostic {
+    return { code: 'type-error', message: error.text, ...placeOf({ file, position: error.pos }) }
+  }
+
+  /** Format a {@link Diagnostic} as `<file>:<line>:<column>: <code>: <message>`. */
+  static format(diagnostic: Diagnostic): string {
+    return new ModDiagnostic(diagnostic).format()
+  }
+
+  /** Format this diagnostic as `<file>:<line>:<column>: <code>: <message>`. */
+  format(): string {
+    const { file, line, column, code, message } = this.#value
+    return `${file}:${line}:${column}: ${code}: ${message}`
+  }
 }
-
-/** Build a {@link Diagnostic} anchored at the start of AST `node`. */
-export function diagnosticAt({
-  code,
-  message,
-  node,
-}: {
-  code: DiagnosticCode
-  message: string
-  node: Node
-}): Diagnostic {
-  return { code, message, ...placeAt(node) }
-}
-
-/** Convert a TypeScript diagnostic in `file` into a modkit `'type-error'` {@link Diagnostic}. */
-export const fromTypeScript = ({
-  error,
-  file,
-}: {
-  error: TsDiagnostic
-  file: SourceFile
-}): Diagnostic => ({
-  code: 'type-error',
-  message: error.text,
-  ...placeOf({ file, position: error.pos }),
-})
-
-/** Format a {@link Diagnostic} as `<file>:<line>:<column>: <code>: <message>`. */
-export const formatDiagnostic = ({ file, line, column, code, message }: Diagnostic): string =>
-  `${file}:${line}:${column}: ${code}: ${message}`

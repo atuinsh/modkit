@@ -1,19 +1,13 @@
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
-import { modkitExports } from './modkit.ts'
-import { resolvedSymbol, syntax, type Node, type Project, type SourceFile } from './program.ts'
+import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { ModkitSymbols } from './modkit.ts'
+import { syntax, type Node, type SourceFile, type TsProject } from './program.ts'
 
 type SetupNode = syntax.ArrowFunction | syntax.FunctionExpression
-
-export interface ModCall {
-  call: syntax.CallExpression
-  setup: SetupNode
-  parts: readonly syntax.ObjectLiteralExpression[]
-}
 
 const NO_MOD =
   "a mod is mod.tsx's default export, written `export default mod((settings) => ({ ... }))`"
 
-const none = (node: Node): Diagnostic => diagnosticAt({ code: 'no-mod', message: NO_MOD, node })
+const none = (node: Node): Diagnostic => ModDiagnostic.at({ code: 'no-mod', message: NO_MOD, node })
 
 const unwrapped = (node: Node): Node =>
   syntax.isParenthesizedExpression(node) ||
@@ -45,9 +39,15 @@ function partsOf(setup: SetupNode): syntax.ObjectLiteralExpression[] | Diagnosti
   if (other !== undefined || literals.length === 0) {
     const message =
       "a mod's function returns its parts as an object literal, which the build reads its tools from"
-    return diagnosticAt({ code: 'mod-parts', message, node: other ?? setup })
+    return ModDiagnostic.at({ code: 'mod-parts', message, node: other ?? setup })
   }
   return literals.filter((one) => syntax.isObjectLiteralExpression(one))
+}
+
+function nameOf(property: syntax.ObjectLiteralElementLike): string | undefined {
+  if (syntax.isSpreadAssignment(property)) return undefined
+  const { name } = property
+  return syntax.isIdentifier(name) || syntax.isStringLiteral(name) ? name.text : undefined
 }
 
 // A part the build can't name, so can't read tools from or check against what a target provides: a
@@ -59,7 +59,7 @@ function unnamedIn(parts: readonly syntax.ObjectLiteralExpression[]): Diagnostic
   if (unnamed === undefined) return undefined
   const message =
     "a mod's parts object names each of its parts, which the build reads; write `status: ...`, not a spread or a computed key"
-  return diagnosticAt({ code: 'mod-parts', message, node: unnamed })
+  return ModDiagnostic.at({ code: 'mod-parts', message, node: unnamed })
 }
 
 const isSetup = (node: Node): node is SetupNode =>
@@ -76,44 +76,56 @@ function defaultCallIn(
   return syntax.isCallExpression(call) ? { exported, call } : none(exported)
 }
 
-export function modCallIn({
-  project,
-  entry,
-}: {
-  project: Project
-  entry: SourceFile
-}): ModCall | Diagnostic {
-  const found = defaultCallIn(entry)
-  if ('code' in found) return found
-  const { exported, call } = found
-  const mod = modkitExports(project).find((symbol) => symbol.name === 'mod')
-  const called = resolvedSymbol({ checker: project.checker, node: call.expression })
-  if (mod === undefined || called?.id !== mod.id) return none(exported)
-  const [setup] = call.arguments
-  if (setup === undefined || !isSetup(setup)) return none(call)
-  const parts = partsOf(setup)
-  if (!Array.isArray(parts)) return parts
-  return unnamedIn(parts) ?? { call, setup, parts }
-}
+/** Parsed AST representation of a mod's `export default mod((settings) => ({ ... }))` entry. */
+export class ModAst {
+  readonly #setup: SetupNode
+  readonly #parts: readonly syntax.ObjectLiteralExpression[]
 
-function nameOf(property: syntax.ObjectLiteralElementLike): string | undefined {
-  if (syntax.isSpreadAssignment(property)) return undefined
-  const { name } = property
-  return syntax.isIdentifier(name) || syntax.isStringLiteral(name) ? name.text : undefined
-}
+  private constructor({
+    setup,
+    parts,
+  }: {
+    setup: SetupNode
+    parts: readonly syntax.ObjectLiteralExpression[]
+  }) {
+    this.#setup = setup
+    this.#parts = parts
+  }
 
-export function partsNamed({ mod, name }: { mod: ModCall; name: string }): Node[] {
-  return mod.parts.flatMap((literal) =>
-    literal.properties.flatMap((property): Node[] => {
-      if (nameOf(property) !== name) return []
-      if (syntax.isPropertyAssignment(property)) return [unwrapped(property.initializer)]
-      return [property]
-    }),
-  )
-}
+  /** Locate and validate `export default mod(...)` in `entry`, or return its diagnostic. */
+  static from({ project, entry }: { project: TsProject; entry: SourceFile }): ModAst | Diagnostic {
+    const found = defaultCallIn(entry)
+    if ('code' in found) return found
+    const { exported, call } = found
+    const mod = new ModkitSymbols(project).exports().find((symbol) => symbol.name === 'mod')
+    const called = project.resolveSymbol(call.expression)
+    if (mod === undefined || called?.id !== mod.id) return none(exported)
+    const [setup] = call.arguments
+    if (setup === undefined || !isSetup(setup)) return none(call)
+    const parts = partsOf(setup)
+    if (!Array.isArray(parts)) return parts
+    return unnamedIn(parts) ?? new ModAst({ setup, parts })
+  }
 
-export function keysOf(node: Node): string[] | undefined {
-  if (!syntax.isObjectLiteralExpression(node)) return undefined
-  const keys = node.properties.map((property) => nameOf(property))
-  return keys.every((key) => key !== undefined) ? keys : undefined
+  /** Static property names of an object literal expression, or `undefined` if any key is computed/spread. */
+  static keysOf(node: Node): string[] | undefined {
+    if (!syntax.isObjectLiteralExpression(node)) return undefined
+    const keys = node.properties.map((property) => nameOf(property))
+    return keys.every((key) => key !== undefined) ? keys : undefined
+  }
+
+  get setup(): SetupNode {
+    return this.#setup
+  }
+
+  /** Return all initializer/property AST nodes named `name` across every returned parts object. */
+  parts(name: string): Node[] {
+    return this.#parts.flatMap((literal) =>
+      literal.properties.flatMap((property): Node[] => {
+        if (nameOf(property) !== name) return []
+        if (syntax.isPropertyAssignment(property)) return [unwrapped(property.initializer)]
+        return [property]
+      }),
+    )
+  }
 }

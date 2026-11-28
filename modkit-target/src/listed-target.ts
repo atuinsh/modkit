@@ -1,22 +1,8 @@
 import { MODPARTS, type Diagnostic, type ModpartName } from '@atuin/modkit-compiler'
 
-import type { Support } from './host/capabilities.ts'
+import { Gap } from './gap.ts'
 import type { ModPackage } from './package.ts'
 import type { Built, CompiledMod, ModkitTarget } from './target.ts'
-
-type Short = Exclude<Support, { kind: 'native' }>
-
-/** A modpart the mod writes that a target lowers or drops, and the mod accepts. */
-export interface Gap {
-  modpart: ModpartName
-  support: Short
-}
-
-const VERBS: Readonly<Record<Short['kind'], string>> = { lowered: 'lowers', dropped: 'drops' }
-
-/** What a target does to a modpart it falls short on: `drops panes: Codex draws no panes`. */
-export const gapText = ({ modpart, support }: Gap): string =>
-  `${VERBS[support.kind]} ${modpart}: ${support.why}`
 
 /** What checking one modpart found: a gap the mod accepts, a gap it does not, or nothing. */
 type Found = { isGap: true; gap: Gap } | { isGap: false; diagnostic: Diagnostic } | undefined
@@ -98,8 +84,9 @@ export class ListedTarget {
         ? stale(`the mod has no ${modpart}; drop it from modkit.${name}.gaps`)
         : undefined
     }
-    if (isAccepted) return { isGap: true, gap: { modpart, support } }
-    const message = `${name} ${gapText({ modpart, support })}; to build for it anyway, add "${modpart}" to modkit.${name}.gaps in package.json`
+    const gap = new Gap({ modpart, support })
+    if (isAccepted) return { isGap: true, gap }
+    const message = `${name} ${gap.toString()}; to build for it anyway, add "${modpart}" to modkit.${name}.gaps in package.json`
     return { isGap: false, diagnostic: { code: 'target-gap', message, ...usage.at } }
   }
 }

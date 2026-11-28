@@ -12,7 +12,7 @@
 import { genAugmentation, genImport, genObjectFromValues, genString } from 'knitwork'
 import { pascalCase } from 'scule'
 
-import { imagesSource, type ImageDecl, type Shape, type StateDecl } from '@atuin/modkit-target'
+import { ImageBundle, type ImageDecl, type Shape, type StateDecl } from '@atuin/modkit-target'
 
 // Atom bumped on every render so Claude Code's `ui.render` hooks re-evaluate.
 const VIEW_KEY = 'modkit.view'
@@ -22,33 +22,6 @@ const toolHook = ({ event, tool, hook }: { event: string; tool: string; hook: st
 
 const rowHook = (tool: string): string =>
   `  on("ui.render", ${genObjectFromValues({ component: 'ToolUse', props: { tool } })}, ($, e, next) => runtime.renderCards(engineOf($), e, next))`
-
-export const entrySource = ({
-  mod,
-  runtime,
-  tools,
-  images,
-}: {
-  mod: string
-  runtime: string
-  tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
-  images: readonly ImageDecl[]
-}): string =>
-  [
-    genImport(runtime, ['ClaudeCodeRuntime', 'engineOf', 'registerHooks']),
-    genImport(mod, 'mod'),
-    '',
-    `const images = ${imagesSource(images)}`,
-    '',
-    'export const register = (on, options) => {',
-    '  const runtime = new ClaudeCodeRuntime({ mod, options, images })',
-    '  registerHooks(on, runtime)',
-    ...tools.before.map((tool) => toolHook({ event: 'tool.check', tool, hook: 'checkTool' })),
-    ...tools.after.map((tool) => toolHook({ event: 'tool.call', tool, hook: 'callTool' })),
-    ...tools.cards.map((tool) => rowHook(tool)),
-    '}',
-    '',
-  ].join('\n')
 
 function typeOf(shape: Shape): string {
   switch (shape.kind) {
@@ -104,6 +77,35 @@ export class StateModule {
   constructor({ plugin, state }: { plugin: string; state: readonly StateDecl[] }) {
     this.#plugin = plugin
     this.#state = state
+  }
+
+  /** Generate the virtual entry module registering Claude Code hooks for `mod`. */
+  static entrySource({
+    mod,
+    runtime,
+    tools,
+    images,
+  }: {
+    mod: string
+    runtime: string
+    tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
+    images: readonly ImageDecl[]
+  }): string {
+    return [
+      genImport(runtime, ['ClaudeCodeRuntime', 'engineOf', 'registerHooks']),
+      genImport(mod, 'mod'),
+      '',
+      `const images = ${new ImageBundle(images).toSource()}`,
+      '',
+      'export const register = (on, options) => {',
+      '  const runtime = new ClaudeCodeRuntime({ mod, options, images })',
+      '  registerHooks(on, runtime)',
+      ...tools.before.map((tool) => toolHook({ event: 'tool.check', tool, hook: 'checkTool' })),
+      ...tools.after.map((tool) => toolHook({ event: 'tool.call', tool, hook: 'callTool' })),
+      ...tools.cards.map((tool) => rowHook(tool)),
+      '}',
+      '',
+    ].join('\n')
   }
 
   /**

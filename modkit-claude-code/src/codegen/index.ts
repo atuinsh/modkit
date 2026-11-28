@@ -22,9 +22,9 @@ import { build } from 'rolldown'
 import { Target, type ModkitTarget } from '@atuin/modkit-target'
 
 import { CLAUDE_CODE_CAPABILITIES } from '../spec.ts'
-import { envSource } from './env.ts'
-import { manifestOf } from './manifest.ts'
-import { entrySource, StateModule } from './state.ts'
+import { ClaudeEnvModule } from './env.ts'
+import { ClaudeManifest } from './manifest.ts'
+import { StateModule } from './state.ts'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 const ENTRY = '\0modkit-claude-entry'
@@ -78,13 +78,16 @@ export const target: ModkitTarget<undefined> = Target.define('claude-code')
         dir,
         out: dest,
         modules: new Map([
-          [ENTRY, entrySource({ mod: entry, runtime: RUNTIME, tools, images })],
+          [ENTRY, StateModule.entrySource({ mod: entry, runtime: RUNTIME, tools, images })],
           [STATE, stateModule.source()],
-          [ENV, envSource(env)],
+          [ENV, new ClaudeEnvModule(env).source()],
         ]),
       }),
     )
-    emit.json('.claude-plugin/plugin.json', manifestOf({ plugin: pluginName, mod, options }))
+    emit.json(
+      '.claude-plugin/plugin.json',
+      new ClaudeManifest({ plugin: pluginName, mod, options }).toJson(),
+    )
     emit.json('hooks/hooks.json', { modules: ['./register.js'] })
     emit.text('types/index.d.ts', stateModule.contract())
     return { notes: [`load it with claude --plugin-dir ${out}`] }

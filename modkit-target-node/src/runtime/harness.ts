@@ -9,8 +9,8 @@ import type {
   Surface,
 } from '@atuin/modkit-target/host'
 
-import { copy } from './clipboard.ts'
-import { findProjectRoot, run } from './run.ts'
+import { Clipboard } from './clipboard.ts'
+import { ProcessRunner } from './run.ts'
 import type { Servers } from './servers.ts'
 
 /** Base dependencies required to construct a Node/Bun {@link HarnessAdapter}. */
@@ -37,7 +37,7 @@ const DEFAULT_COMPLETE: CompleteFn = async () => ({
   reason: 'refused',
   detail: DEFAULT_NO_MODEL,
 })
-const DEFAULT_COPY: CopyFn = async (text) => copy(text)
+const DEFAULT_COPY: CopyFn = async (text) => Clipboard.system().copy(text)
 
 /** Fluent builder for a Node/Bun {@link HarnessAdapter} with standard process, env, MCP, and clipboard defaults. */
 export class NodeHarnessBuilder {
@@ -85,13 +85,13 @@ export class NodeHarnessBuilder {
   build(): HarnessAdapter {
     const { sessionId, cwd, servers, store, report, signal } = this.#init
     const resolveCwd = typeof cwd === 'function' ? cwd : (): string => cwd
+    const runner = new ProcessRunner({ cwd: resolveCwd, ...(signal !== undefined && { signal }) })
     return {
       session: { id: sessionId },
       cwd: async () => resolveCwd(),
-      root: async () => findProjectRoot(resolveCwd(), signal),
+      root: async () => runner.projectRoot(),
       env: async (name) => process.env[name],
-      run: async (argv, options) =>
-        run({ argv, options, cwd: resolveCwd(), ...(signal !== undefined && { signal }) }),
+      run: async (argv, options) => runner.run(argv, options),
       mcp: async (call) => servers.call(call),
       complete: this.#complete,
       copy: this.#copy,

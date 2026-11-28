@@ -1,4 +1,4 @@
-import { pluginNameOf } from '@atuin/modkit-compiler'
+import { ModManifest } from '@atuin/modkit-compiler'
 
 /** Validated harness plugin name derived from a mod's package name. */
 export class PluginName {
@@ -10,7 +10,7 @@ export class PluginName {
 
   /** Derive the plugin name for a mod's `package.json` `name`. */
   static fromPackage(pkgName: string): PluginName {
-    return new PluginName(pluginNameOf(pkgName))
+    return new PluginName(ModManifest.pluginName(pkgName))
   }
 
   /** Wrap an already-normalized plugin name. */

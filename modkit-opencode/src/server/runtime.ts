@@ -12,8 +12,8 @@ import {
 } from '@atuin/modkit-target/host'
 
 import { OPENCODE_CAPABILITIES, type OpencodeCapabilities } from '../contract.ts'
-import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './hooks.ts'
-import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view.ts'
+import { OpencodeEvent, type OcCall, type OcResult } from './hooks.ts'
+import { OpencodeView, type OpenPane } from './view.ts'
 
 export interface OpencodeSession {
   readonly buildHarness: (signal: AbortSignal) => {
@@ -36,13 +36,13 @@ export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession, Opencode
     return this.start(session)
   }
 
-  drawn(): Drawn {
-    if (!this.hasStarted) return NOTHING_DRAWN
+  drawn(): OpencodeView {
+    if (!this.hasStarted) return OpencodeView.EMPTY
     const open = [...this.#panes].flatMap(([id, title]): OpenPane[] => {
       const body = this.paneBody(id)
       return body === undefined ? [] : [{ id, title, body }]
     })
-    return viewJsonOf({ statuses: this.statuses(), open, commands: this.#commands })
+    return OpencodeView.render({ statuses: this.statuses(), open, commands: this.#commands })
   }
 
   endTurn(): void {
@@ -50,7 +50,7 @@ export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession, Opencode
   }
 
   pressed(session: OpencodeSession, button: string): void {
-    const node = this.drawn().buttons.get(button)
+    const node = this.drawn().button(button)
     if (node !== undefined) this.press(session, { button: node, surface: 'terminal' })
   }
 
@@ -64,20 +64,32 @@ export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession, Opencode
   }
 
   async verdictOn({ call, cwd }: { call: OcCall; cwd: string }): Promise<Verdict> {
-    return this.verdictFor(callOf({ call, cwd }))
+    return this.verdictFor(OpencodeEvent.from({ call, cwd }).toCall())
   }
 
-  async followupOn(input: { call: OcCall; result: OcResult; cwd: string }): Promise<Followup> {
-    const result = resultOf(input)
-    return result === undefined ? {} : this.followupFor(result)
+  async followupOn({
+    call,
+    result,
+    cwd,
+  }: {
+    call: OcCall
+    result: OcResult
+    cwd: string
+  }): Promise<Followup> {
+    const converted = OpencodeEvent.from({ call, cwd }).toResult(result)
+    return converted === undefined ? {} : this.followupFor(converted)
   }
 
-  async followupOnFailed(failed: {
+  async followupOnFailed({
+    call,
+    message,
+    cwd,
+  }: {
     call: OcCall
     message: string
     cwd: string
   }): Promise<Followup> {
-    return this.followupFor(failedResultOf(failed))
+    return this.followupFor(OpencodeEvent.from({ call, cwd }).toFailedResult(message))
   }
 
   protected override adapter(session: OpencodeSession): HarnessAdapter {

@@ -18,18 +18,33 @@ function clipboardCommand(): readonly string[] | undefined {
   return undefined
 }
 
-export async function copy(text: string): Promise<Copied> {
-  const [command, ...args] = clipboardCommand() ?? []
-  if (command === undefined) return NO_CLIPBOARD
-  try {
-    const child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'] })
-    // A clipboard tool that exits before it reads, as one with no display to reach, breaks the
-    // pipe; its exit code says so below.
-    child.stdin.on('error', () => undefined)
-    child.stdin.end(text)
-    const closed: readonly unknown[] = await once(child, 'close')
-    return closed[0] === 0 ? { isCopied: true } : NO_CLIPBOARD
-  } catch {
-    return NO_CLIPBOARD
+/** Platform clipboard writer bound to the native clipboard command for Node/Bun harnesses. */
+export class Clipboard {
+  readonly #command: readonly string[] | undefined
+
+  private constructor(command: readonly string[] | undefined) {
+    this.#command = command
+  }
+
+  /** Detect and bind the current platform's native clipboard utility. */
+  static system(): Clipboard {
+    return new Clipboard(clipboardCommand())
+  }
+
+  /** Copy `text` to the system clipboard using the bound platform CLI tool. */
+  async copy(text: string): Promise<Copied> {
+    const [command, ...args] = this.#command ?? []
+    if (command === undefined) return NO_CLIPBOARD
+    try {
+      const child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'] })
+      // A clipboard tool that exits before it reads, as one with no display to reach, breaks the
+      // pipe; its exit code says so below.
+      child.stdin.on('error', () => undefined)
+      child.stdin.end(text)
+      const closed: readonly unknown[] = await once(child, 'close')
+      return closed[0] === 0 ? { isCopied: true } : NO_CLIPBOARD
+    } catch {
+      return NO_CLIPBOARD
+    }
   }
 }

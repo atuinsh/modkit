@@ -19,15 +19,6 @@ export interface OcResult {
   metadata?: unknown
 }
 
-export function callOf({ call, cwd }: { call: OcCall; cwd: string }): HookedCall {
-  const input = asRecord(call.input)
-  const { command, workdir } = input
-  if (OPENCODE_TOOLS.isShell(call.tool) && typeof command === 'string') {
-    return { kind: 'shell', id: call.id, command, cwd: typeof workdir === 'string' ? workdir : cwd }
-  }
-  return { kind: 'tool', id: call.id, tool: OPENCODE_TOOLS.toModTool(call.tool), input, cwd }
-}
-
 function textOf(content: OcResult['content']): string {
   if (typeof content === 'string') return content
   return (content ?? [])
@@ -35,57 +26,79 @@ function textOf(content: OcResult['content']): string {
     .join('\n')
 }
 
-export function resultOf({
-  call,
-  result,
-  cwd,
-}: {
-  call: OcCall
-  result: OcResult
-  cwd: string
-}): HookedResult | undefined {
-  const parsed = callOf({ call, cwd })
-  if (parsed.kind === 'tool') {
-    return { ...parsed, output: textOf(result.content), failed: false }
-  }
-  const { status, exit } = asRecord(result.metadata)
-  if (status === 'running') return undefined
-  const { output: structured } = asRecord(result.output)
-  const exitCode = typeof exit === 'number' ? exit : null
-  return {
-    ...parsed,
-    output: typeof structured === 'string' ? structured : textOf(result.content),
-    exitCode,
-    failed: exitCode !== 0,
-  }
-}
+/** Bound translator for opencode tool hook events and results. */
+export class OpencodeEvent {
+  readonly #call: OcCall
+  readonly #cwd: string
 
-// A call opencode ended with an error rather than a result, as the mod's handlers take it.
-export function failedResultOf({
-  call,
-  message,
-  cwd,
-}: {
-  call: OcCall
-  message: string
-  cwd: string
-}): HookedResult {
-  const parsed = callOf({ call, cwd })
-  return parsed.kind === 'shell'
-    ? { ...parsed, output: message, exitCode: null, failed: true }
-    : { ...parsed, output: message, failed: true }
-}
+  private constructor({ call, cwd }: { call: OcCall; cwd: string }) {
+    this.#call = call
+    this.#cwd = cwd
+  }
 
-export function withContext<Result extends OcResult>({
-  result,
-  context,
-}: {
-  result: Result
-  context: string
-}): Result {
-  const blocks: OcBlock[] =
-    typeof result.content === 'string'
-      ? [{ type: 'text', text: result.content }]
-      : [...(result.content ?? [])]
-  return { ...result, content: [...blocks, { type: 'text', text: context }] }
+  static from({ call, cwd }: { call: OcCall; cwd: string }): OpencodeEvent {
+    return new OpencodeEvent({ call, cwd })
+  }
+
+  /** Append a followup `context` text block to an opencode tool `result`. */
+  static withContext<Result extends OcResult>({
+    result,
+    context,
+  }: {
+    result: Result
+    context: string
+  }): Result {
+    const blocks: OcBlock[] =
+      typeof result.content === 'string'
+        ? [{ type: 'text', text: result.content }]
+        : [...(result.content ?? [])]
+    return { ...result, content: [...blocks, { type: 'text', text: context }] }
+  }
+
+  /** Convert this call into a modkit {@link HookedCall}. */
+  toCall(): HookedCall {
+    const input = asRecord(this.#call.input)
+    const { command, workdir } = input
+    if (OPENCODE_TOOLS.isShell(this.#call.tool) && typeof command === 'string') {
+      return {
+        kind: 'shell',
+        id: this.#call.id,
+        command,
+        cwd: typeof workdir === 'string' ? workdir : this.#cwd,
+      }
+    }
+    return {
+      kind: 'tool',
+      id: this.#call.id,
+      tool: OPENCODE_TOOLS.toModTool(this.#call.tool),
+      input,
+      cwd: this.#cwd,
+    }
+  }
+
+  /** Convert this call and completed `result` into a modkit {@link HookedResult}. */
+  toResult(result: OcResult): HookedResult | undefined {
+    const parsed = this.toCall()
+    if (parsed.kind === 'tool') {
+      return { ...parsed, output: textOf(result.content), failed: false }
+    }
+    const { status, exit } = asRecord(result.metadata)
+    if (status === 'running') return undefined
+    const { output: structured } = asRecord(result.output)
+    const exitCode = typeof exit === 'number' ? exit : null
+    return {
+      ...parsed,
+      output: typeof structured === 'string' ? structured : textOf(result.content),
+      exitCode,
+      failed: exitCode !== 0,
+    }
+  }
+
+  /** Convert this call and error `message` into a failed modkit {@link HookedResult}. */
+  toFailedResult(message: string): HookedResult {
+    const parsed = this.toCall()
+    return parsed.kind === 'shell'
+      ? { ...parsed, output: message, exitCode: null, failed: true }
+      : { ...parsed, output: message, failed: true }
+  }
 }

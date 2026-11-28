@@ -1,5 +1,5 @@
-import { placeAt, type Place } from './diagnostics.ts'
-import { keysOf, partsNamed, type ModCall } from './entry.ts'
+import { ModDiagnostic, type Place } from './diagnostics.ts'
+import { ModAst } from './entry.ts'
 import { syntax, type Node } from './program.ts'
 
 export const MODPARTS = [
@@ -26,17 +26,19 @@ export type Modparts = Readonly<Record<ModpartName, ModpartUsage | undefined>>
 
 function countOf(part: Node): number {
   if (syntax.isArrayLiteralExpression(part)) return part.elements.length
-  return keysOf(part)?.length ?? 1
+  return ModAst.keysOf(part)?.length ?? 1
 }
 
-function usageOf({ mod, name }: { mod: ModCall; name: ModpartName }): ModpartUsage | undefined {
-  const parts = partsNamed({ mod, name })
+function usageOf({ mod, name }: { mod: ModAst; name: ModpartName }): ModpartUsage | undefined {
+  const parts = mod.parts(name)
   const [first] = parts
   const count = Math.max(0, ...parts.map((part) => countOf(part)))
-  return first === undefined || count === 0 ? undefined : { count, at: placeAt(first) }
+  return first === undefined || count === 0
+    ? undefined
+    : { count, at: ModDiagnostic.placeAt(first) }
 }
 
-export const modpartsIn = (mod: ModCall): Modparts => ({
+export const modpartsIn = (mod: ModAst): Modparts => ({
   status: usageOf({ mod, name: 'status' }),
   commands: usageOf({ mod, name: 'commands' }),
   panes: usageOf({ mod, name: 'panes' }),

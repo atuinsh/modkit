@@ -13,13 +13,7 @@ export type { Failure, HarnessAdapter, Phase, Store, Stored } from './harness/in
 export { textOf } from './runtime/element.ts'
 export { mount, type Mounted, type View } from './runtime/mount.ts'
 export { PaneId } from './runtime/pane-id.ts'
-export {
-  dismissed,
-  nextShown,
-  NOTHING_SHOWN,
-  type PaneChange,
-  type Shown,
-} from './runtime/panes.ts'
+export { PaneReconciler, type PaneChange } from './runtime/panes.ts'
 export type { CommandView, PaneView } from './runtime/render.ts'
 export type {
   ButtonNode,

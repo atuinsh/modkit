@@ -12,16 +12,15 @@
  * @module
  */
 
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
 import {
-  hasAnyFlag,
   isStringLiteralType,
   isUnionType,
   SymbolFlags,
   syntax,
+  TsProject,
   TypeFlags,
   type Node,
-  type Project,
   type TsSymbol,
   type Type,
 } from './program.ts'
@@ -71,7 +70,7 @@ function writtenPathsOf({
   project,
   attribute,
 }: {
-  project: Project
+  project: TsProject
   attribute: syntax.JsxAttribute
 }): string[] | undefined {
   const value = attribute.initializer
@@ -100,12 +99,12 @@ function memberImageOf({
   project,
   type,
 }: {
-  project: Project
+  project: TsProject
   type: Type
 }): SpreadImage | undefined {
   const { checker } = project
   const isOpaque =
-    hasAnyFlag({ type, flags: TypeFlags.Any | TypeFlags.Unknown }) ||
+    TsProject.hasAnyFlag({ type, flags: TypeFlags.Any | TypeFlags.Unknown }) ||
     checker.getIndexInfosOfType(type).length > 0
   if (isOpaque) return undefined
   const image = checker.getPropertyOfType(type, 'image')
@@ -113,7 +112,7 @@ function memberImageOf({
   const declared = checker.getTypeOfSymbol(image)
   const present = declared === undefined ? undefined : checker.getNonNullableType(declared)
   // An `image?: undefined`, as a normalized `cond ? { image } : {}` has, sets nothing.
-  if (present !== undefined && hasAnyFlag({ type: present, flags: TypeFlags.Never })) {
+  if (present !== undefined && TsProject.hasAnyFlag({ type: present, flags: TypeFlags.Never })) {
     return SETS_NOTHING
   }
   const paths = present === undefined ? undefined : literalsOf(present)
@@ -126,7 +125,7 @@ function spreadImageOf({
   project,
   spread,
 }: {
-  project: Project
+  project: TsProject
   spread: syntax.JsxSpreadAttribute
 }): SpreadImage | undefined {
   const type = project.checker.getTypeAtLocation(spread.expression)
@@ -148,13 +147,13 @@ function spreadOver({
   spread,
   read,
 }: {
-  project: Project
+  project: TsProject
   spread: syntax.JsxSpreadAttribute
   read: Read
 }): Read {
   const image = spreadImageOf({ project, spread })
   if (image === undefined) {
-    return diagnosticAt({ code: 'image', message: SPREAD_MESSAGE, node: spread })
+    return ModDiagnostic.at({ code: 'image', message: SPREAD_MESSAGE, node: spread })
   }
   const set = image.paths.map((path): [string, Node] => [path, spread])
   if (image.isSet) return { paths: new Map(set), isSet: true }
@@ -169,7 +168,7 @@ function appliedOf({
   property,
   read,
 }: {
-  project: Project
+  project: TsProject
   property: Node
   read: Read
 }): Read {
@@ -177,7 +176,7 @@ function appliedOf({
   if (!isImageAttribute(property)) return read
   const paths = writtenPathsOf({ project, attribute: property })
   if (paths === undefined) {
-    return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: property })
+    return ModDiagnostic.at({ code: 'image', message: LITERAL_MESSAGE, node: property })
   }
   const at = property.initializer ?? property
   return { paths: new Map(paths.map((path) => [path, at])), isSet: true }
@@ -188,7 +187,7 @@ export function pathsOf({
   project,
   element,
 }: {
-  project: Project
+  project: TsProject
   element: syntax.JsxSelfClosingElement | syntax.JsxOpeningElement
 }): NamedPaths | Diagnostic {
   let read: Read = UNSET
@@ -197,5 +196,5 @@ export function pathsOf({
   }
   if (isUnknown(read)) return read
   if (read.isSet) return read.paths
-  return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: element })
+  return ModDiagnostic.at({ code: 'image', message: LITERAL_MESSAGE, node: element })
 }

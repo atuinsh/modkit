@@ -6,18 +6,11 @@ import type { Plugin } from '@opencode/plugin'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { SettingsSchema } from '@atuin/modkit-target-node/runtime/settings'
 
-import {
-  contractOf,
-  parseCloseInput,
-  parsePressInput,
-  parseRunInput,
-  parseSessionInput,
-  type ViewJson,
-} from '../contract.ts'
-import { hookCalls } from './calls.ts'
-import { opencodeServerOf } from './mcp.ts'
+import { OpencodeContract, type ViewJson } from '../contract.ts'
+import { OpencodeCallHooks } from './calls.ts'
+import { OpencodeMcpConfig } from './mcp.ts'
 import type { Served } from './served.ts'
-import { Sessions, sessionsDirOf } from './sessions.ts'
+import { Sessions } from './sessions.ts'
 
 export type { Served } from './served.ts'
 
@@ -40,7 +33,7 @@ async function followEvents({
 }): Promise<void> {
   for await (const event of ctx.event.subscribe()) {
     if (signal.aborted) return
-    const id = parseSessionInput(event.data)?.sessionID ?? ''
+    const id = OpencodeContract.parseSession(event.data)?.sessionID ?? ''
     // A session mounts the mod, and tells it the session started, the first time it is seen.
     if (id !== '' && event.type === 'session.created') void sessions.live(id)
     if (id !== '' && RUN_ENDS.has(event.type)) void endTurn({ sessions, id })
@@ -63,27 +56,27 @@ interface Handlers {
 
 const handlersOf = (sessions: Sessions): Handlers => ({
   view: async (input) => {
-    const req = parseSessionInput(input)
+    const req = OpencodeContract.parseSession(input)
     if (req === undefined) return NO_VIEW
     const live = await sessions.live(req.sessionID)
     return live?.runtime.drawn().json ?? NO_VIEW
   },
   press: async (input) => {
-    const req = parsePressInput(input)
+    const req = OpencodeContract.parsePress(input)
     if (req === undefined) return {}
     const live = await sessions.live(req.sessionID)
     live?.runtime.pressed(live.session, req.button)
     return {}
   },
   run: async (input) => {
-    const req = parseRunInput(input)
+    const req = OpencodeContract.parseRun(input)
     if (req === undefined) return {}
     const live = await sessions.live(req.sessionID)
     const said = await live?.runtime.run(live.session, req.command)
     return said === undefined || said === '' ? {} : { text: said }
   },
   close: async (input) => {
-    const req = parseCloseInput(input)
+    const req = OpencodeContract.parseClose(input)
     if (req === undefined) return {}
     const live = await sessions.live(req.sessionID)
     await live?.runtime.close(live.session, req.pane)
@@ -96,7 +89,8 @@ async function serversOf(ctx: Plugin.Context): Promise<Servers> {
   await ctx.mcp.transform((editor) => {
     configured = editor.list()
   })
-  return new Servers({ find: async (name) => opencodeServerOf({ name, configured }) })
+  const mcp = new OpencodeMcpConfig(configured)
+  return new Servers({ find: async (name) => mcp.resolve(name) })
 }
 
 class RpcOutEvent extends Event {
@@ -131,7 +125,7 @@ function sessionsOf({
     problems: settings.problems.map((problem) => `${plugin}: ${problem}`),
     ports: {
       reached: { ctx, plugin, cwd: ctx.location.directory, servers },
-      dir: sessionsDirOf({ data: dataDir(), plugin }),
+      dir: Sessions.dir({ data: dataDir(), plugin }),
       tags: served.state,
       changed: (id) => {
         events.dispatchEvent(new RpcOutEvent({ kind: 'changed', data: { sessionID: id } }))
@@ -153,7 +147,10 @@ async function setUp({
   const servers = await serversOf(ctx)
   const events = new EventTarget()
   const sessions = sessionsOf({ ctx, served, servers, events })
-  const registration = await ctx.rpc.register(contractOf(served.plugin), handlersOf(sessions))
+  const registration = await ctx.rpc.register(
+    OpencodeContract.for(served.plugin),
+    handlersOf(sessions),
+  )
   const stop = new AbortController()
   events.addEventListener(
     'rpc',
@@ -162,7 +159,7 @@ async function setUp({
     },
     { signal: stop.signal },
   )
-  await hookCalls({ ctx, sessions })
+  await new OpencodeCallHooks(sessions).attach(ctx)
   void followEvents({ ctx, sessions, signal: stop.signal })
   return () => {
     stop.abort()

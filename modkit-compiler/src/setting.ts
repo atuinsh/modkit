@@ -1,6 +1,6 @@
 import { splitByCase, upperFirst } from 'scule'
 
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
 import type { OptionDecl, OptionKind } from './ir.ts'
 import {
   isNumberLiteralType,
@@ -10,16 +10,12 @@ import {
   isTypeReference,
   syntax,
   type Node,
-  type Project,
+  type TsProject,
   type TsSymbol,
 } from './program.ts'
 import type { Field, Shape } from './shape.ts'
 
 const SETTING_KINDS = 'a string, a number, a boolean, one of a few strings, or a list of strings'
-
-/** Why `name` can't be a setting, naming what it `holds` when that is known. */
-export const cantBe = ({ name, holds }: { name: string; holds?: string }): string =>
-  `${name} can't be a setting${holds === undefined ? '' : `, as it holds ${holds}`}: a setting holds ${SETTING_KINDS}`
 
 function kindOf(shape: Shape): OptionKind | undefined {
   switch (shape.kind) {
@@ -81,7 +77,7 @@ function titleOf(name: string): string {
  * the settings parameter's destructuring gives it is written into plugin.json.
  */
 export class Setting {
-  readonly #project: Project
+  readonly #project: TsProject
   readonly #property: TsSymbol | undefined
   readonly #field: Field
   // The default the settings parameter's destructuring gives the prop, if any.
@@ -96,7 +92,7 @@ export class Setting {
     initializer,
     fallback,
   }: {
-    project: Project
+    project: TsProject
     property: TsSymbol | undefined
     field: Field
     initializer: Node | undefined
@@ -109,6 +105,11 @@ export class Setting {
     this.#fallback = fallback
   }
 
+  /** Why `name` can't be a setting, naming what it `holds` when that is known. */
+  static cantBe({ name, holds }: { name: string; holds?: string }): string {
+    return `${name} can't be a setting${holds === undefined ? '' : `, as it holds ${holds}`}: a setting holds ${SETTING_KINDS}`
+  }
+
   /** The option the prop declares, or the diagnostic saying why it can't be one. */
   option(): { isOk: true; option: OptionDecl } | { isOk: false; diagnostic: Diagnostic } {
     const { name } = this.#field
@@ -116,9 +117,9 @@ export class Setting {
     if (kind === undefined) {
       return {
         isOk: false,
-        diagnostic: diagnosticAt({
+        diagnostic: ModDiagnostic.at({
           code: 'option-type',
-          message: cantBe({ name }),
+          message: Setting.cantBe({ name }),
           node: this.#where(),
         }),
       }
@@ -128,7 +129,11 @@ export class Setting {
       const message = `${name} has no doc comment, which harnesses show as the setting's description`
       return {
         isOk: false,
-        diagnostic: diagnosticAt({ code: 'option-no-description', message, node: this.#where() }),
+        diagnostic: ModDiagnostic.at({
+          code: 'option-no-description',
+          message,
+          node: this.#where(),
+        }),
       }
     }
     const held = this.#defaulted(kind)
@@ -136,7 +141,7 @@ export class Setting {
       const message = `${name}'s default is written into the built manifest, so it's a literal or a const holding one`
       return {
         isOk: false,
-        diagnostic: diagnosticAt({
+        diagnostic: ModDiagnostic.at({
           code: 'option-default',
           message,
           node: this.#initializer ?? this.#where(),

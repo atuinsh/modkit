@@ -48,7 +48,7 @@ const recordedExit = ({ text, id }: { text: string; id: string }): Exit | undefi
     .map((line) => exitOn({ line, id }))
     .find((found) => found !== undefined)
 
-async function tailOf(path: string): Promise<string | undefined> {
+async function readTail(path: string): Promise<string | undefined> {
   try {
     await using file = await open(path, 'r')
     const { size } = await file.stat()
@@ -61,20 +61,24 @@ async function tailOf(path: string): Promise<string | undefined> {
   }
 }
 
-export async function exitFromTranscript({
-  path,
-  id,
-}: {
-  path: string
-  id: string
-}): Promise<Exit> {
-  for (let look = 0; look < LOOKS; look += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- each look waits for Codex to write the item
-    const text = await tailOf(path)
-    const exit = text === undefined ? undefined : recordedExit({ text, id })
-    if (exit !== undefined) return exit
-    // oxlint-disable-next-line no-await-in-loop -- the gap is the point: Codex writes meanwhile
-    await sleep(LOOK_GAP_MS)
+/** Reader bound to a Codex JSONL session transcript file, recovering shell command exit codes. */
+export class CodexTranscript {
+  readonly #path: string
+
+  constructor(path: string) {
+    this.#path = path
   }
-  return UNKNOWN_EXIT
+
+  /** Poll the tail of this transcript for the completed exit status of command `id`. */
+  async readExit(id: string): Promise<Exit> {
+    for (let look = 0; look < LOOKS; look += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- each look waits for Codex to write the item
+      const text = await readTail(this.#path)
+      const exit = text === undefined ? undefined : recordedExit({ text, id })
+      if (exit !== undefined) return exit
+      // oxlint-disable-next-line no-await-in-loop -- the gap is the point: Codex writes meanwhile
+      await sleep(LOOK_GAP_MS)
+    }
+    return UNKNOWN_EXIT
+  }
 }

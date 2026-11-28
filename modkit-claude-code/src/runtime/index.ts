@@ -35,7 +35,7 @@ import { bumpView, load, plugin, readView, save } from 'modkit-claude:state'
 import {
   asRecord,
   errorMessage,
-  failureReporter,
+  FailureReporter,
   McpResponse,
   ModkitTargetRuntime,
   type ButtonNode,
@@ -54,8 +54,8 @@ import {
 } from '@atuin/modkit-target/host'
 
 import { CLAUDE_CODE_CAPABILITIES, type ClaudeCodeCapabilities } from '../spec.ts'
-import { completionOf } from './answers.ts'
-import { decide, exitCodeOf } from './decide.ts'
+import { ClaudeCompletion } from './answers.ts'
+import { ClaudeVerdict } from './decide.ts'
 import { Drawing } from './draw.ts'
 
 function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'> {
@@ -73,7 +73,7 @@ function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'
     },
     complete: async (request) => {
       try {
-        return completionOf(await $.model.complete(request))
+        return new ClaudeCompletion(await $.model.complete(request)).toCompletion()
       } catch (error) {
         return { isAnswered: false, reason: 'refused', detail: errorMessage(error) }
       }
@@ -88,7 +88,7 @@ function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'
 
 async function harnessFor($: EngineInterface): Promise<HarnessAdapter> {
   const stored = await load($)
-  const report = failureReporter({
+  const { report } = FailureReporter.for({
     plugin,
     notify: (line) => {
       $.ui.toast(line)
@@ -183,7 +183,7 @@ function decided(
   if (mine !== undefined && 'ask' in mine && !canAsk && mine.otherwise === 'allow') {
     engine.toast(mine.ask)
   }
-  return decide({ verdict, mine, canAsk })
+  return new ClaudeVerdict(verdict).merge({ mine, canAsk })
 }
 
 function followedBy(engine: ClaudeEngine, ran: ToolCallResult, followup: Followup): ToolCallResult {
@@ -335,7 +335,7 @@ export class ClaudeCodeRuntime extends ModkitTargetRuntime<ClaudeEngine, ClaudeC
       command: e.command,
       cwd: await engine.cwd(),
       output: ran.text ?? '',
-      exitCode: exitCodeOf(ran),
+      exitCode: ClaudeVerdict.parseExitCode(ran),
       failed: ran.isError === true,
     }
     return followedBy(engine, ran, await this.afterShell(result))

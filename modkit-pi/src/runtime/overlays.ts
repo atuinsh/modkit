@@ -3,7 +3,7 @@ import type { OverlayHandle, OverlayOptions, TUI } from '@earendil-works/pi-tui'
 
 import type { ButtonNode, Failure, UiNode } from '@atuin/modkit-target/host'
 
-import { paintOf } from './paint.ts'
+import { PiThemePaint } from './paint.ts'
 import { PaneComponent, type PaneState } from './pane.ts'
 
 const PANE_WIDTH = '42%'
@@ -183,7 +183,8 @@ export class Overlays implements Disposable {
       height: () => this.#layoutOf(id).room,
       // TODO(markovejnovic): draw pictures in panes once pi-tui composites image lines in an
       // overlay; it composites an overlay's lines as text, so a pane draws each fallback.
-      paint: (hasKeys) => paintOf({ theme, hasKeys, isLine: false, drawsImages: false }),
+      paint: (hasKeys) =>
+        new PiThemePaint(theme).paint({ hasKeys, isLine: false, drawsImages: false }),
       press: (button) => {
         this.#press({ ctx, button })
       },

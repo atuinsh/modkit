@@ -7,7 +7,7 @@ import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runt
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { Images, Mod, Options } from '@atuin/modkit-target/host'
 
-import { configuredServer } from './configured.ts'
+import { CodexMcpConfig } from './configured.ts'
 import { LiveSession } from './live-session.ts'
 
 export type { LiveSession } from './live-session.ts'
@@ -37,7 +37,11 @@ export class Sessions implements Disposable {
       served.plugin,
     )
     this.#settings = SettingsSchema.from(served.settings)
-    this.#servers = new Servers({ find: configuredServer, own: `${served.plugin}-mod` })
+    const mcp = new CodexMcpConfig()
+    this.#servers = new Servers({
+      find: async (name) => mcp.resolve(name),
+      own: `${served.plugin}-mod`,
+    })
   }
 
   known(id: string): LiveSession | undefined {

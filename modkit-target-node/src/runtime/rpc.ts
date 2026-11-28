@@ -98,7 +98,8 @@ export interface Handlers {
   onNotify?: (call: { method: string; params: unknown }) => void
 }
 
-class LinePeer implements Peer {
+/** Line-delimited JSON-RPC 2.0 peer implementing {@link Peer} and {@link Disposable}. */
+export class RpcPeer implements Peer {
   readonly closed: Promise<void>
   readonly #output: Writable
   readonly #handlers: Handlers
@@ -107,7 +108,7 @@ class LinePeer implements Peer {
   #nextId = 1
   #isClosed = false
 
-  constructor({
+  private constructor({
     input,
     output,
     handlers,
@@ -129,6 +130,20 @@ class LinePeer implements Peer {
     this.closed = this.#untilClosed()
   }
 
+  /** Attach an {@link RpcPeer} to arbitrary `input`/`output` streams. */
+  static on({
+    input,
+    output,
+    ...handlers
+  }: { input: Readable; output: Writable } & Handlers): Peer {
+    return new RpcPeer({ input, output, handlers })
+  }
+
+  /** Attach an {@link RpcPeer} to `process.stdin` and `process.stdout`. */
+  static stdio(handlers: Handlers): Peer {
+    return new RpcPeer({ input: process.stdin, output: process.stdout, handlers })
+  }
+
   async call<Params, Result>(
     method: RpcMethod<Params, Result>,
     {
@@ -144,12 +159,6 @@ class LinePeer implements Peer {
       ...(signal !== undefined && { signal }),
     })
     return method.parseResult(raw)
-  }
-
-  #allocateId(): number {
-    const id = this.#nextId
-    this.#nextId += 1
-    return id
   }
 
   async request({ method, params, timeout, signal }: Request): Promise<unknown> {
@@ -185,6 +194,12 @@ class LinePeer implements Peer {
     this.#lines.close()
     for (const waiting of this.#pending.values()) waiting.reject(new Error('the peer closed'))
     this.#pending.clear()
+  }
+
+  #allocateId(): number {
+    const id = this.#nextId
+    this.#nextId += 1
+    return id
   }
 
   async #untilClosed(): Promise<void> {
@@ -242,12 +257,4 @@ class LinePeer implements Peer {
     if (error === undefined) waiting.resolve(result)
     else waiting.reject(parseWireError(error))
   }
-}
-
-export function peerOn({
-  input,
-  output,
-  ...handlers
-}: { input: Readable; output: Writable } & Handlers): Peer {
-  return new LinePeer({ input, output, handlers })
 }

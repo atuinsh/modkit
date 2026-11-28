@@ -1,5 +1,5 @@
 import { Target, type ModkitTarget } from '@atuin/modkit-target'
-import { emitRuntimeEntry, settingDecl, stateTags } from '@atuin/modkit-target-node/codegen'
+import { NodeBundler } from '@atuin/modkit-target-node/codegen'
 
 import type { createPiExtension } from '../runtime/index.ts'
 import { PI_CAPABILITIES, PI_TOOLS } from '../spec.ts'
@@ -14,9 +14,8 @@ export const target: ModkitTarget<undefined> = Target.define('pi')
   .build(({ compiled, dir, out, plugin, emit }) => {
     const { mod, entry, state, options, images, hooks } = compiled
     const pluginName = plugin.toString()
-    emitRuntimeEntry<typeof createPiExtension>(emit, {
+    NodeBundler.for({ dir, emit }).emitEntry<typeof createPiExtension>({
       file: 'extension.js',
-      dir,
       runtimeUrl: RUNTIME_URL,
       exportName: 'createPiExtension',
       mode: 'default-export',
@@ -25,8 +24,8 @@ export const target: ModkitTarget<undefined> = Target.define('pi')
       external: PROVIDED,
       payload: {
         plugin: pluginName,
-        settings: options.map((option) => settingDecl(option)),
-        state: stateTags(state),
+        settings: options.map((option) => NodeBundler.settingDecl(option)),
+        state: NodeBundler.stateTags(state),
         cards: hooks.cards,
         hasPanes: hooks.hasPanes,
       },

@@ -5,7 +5,7 @@ import { genImport, genObjectFromValues } from 'knitwork'
 import { build, type ExternalOption } from 'rolldown'
 
 import {
-  imagesSource,
+  ImageBundle,
   type ArtifactWriter,
   type ImageDecl,
   type OptionDecl,
@@ -15,93 +15,15 @@ import {
 import type { SettingDecl } from '../runtime/settings.ts'
 import type { Tags } from '../runtime/store.ts'
 
-export const stateTags = (state: readonly StateDecl[]): Tags =>
-  Object.fromEntries(state.map((one) => [one.id, one.tag]))
-
-export function settingDecl(option: OptionDecl): SettingDecl {
-  const common = { name: option.name, isRequired: option.isRequired }
-  switch (option.kind) {
-    case 'string':
-      return {
-        ...common,
-        kind: 'string',
-        ...(option.choices !== undefined && { choices: option.choices }),
-        ...(option.default !== undefined && { default: option.default }),
-      }
-    case 'strings':
-      return {
-        ...common,
-        kind: 'strings',
-        ...(option.default !== undefined && { default: option.default }),
-      }
-    case 'number':
-      return {
-        ...common,
-        kind: 'number',
-        ...(option.default !== undefined && { default: option.default }),
-      }
-    case 'boolean':
-      break
-  }
-  return {
-    ...common,
-    kind: 'boolean',
-    ...(option.default !== undefined && { default: option.default }),
-  }
-}
-
 const ENTRY = '\0modkit-entry'
-
-export async function bundle({
-  dir,
-  entry,
-  file,
-  platform = 'node',
-  external,
-}: {
-  dir: string
-  entry: string
-  file: string
-  platform?: 'node' | 'neutral'
-  external?: ExternalOption
-}): Promise<void> {
-  await build({
-    input: ENTRY,
-    cwd: dir,
-    platform,
-    ...(external !== undefined && { external }),
-    plugins: [
-      {
-        name: 'modkit-entry',
-        resolveId: (id) => (id === ENTRY ? id : null),
-        load: (id) => (id === ENTRY ? entry : null),
-      },
-    ],
-    transform: { jsx: { runtime: 'automatic', importSource: '@atuin/modkit' } },
-    // A mod's JSX is modkit's whatever its tsconfig says, so the override Rolldown warns of is meant.
-    // oxlint-disable-next-line eslint/max-params -- Rolldown's signature
-    onLog: (level, log, handler) => {
-      if (
-        log.code === 'CONFIGURATION_FIELD_CONFLICT' &&
-        /jsxImportSource|compilerOptions\.jsx\b/u.test(log.message)
-      ) {
-        return
-      }
-      handler(level, log)
-    },
-    write: true,
-    output: { file, format: 'es', codeSplitting: false },
-  })
-}
 
 type SerializablePayload<Fn> = Fn extends (served: infer Served) => unknown
   ? Omit<Served, 'mod' | 'images'>
   : never
 
-/** Options for {@link emitRuntimeEntry}, binding codegen output to a runtime entry function's signature. */
+/** Options for {@link NodeBundler.emitEntry}, binding codegen output to a runtime entry function. */
 export interface RuntimeEntryOptions<Fn> {
   readonly file: string
-  readonly dir: string
   readonly runtimeUrl: URL
   readonly exportName: string
   readonly mode: 'default-export' | 'top-level-await'
@@ -111,23 +33,119 @@ export interface RuntimeEntryOptions<Fn> {
   readonly external?: ExternalOption
 }
 
-/**
- * Emit a bundled runtime entry module verified at compile time against `Fn`'s parameter shape
- * (`Omit<Served, 'mod' | 'images'>`).
- */
-export function emitRuntimeEntry<Fn>(emit: ArtifactWriter, options: RuntimeEntryOptions<Fn>): void {
-  const { file, dir, runtimeUrl, exportName, mode, mod, images, payload, external } = options
-  const runtimePath = fileURLToPath(runtimeUrl)
-  const call = `${exportName}({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(payload)} })`
-  const invocation = mode === 'top-level-await' ? `await ${call}` : `export default ${call}`
-  const entry = [
-    genImport(runtimePath, [exportName]),
-    genImport(mod, 'mod'),
-    '',
-    invocation,
-    '',
-  ].join('\n')
-  emit.write(async (out) =>
-    bundle({ dir, entry, file: join(out, file), ...(external !== undefined && { external }) }),
-  )
+/** Bound Rolldown bundler and metadata translator for Node/Bun target codegen. */
+export class NodeBundler {
+  readonly #dir: string
+  readonly #emit: ArtifactWriter
+
+  private constructor({ dir, emit }: { dir: string; emit: ArtifactWriter }) {
+    this.#dir = dir
+    this.#emit = emit
+  }
+
+  /** Create a bundler bound to a mod's directory `dir` and target `emit` writer. */
+  static for({ dir, emit }: { dir: string; emit: ArtifactWriter }): NodeBundler {
+    return new NodeBundler({ dir, emit })
+  }
+
+  /** Map compiler {@link StateDecl}s into the schema-tag table read by `FileStore`. */
+  static stateTags(state: readonly StateDecl[]): Tags {
+    return Object.fromEntries(state.map((one) => [one.id, one.tag]))
+  }
+
+  /** Convert a compiler {@link OptionDecl} into a runtime {@link SettingDecl}. */
+  static settingDecl(option: OptionDecl): SettingDecl {
+    const common = { name: option.name, isRequired: option.isRequired }
+    switch (option.kind) {
+      case 'string':
+        return {
+          ...common,
+          kind: 'string',
+          ...(option.choices !== undefined && { choices: option.choices }),
+          ...(option.default !== undefined && { default: option.default }),
+        }
+      case 'strings':
+        return {
+          ...common,
+          kind: 'strings',
+          ...(option.default !== undefined && { default: option.default }),
+        }
+      case 'number':
+        return {
+          ...common,
+          kind: 'number',
+          ...(option.default !== undefined && { default: option.default }),
+        }
+      case 'boolean':
+        break
+    }
+    return {
+      ...common,
+      kind: 'boolean',
+      ...(option.default !== undefined && { default: option.default }),
+    }
+  }
+
+  /** Bundle a virtual entry source into `file` relative to the target's output directory. */
+  bundle({
+    entry,
+    file,
+    platform = 'node',
+    external,
+  }: {
+    entry: string
+    file: string
+    platform?: 'node' | 'neutral'
+    external?: ExternalOption
+  }): void {
+    const dir = this.#dir
+    this.#emit.write(async (out) => {
+      await build({
+        input: ENTRY,
+        cwd: dir,
+        platform,
+        ...(external !== undefined && { external }),
+        plugins: [
+          {
+            name: 'modkit-entry',
+            resolveId: (id) => (id === ENTRY ? id : null),
+            load: (id) => (id === ENTRY ? entry : null),
+          },
+        ],
+        transform: { jsx: { runtime: 'automatic', importSource: '@atuin/modkit' } },
+        // A mod's JSX is modkit's whatever its tsconfig says, so the override Rolldown warns of is meant.
+        // oxlint-disable-next-line eslint/max-params -- Rolldown's signature
+        onLog: (level, log, handler) => {
+          if (
+            log.code === 'CONFIGURATION_FIELD_CONFLICT' &&
+            /jsxImportSource|compilerOptions\.jsx\b/u.test(log.message)
+          ) {
+            return
+          }
+          handler(level, log)
+        },
+        write: true,
+        output: { file: join(out, file), format: 'es', codeSplitting: false },
+      })
+    })
+  }
+
+  /**
+   * Emit a bundled runtime entry module verified at compile time against `Fn`'s parameter shape
+   * (`Omit<Served, 'mod' | 'images'>`).
+   */
+  emitEntry<Fn>(options: RuntimeEntryOptions<Fn>): void {
+    const { file, runtimeUrl, exportName, mode, mod, images, payload, external } = options
+    const runtimePath = fileURLToPath(runtimeUrl)
+    const call = `${exportName}({ mod, images: ${new ImageBundle(images).toSource()}, ...${genObjectFromValues(payload)} })`
+    const invocation = mode === 'top-level-await' ? `await ${call}` : `export default ${call}`
+    const entry = [
+      genImport(runtimePath, [exportName]),
+      genImport(mod, 'mod'),
+      '',
+      invocation,
+      '',
+    ].join('\n')
+    this.bundle({ file, entry, ...(external !== undefined && { external }) })
+  }
 }

@@ -150,12 +150,6 @@ const ViewJsonSchema: v.GenericSchema<unknown, ViewJson> = v.object({
 
 export const EMPTY_VIEW: ViewJson = { statuses: [], panes: [], commands: [] }
 
-/** Validate an RPC `view` response against {@link ViewJsonSchema}, falling back to {@link EMPTY_VIEW}. */
-export function parseViewJson(raw: unknown): ViewJson {
-  const parsed = v.safeParse(ViewJsonSchema, raw)
-  return parsed.success ? parsed.output : EMPTY_VIEW
-}
-
 export type SessionId = string & v.Brand<'SessionId'>
 
 const SessionIdSchema = v.pipe(v.string(), v.minLength(1), v.brand('SessionId'))
@@ -164,33 +158,6 @@ const PressInputSchema = v.object({ sessionID: SessionIdSchema, button: v.string
 const RunInputSchema = v.object({ sessionID: SessionIdSchema, command: v.string() })
 const CloseInputSchema = v.object({ sessionID: SessionIdSchema, pane: v.string() })
 const RunOutputSchema = v.object({ text: v.optional(v.string()) })
-
-export function parseSessionInput(raw: unknown): { sessionID: SessionId } | undefined {
-  const parsed = v.safeParse(SessionInputSchema, raw)
-  return parsed.success ? parsed.output : undefined
-}
-
-export function parsePressInput(
-  raw: unknown,
-): { sessionID: SessionId; button: string } | undefined {
-  const parsed = v.safeParse(PressInputSchema, raw)
-  return parsed.success ? parsed.output : undefined
-}
-
-export function parseRunInput(raw: unknown): { sessionID: SessionId; command: string } | undefined {
-  const parsed = v.safeParse(RunInputSchema, raw)
-  return parsed.success ? parsed.output : undefined
-}
-
-export function parseCloseInput(raw: unknown): { sessionID: SessionId; pane: string } | undefined {
-  const parsed = v.safeParse(CloseInputSchema, raw)
-  return parsed.success ? parsed.output : undefined
-}
-
-export function parseRunOutput(raw: unknown): string {
-  const parsed = v.safeParse(RunOutputSchema, raw)
-  return parsed.success ? (parsed.output.text ?? '') : ''
-}
 
 // A JSON Schema, which opencode takes as an open record.
 interface Text {
@@ -245,16 +212,64 @@ const sessionAnd = <Key extends string>(properties: Readonly<Record<Key, Text>>)
   required: ['sessionID', ...Object.keys(properties)],
 })
 
-export const contractOf = (plugin: string): Contract => ({
-  id: `${plugin}-mod`,
-  methods: {
-    view: { input: SESSION, output: ANY_OBJECT },
-    press: { input: sessionAnd({ button: TEXT }), output: ANY_OBJECT },
-    run: { input: sessionAnd({ command: TEXT }), output: ANY_OBJECT },
-    close: { input: sessionAnd({ pane: TEXT }), output: ANY_OBJECT },
-  },
-  events: {
-    changed: { schema: SESSION },
-    notified: { schema: sessionAnd({ text: TEXT }) },
-  },
-})
+/** RPC schema and Valibot codecs shared by opencode's server and TUI plugin parts. */
+export class OpencodeContract {
+  readonly #plugin: string
+
+  private constructor(plugin: string) {
+    this.#plugin = plugin
+  }
+
+  /** Build the opencode RPC contract descriptor for `plugin`. */
+  static for(plugin: string): Contract {
+    return new OpencodeContract(plugin).toDescriptor()
+  }
+
+  /** Validate an RPC `view` response, falling back to {@link EMPTY_VIEW}. */
+  static parseView(raw: unknown): ViewJson {
+    const parsed = v.safeParse(ViewJsonSchema, raw)
+    return parsed.success ? parsed.output : EMPTY_VIEW
+  }
+
+  static parseSession(raw: unknown): { sessionID: SessionId } | undefined {
+    const parsed = v.safeParse(SessionInputSchema, raw)
+    return parsed.success ? parsed.output : undefined
+  }
+
+  static parsePress(raw: unknown): { sessionID: SessionId; button: string } | undefined {
+    const parsed = v.safeParse(PressInputSchema, raw)
+    return parsed.success ? parsed.output : undefined
+  }
+
+  static parseRun(raw: unknown): { sessionID: SessionId; command: string } | undefined {
+    const parsed = v.safeParse(RunInputSchema, raw)
+    return parsed.success ? parsed.output : undefined
+  }
+
+  static parseClose(raw: unknown): { sessionID: SessionId; pane: string } | undefined {
+    const parsed = v.safeParse(CloseInputSchema, raw)
+    return parsed.success ? parsed.output : undefined
+  }
+
+  static parseRunOutput(raw: unknown): string {
+    const parsed = v.safeParse(RunOutputSchema, raw)
+    return parsed.success ? (parsed.output.text ?? '') : ''
+  }
+
+  /** Materialize the JSON-schema RPC {@link Contract} object for this plugin. */
+  toDescriptor(): Contract {
+    return {
+      id: `${this.#plugin}-mod`,
+      methods: {
+        view: { input: SESSION, output: ANY_OBJECT },
+        press: { input: sessionAnd({ button: TEXT }), output: ANY_OBJECT },
+        run: { input: sessionAnd({ command: TEXT }), output: ANY_OBJECT },
+        close: { input: sessionAnd({ pane: TEXT }), output: ANY_OBJECT },
+      },
+      events: {
+        changed: { schema: SESSION },
+        notified: { schema: sessionAnd({ text: TEXT }) },
+      },
+    }
+  }
+}

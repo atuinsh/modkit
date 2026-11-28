@@ -1,18 +1,17 @@
 import { relative } from 'node:path'
 
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
 import type { StateDecl, StateKind } from './ir.ts'
-import { callsIn, modkitExports } from './modkit.ts'
+import { ModkitSymbols } from './modkit.ts'
 import {
   isStringLiteralType,
   isTypeReference,
-  resolvedSymbol,
   syntax,
-  type Project,
+  type TsProject,
   type Type,
 } from './program.ts'
-import { canonical, tagOf } from './shape.ts'
-import { shapeOf } from './types.ts'
+import { JsonShape } from './shape.ts'
+import { TypeShape } from './types.ts'
 
 // Where each declaration's value type sits among its return type's arguments: `State<T>`,
 // `Query<I, T>`.
@@ -30,7 +29,7 @@ type Found =
 
 /** A `state()` or `query()` call in the mod, which declares one value the mod keeps. */
 class StateCall {
-  readonly #project: Project
+  readonly #project: TsProject
   readonly #call: syntax.CallExpression
   readonly #kind: StateKind
 
@@ -39,7 +38,7 @@ class StateCall {
     call,
     kind,
   }: {
-    project: Project
+    project: TsProject
     call: syntax.CallExpression
     kind: StateKind
   }) {
@@ -62,8 +61,7 @@ class StateCall {
     if (held === undefined) {
       return this.#fail('state-not-json', `TypeScript gives ${id} no value type`)
     }
-    const { checker, program } = this.#project
-    const shaped = shapeOf({ checker, program, type: held })
+    const shaped = TypeShape.in(this.#project).of(held)
     if (!shaped.isJson) {
       const where = shaped.notJson.path === '' ? 'as its value' : `at ${shaped.notJson.path}`
       return this.#fail(
@@ -71,10 +69,16 @@ class StateCall {
         `${id} can't hold ${shaped.notJson.found} ${where}: a mod's state is JSON`,
       )
     }
-    const shape = canonical(shaped.shape)
+    const jsonShape = JsonShape.of(shaped.shape)
     return {
       isDeclared: true,
-      declared: { id, kind, shape, tag: tagOf(shaped.shape), call: this.#call },
+      declared: {
+        id,
+        kind,
+        shape: jsonShape.canonical(),
+        tag: jsonShape.tag(),
+        call: this.#call,
+      },
     }
   }
 
@@ -105,7 +109,7 @@ class StateCall {
   }
 
   #fail(code: Diagnostic['code'], message: string): Found {
-    return { isDeclared: false, diagnostic: diagnosticAt({ code, message, node: this.#call }) }
+    return { isDeclared: false, diagnostic: ModDiagnostic.at({ code, message, node: this.#call }) }
   }
 }
 
@@ -113,7 +117,7 @@ function duplicatesIn({
   project,
   declared,
 }: {
-  project: Project
+  project: TsProject
   declared: readonly Declared[]
 }): Diagnostic[] {
   const first = new Map<string, Declared>()
@@ -127,22 +131,22 @@ function duplicatesIn({
     const { line } = file.getLineAndCharacterOfPosition(earlier.call.getStart(file))
     const where = `${relative(project.dir, file.fileName)}:${line + 1}`
     const message = `${one.id} is also the id declared at ${where}; give one another`
-    return [diagnosticAt({ code: 'duplicate-state', message, node: one.call })]
+    return [ModDiagnostic.at({ code: 'duplicate-state', message, node: one.call })]
   })
 }
 
-export function declarationsIn(project: Project): {
+export function declarationsIn(project: TsProject): {
   state: StateDecl[]
   diagnostics: Diagnostic[]
 } {
   const kinds = new Map(
-    modkitExports(project).flatMap((symbol) =>
-      isKind(symbol.name) ? [[symbol.id, symbol.name] as const] : [],
-    ),
+    new ModkitSymbols(project)
+      .exports()
+      .flatMap((symbol) => (isKind(symbol.name) ? [[symbol.id, symbol.name] as const] : [])),
   )
   const found = project.files.flatMap((file) =>
-    callsIn(file).flatMap((call): Found[] => {
-      const symbol = resolvedSymbol({ checker: project.checker, node: call.expression })
+    ModkitSymbols.callsIn(file).flatMap((call): Found[] => {
+      const symbol = project.resolveSymbol(call.expression)
       const kind = symbol === undefined ? undefined : kinds.get(symbol.id)
       return kind === undefined ? [] : [new StateCall({ project, call, kind }).declared()]
     }),

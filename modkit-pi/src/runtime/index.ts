@@ -7,7 +7,7 @@ import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { CommandView, Images, Mod, Options } from '@atuin/modkit-target/host'
 
 import { Cards } from './cards.ts'
-import { agentDir } from './mcp.ts'
+import { PiMcpConfig } from './mcp.ts'
 import { FOCUS_KEY } from './pane.ts'
 import { PiRuntime } from './runtime.ts'
 
@@ -33,7 +33,7 @@ class Extension {
   constructor({ pi, served }: { pi: ExtensionAPI; served: Served }) {
     this.#pi = pi
     this.#served = served
-    this.#dir = join(agentDir(), 'modkit', served.plugin)
+    this.#dir = join(PiMcpConfig.agentDir(), 'modkit', served.plugin)
     this.#settings = SettingsSchema.from(served.settings)
     this.#cards = new Cards({
       tools: served.cards,

@@ -20,9 +20,9 @@ import { resolve as resolveImport } from 'import-meta-resolve'
 import * as v from 'valibot'
 
 import {
-  compile,
+  ModCompiler,
+  ModManifest,
   MODPARTS,
-  manifestAt,
   type Compiled,
   type Diagnostic,
   type DiagnosticCode,
@@ -120,7 +120,7 @@ export class ModPackage {
   compile(): Compiled {
     const listed = this.#listed()
     const targetPackages = listed.isOk ? listed.value.map((one) => one.ref.packageName) : []
-    return compile({ dir: this.#dir, targetPackages })
+    return new ModCompiler({ dir: this.#dir, targetPackages }).compile()
   }
 
   /** Load each target the package lists from its `node_modules`, or say why one can't be. */
@@ -144,7 +144,7 @@ export class ModPackage {
 
   // The `modkit` field of package.json, which a mod without one is told to add.
   #field(): Read<unknown> {
-    const manifest = manifestAt(join(this.#dir, 'package.json'))
+    const manifest = new ModManifest(this.#dir).readJson()
     if (!manifest.isOk) return { isOk: false, diagnostics: [manifest.diagnostic] }
     const field = v.safeParse(ManifestSchema, manifest.manifest)
     const modkit = field.success ? field.output.modkit : undefined

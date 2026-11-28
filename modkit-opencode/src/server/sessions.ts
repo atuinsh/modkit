@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { SessionPool } from '@atuin/modkit-target-node/runtime/session-pool'
 import { FileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
-  failureReporter,
+  FailureReporter,
   type Ask,
   type Images,
   type Mod,
@@ -57,6 +57,10 @@ export class Sessions implements Disposable {
     this.#ports = ports
   }
 
+  static dir({ data, plugin }: { data: string; plugin: string }): string {
+    return join(data, 'opencode', 'modkit', plugin, 'sessions')
+  }
+
   get cwd(): string {
     return this.#ports.reached.cwd
   }
@@ -94,7 +98,7 @@ export class Sessions implements Disposable {
     if (options === undefined) return undefined
     return this.#pool.getOrCreate(id, () => {
       const { reached, dir, tags } = this.#ports
-      const report = failureReporter({
+      const { report } = FailureReporter.for({
         plugin: reached.plugin,
         notify: (text) => {
           this.notify({ id, text })
@@ -132,6 +136,3 @@ export class Sessions implements Disposable {
     })
   }
 }
-
-export const sessionsDirOf = ({ data, plugin }: { data: string; plugin: string }): string =>
-  join(data, 'opencode', 'modkit', plugin, 'sessions')
