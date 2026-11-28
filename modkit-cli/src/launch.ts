@@ -46,7 +46,8 @@ async function commandOf({
   const target = listed?.find((one) => one.name === name)
   if (target === undefined) return `modkit.targets no longer lists ${name}, so it gets no harness`
   const out = join(build.out, name)
-  const harness = target.dev({ out, plugin: landed.plugin, scratch: join(dev, name), env })
+  const { plugin, hasStatus } = landed
+  const harness = target.dev({ out, plugin, hasStatus, scratch: join(dev, name), env })
   const digest = await digestOf({ dir: out, skipped: harness.writes ?? [] })
   if (digest !== landed.digest) {
     return `${name}: not started, since a build that never landed wrote over the ${clock(landed.at)} one; the next build that does starts it`
@@ -55,7 +56,7 @@ async function commandOf({
 }
 
 /**
- * Replace this process with the harness of the target `name`, on the build the `modkit` task
+ * Replace this process with the harness of the target `name`, on the build the `modkit-logs` task
  * last landed for it; returns an exit code only when it doesn't start.
  *
  * The build is checked once, so a save landing between the check and the harness reading its

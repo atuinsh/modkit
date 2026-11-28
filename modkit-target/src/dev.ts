@@ -38,6 +38,8 @@ export interface DevInput {
   plugin: string
   /** A directory the harness may keep files in while `modkit dev` runs. */
   scratch: string
+  /** Whether the mod has a status, which a harness may show in place of the user's own. */
+  hasStatus: boolean
   env: Env
 }
 

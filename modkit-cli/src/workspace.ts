@@ -1,6 +1,6 @@
 /**
- * The `modkit` task of `modkit dev`'s dekit project, which builds the mod on every save and brings
- * each harness's task onto its target's build.
+ * The `modkit-logs` task of `modkit dev`'s dekit project, which builds the mod on every save and
+ * brings each harness's task onto its target's build.
  *
  * Claude Code reloads its build itself; the rest are restarted onto theirs on the session they
  * were on. A harness whose build failed keeps running the last one. When dekit stops the task, as
@@ -28,7 +28,7 @@ export interface WorkspaceInput {
   env: Env
 }
 
-/** The `modkit` task: the build on every save, and each harness's task brought onto it. */
+/** The `modkit-logs` task: the build on every save, and each harness's task brought onto it. */
 export class Workspace {
   readonly #input: WorkspaceInput
   readonly #tasks: readonly HarnessTask[]

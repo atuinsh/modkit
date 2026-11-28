@@ -1,9 +1,9 @@
 /**
  * The `dev` command, which runs a mod's harnesses in dekit: a task per target the mod lists, each
- * running its harness on the target's build, beside a `modkit` task that builds on every save.
+ * running its harness on the target's build, beside a `modkit-logs` task that builds on every save.
  *
  * Run by hand, it writes the dekit project into `<out>/.dev/<mod>` and attaches this terminal to
- * it. Its tasks run it again with `MODKIT_DEV` set: `watch` for the `modkit` task
+ * it. Its tasks run it again with `MODKIT_DEV` set: `watch` for the `modkit-logs` task
  * ({@link Workspace}), and `harness` for a harness's, with `MODKIT_DEV_TARGET` naming the target
  * ({@link launch}).
  *
@@ -52,7 +52,7 @@ function pickedOf({
   return `--only names ${unlisted.join(', ')}, which modkit.targets does not list (it lists ${listed.join(', ')})`
 }
 
-// The tasks of the dekit project: `modkit`, then a harness's per target in `names`. Each runs
+// The tasks of the dekit project: a harness's per target in `names`, then `modkit-logs`. Each runs
 // this command again as it was run, under tsx or not, with every argument resolved.
 function tasksOf({
   build,
@@ -69,8 +69,8 @@ function tasksOf({
   const args = ['dev', build.dir, '--out', build.out, '--cwd', cwd, '--only', names.join(',')]
   const cmd = [...self, ...args]
   const watch: DekitTask = {
-    path: 'modkit',
-    label: 'modkit',
+    path: 'modkit-logs',
+    label: 'modkit-logs',
     cmd,
     cwd: process.cwd(),
     env: { MODKIT_DEV: 'watch' },
@@ -84,7 +84,8 @@ function tasksOf({
     env: { MODKIT_DEV: 'harness', MODKIT_DEV_TARGET: name },
     autostart: false,
   }))
-  return [watch, ...harnesses]
+  // The sidebar lists the tasks in this order: the harnesses first, and the build log last.
+  return [...harnesses, watch]
 }
 
 // Writes the project for a runner to start on: no record of a build any harness landed, and no
@@ -127,15 +128,15 @@ async function namesOf({
 const RunningConfig = v.pipe(
   v.string(),
   v.parseJson(),
-  v.object({ tasks: v.object({ modkit: v.object({ cmd: v.array(v.string()) }) }) }),
+  v.object({ tasks: v.object({ 'modkit-logs': v.object({ cmd: v.array(v.string()) }) }) }),
 )
 
-// The flags the `modkit` task of the `dekit.yaml` `config` runs with, after the mod's directory, if
-// it reads as one this command wrote.
+// The flags the `modkit-logs` task of the `dekit.yaml` `config` runs with, after the mod's
+// directory, if it reads as one this command wrote.
 function flagsOf(config: string): string | undefined {
   const parsed = v.safeParse(RunningConfig, config)
   if (!parsed.success) return undefined
-  const { cmd } = parsed.output.tasks.modkit
+  const { cmd } = parsed.output.tasks['modkit-logs']
   const [, ...flags] = cmd.slice(cmd.indexOf('dev') + 1)
   return flags.join(' ')
 }
@@ -171,7 +172,7 @@ async function readied({
 }
 
 // Attaches to `dekit` until it quits or is detached from, returning the exit code: non-zero when
-// the quit left something to undo, which the `modkit` task reported.
+// the quit left something to undo, which the `modkit-logs` task reported.
 async function attached(dekit: Dekit): Promise<number> {
   const code = await dekit.attach()
   if (await dekit.isRunning()) {

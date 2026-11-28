@@ -9,11 +9,14 @@ import { escapeRegExp } from 'es-toolkit/string'
 
 import {
   errorMessage,
+  PluginName,
   type DevCommand,
   type DevHarness,
   type DevInput,
   type Env,
 } from '@atuin/modkit-target'
+
+import { STATUSLINE_TOOL } from '../protocol.ts'
 
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
@@ -56,15 +59,31 @@ class CodexDev implements DevHarness {
   readonly reload = 'restarted'
   readonly #out: string
   readonly #plugin: string
+  readonly #hasStatus: boolean
   readonly #scratch: string
   readonly #env: Env
   #isListed = false
 
-  constructor({ out, plugin, scratch, env }: DevInput) {
+  constructor({ out, plugin, hasStatus, scratch, env }: DevInput) {
     this.#out = out
     this.#plugin = plugin
+    this.#hasStatus = hasStatus
     this.#scratch = scratch
     this.#env = env
+  }
+
+  // Puts the mod's status in this session's footer over the status line the user picked, which
+  // `/statusline` keeps for every session. `-c` reads its value as TOML, here an inline table.
+  get #statusLine(): string[] {
+    if (!this.#hasStatus) return []
+    const server = JSON.stringify(PluginName.parse(this.#plugin).serverName())
+    const provider = `{ server = ${server}, tool = ${JSON.stringify(STATUSLINE_TOOL)} }`
+    return [
+      '-c',
+      'features.tui_extensions_statusline=true',
+      '-c',
+      `tui.status_line_provider=${provider}`,
+    ]
   }
 
   get #marketplace(): string {
@@ -82,11 +101,8 @@ class CodexDev implements DevHarness {
     const others = installedCopies({ plugin: this.#plugin, env: this.#env }).filter(
       (selector) => selector !== this.#selector,
     )
-    return {
-      program: 'codex',
-      args: others.flatMap((selector) => ['-c', `plugins.${selector}.enabled=false`]),
-      env: {},
-    }
+    const disabled = others.flatMap((selector) => ['-c', `plugins.${selector}.enabled=false`])
+    return { program: 'codex', args: [...disabled, ...this.#statusLine], env: {} }
   }
 
   async built(): Promise<void> {

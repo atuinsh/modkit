@@ -1,6 +1,7 @@
 /**
- * A target's harness as `modkit dev`'s `modkit` task drives it: the dekit task that runs it, and
- * the build it last landed there, which it records for that task to start on ({@link Landed}).
+ * A target's harness as `modkit dev`'s `modkit-logs` task drives it: the dekit task that runs it,
+ * and the build it last landed there, which it records for that task to start on
+ * ({@link Landed}).
  *
  * @module
  */
@@ -42,13 +43,14 @@ export class HarnessTask {
       this.#failed()
       return
     }
-    const { out, plugin } = build
+    const { out, plugin, hasStatus } = build
     const harness = this.#harnessFor(build)
     const digest = await digestOf({ dir: out, skipped: harness.writes ?? [] })
     const way = await this.#wayOnto({ harness, digest })
     if (way === 'kept') return
     if (way === 'started') await harness.built?.()
-    const landed = new Landed({ digest, plugin, session: this.#session, at: new Date() })
+    const session = this.#session
+    const landed = new Landed({ digest, plugin, hasStatus, session, at: new Date() })
     // The harness's task reads the record as it starts, so it is written before the restart.
     await landed.write(Landed.pathOf({ dev: this.#dekit.root, name: this.#name }))
     this.#loaded = landed
@@ -67,8 +69,13 @@ export class HarnessTask {
     console.error(`${this.#name}: build failed; ${on}`)
   }
 
-  #harnessFor({ target, out, plugin }: Extract<TargetBuild, { isOk: true }>): DevHarness {
-    this.#harness ??= target.dev({ out, plugin, scratch: this.#scratch, env: this.#env })
+  #harnessFor({
+    target,
+    out,
+    plugin,
+    hasStatus,
+  }: Extract<TargetBuild, { isOk: true }>): DevHarness {
+    this.#harness ??= target.dev({ out, plugin, hasStatus, scratch: this.#scratch, env: this.#env })
     return this.#harness
   }
 

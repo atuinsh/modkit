@@ -1,5 +1,5 @@
 /**
- * The record of the build `modkit dev`'s `modkit` task last brought a harness onto, which the
+ * The record of the build `modkit dev`'s `modkit-logs` task last brought a harness onto, which the
  * harness's own task reads as it starts, `<target>.landed.json` in the dekit project's directory.
  *
  * @module
@@ -46,16 +46,19 @@ export async function digestOf({
 const LandedRecord = v.object({
   digest: v.string(),
   plugin: v.string(),
+  hasStatus: v.boolean(),
   session: v.string(),
   at: v.pipe(v.string(), v.isoTimestamp()),
 })
 
-/** The build the `modkit` task last brought a harness onto. */
+/** The build the `modkit-logs` task last brought a harness onto. */
 export class Landed {
   /** The {@link digestOf} the build's files, less those the harness writes itself. */
   readonly digest: string
   /** The harness's name for the package the build wrote, `atuin-mod`. */
   readonly plugin: string
+  /** Whether the mod has a status. */
+  readonly hasStatus: boolean
   /** The UUID of the session the harness runs on while `modkit dev` runs. */
   readonly session: string
   readonly at: Date
@@ -63,16 +66,19 @@ export class Landed {
   constructor({
     digest,
     plugin,
+    hasStatus,
     session,
     at,
   }: {
     digest: string
     plugin: string
+    hasStatus: boolean
     session: string
     at: Date
   }) {
     this.digest = digest
     this.plugin = plugin
+    this.hasStatus = hasStatus
     this.session = session
     this.at = at
   }
@@ -91,8 +97,8 @@ export class Landed {
   }
 
   async write(path: string): Promise<void> {
-    const { digest, plugin, session } = this
-    const record = { digest, plugin, session, at: this.at.toISOString() }
+    const { digest, plugin, hasStatus, session } = this
+    const record = { digest, plugin, hasStatus, session, at: this.at.toISOString() }
     await writeFile(path, `${JSON.stringify(record, null, JSON_INDENT_SPACES)}\n`)
   }
 }

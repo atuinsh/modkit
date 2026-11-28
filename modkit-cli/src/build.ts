@@ -44,6 +44,8 @@ export type TargetBuild = {
       isOk: true
       /** The harness's name for the package the build wrote, `atuin-mod`. */
       plugin: string
+      /** Whether the mod has a status. */
+      hasStatus: boolean
     }
   | { isOk: false }
 )
@@ -189,6 +191,6 @@ export class Build {
         '\n',
       ),
     )
-    return { target, out, isOk: true, plugin: built.plugin }
+    return { target, out, isOk: true, plugin: built.plugin, hasStatus: compiled.hooks.hasStatus }
   }
 }
