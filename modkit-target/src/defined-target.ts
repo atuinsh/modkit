@@ -5,7 +5,8 @@ import type * as v from 'valibot'
 
 import type { Diagnostic } from '@atuin/modkit-compiler'
 
-import type { Capabilities } from './capabilities.ts'
+import type { Capabilities } from './host/capabilities.ts'
+import type { HarnessTools } from './host/tools.ts'
 import { PluginName } from './plugin-name.ts'
 import { ModkitTarget, type BuildInput, type Built } from './target.ts'
 
@@ -39,16 +40,11 @@ export type TargetBuilt =
   | { readonly isOk: false; readonly diagnostics: readonly Diagnostic[] }
   | undefined
 
-export interface KnownTools {
-  readonly harness: string
-  readonly has: ReadonlySet<string>
-}
-
 export interface TargetConfig<Options> {
   readonly name: string
   readonly capabilities: Capabilities
   readonly options: v.GenericSchema<unknown, Options>
-  readonly tools: KnownTools | undefined
+  readonly tools: HarnessTools | undefined
   readonly build: (ctx: TargetBuildContext<Options>) => Promise<TargetBuilt> | TargetBuilt
 }
 
@@ -56,22 +52,6 @@ type PendingArtifact =
   | { readonly kind: 'text'; readonly path: string; readonly content: string }
   | { readonly kind: 'copy'; readonly path: string; readonly from: string }
   | { readonly kind: 'task'; readonly task: (out: string) => Promise<void> }
-
-function missingToolNotes({
-  tools,
-  harness,
-  has,
-}: {
-  tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
-  harness: string
-  has: ReadonlySet<string>
-}): string[] {
-  const hooked = new Set([...tools.before, ...tools.after, ...tools.cards])
-  return [...hooked]
-    .filter((tool) => !has.has(tool) && !tool.startsWith('mcp__'))
-    .toSorted()
-    .map((tool) => `${harness} has no ${tool} tool, so what the mod does on it never runs there`)
-}
 
 async function flush({
   out,
@@ -134,9 +114,7 @@ export class DefinedTarget<Options> extends ModkitTarget<Options> {
     }
     await flush({ out: input.out, artifacts })
     const missing =
-      this.#config.tools === undefined
-        ? []
-        : missingToolNotes({ tools: input.compiled.tools, ...this.#config.tools })
+      this.#config.tools === undefined ? [] : this.#config.tools.missingNotes(input.compiled.tools)
     return { isOk: true, plugin: plugin.toString(), notes: [...(result?.notes ?? []), ...missing] }
   }
 }

@@ -4,5 +4,5 @@
     // Bundled into a pi extension, which pi runs in Node.
     "types": ["node"]
   },
-  "include": ["."]
+  "include": [".", "../spec.ts"]
 }

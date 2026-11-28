@@ -1,4 +1,11 @@
-import { textOf, type ButtonNode, type CommandView, type UiNode } from '@atuin/modkit-target/host'
+import {
+  buttonKey,
+  textOf,
+  visitUiNode,
+  type ButtonNode,
+  type CommandView,
+  type UiNode,
+} from '@atuin/modkit-target/host'
 
 import type { NodeJson, PaneJson, ViewJson } from '../contract'
 
@@ -16,8 +23,7 @@ function buttonJson({
   here: string
   walk: Walk
 }): NodeJson {
-  // A key or a hotkey names its button for good; a position moves as the list around it does.
-  const name = node.key ?? (node.hotkey === undefined ? here : `hotkey:${node.hotkey}`)
+  const name = buttonKey(node, here)
   const named = `${at.split('.')[0] ?? at}:${name}`
   // Two buttons of one pane may share a key or a hotkey, as in separate lists; the later one is
   // told apart by where it is.
@@ -32,42 +38,41 @@ function buttonJson({
 }
 
 function nodeJson({ node, here, walk }: { node: UiNode; here: string; walk: Walk }): NodeJson {
-  if (typeof node === 'string') return node
-  const children = (): NodeJson[] =>
-    'children' in node ? nodesJson(node.children, { ...walk, at: here }) : []
-  switch (node.kind) {
-    case 'Text':
-      return {
-        kind: 'Text',
-        tone: node.tone,
-        bold: node.bold,
-        ...(node.color !== undefined && { color: node.color }),
-        ...(node.background !== undefined && { background: node.background }),
-        children: children(),
-      }
-    case 'Link':
-      return { kind: 'Link', href: node.href, children: children() }
-    case 'Column':
-    case 'Row':
-      return {
-        kind: node.kind,
-        gap: node.gap,
-        ...(node.border !== undefined && { border: node.border }),
-        ...(node.borderTone !== undefined && { borderTone: node.borderTone }),
-        ...(node.paddingX !== undefined && { paddingX: node.paddingX }),
-        ...(node.paddingY !== undefined && { paddingY: node.paddingY }),
-        children: children(),
-      }
-    case 'Button':
-      return buttonJson({ node, here, walk })
-    case 'Img': {
-      const { png, columns, rows, fallback } = node
-      return { kind: 'Img', png: png.base64, columns, rows, fallback }
-    }
-    case 'Markdown':
-      break
-  }
-  return { kind: 'Markdown', text: node.text }
+  const children = (nodes: readonly UiNode[]): NodeJson[] => nodesJson(nodes, { ...walk, at: here })
+  return visitUiNode<NodeJson>(node, {
+    string: (text) => text,
+    text: (textNode) => ({
+      kind: 'Text',
+      tone: textNode.tone,
+      bold: textNode.bold,
+      ...(textNode.color !== undefined && { color: textNode.color }),
+      ...(textNode.background !== undefined && { background: textNode.background }),
+      children: children(textNode.children),
+    }),
+    link: (linkNode) => ({
+      kind: 'Link',
+      href: linkNode.href,
+      children: children(linkNode.children),
+    }),
+    stack: (stack) => ({
+      kind: stack.kind,
+      gap: stack.gap,
+      ...(stack.border !== undefined && { border: stack.border }),
+      ...(stack.borderTone !== undefined && { borderTone: stack.borderTone }),
+      ...(stack.paddingX !== undefined && { paddingX: stack.paddingX }),
+      ...(stack.paddingY !== undefined && { paddingY: stack.paddingY }),
+      children: children(stack.children),
+    }),
+    button: (button) => buttonJson({ node: button, here, walk }),
+    img: ({ png, columns, rows, fallback }) => ({
+      kind: 'Img',
+      png: png.base64,
+      columns,
+      rows,
+      fallback,
+    }),
+    markdown: (md) => ({ kind: 'Markdown', text: md.text }),
+  })
 }
 
 function nodesJson(nodes: readonly UiNode[], walk: Walk): NodeJson[] {

@@ -1,6 +1,8 @@
 import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
 
-import type { NodeJson, ViewJson } from '../contract'
+import { parseViewJson, type NodeJson, type ViewJson } from '../contract'
+
+export { EMPTY_VIEW } from '../contract'
 
 export type Paint = { tone: Tone | 'accent' | 'border' } | { hex: Hex }
 
@@ -222,17 +224,6 @@ export function hotkeysIn(nodes: readonly NodeJson[]): Map<string, string> {
   return found
 }
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-export const EMPTY_VIEW: ViewJson = { statuses: [], panes: [], commands: [] }
-
 export function viewOf(answer: unknown): ViewJson {
-  if (!isRecord(answer)) return EMPTY_VIEW
-  const { statuses, panes, commands } = answer
-  if (!Array.isArray(statuses) || !Array.isArray(panes) || !Array.isArray(commands)) {
-    return EMPTY_VIEW
-  }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- the server part's own `ViewJson`, over the RPC
-  return answer as unknown as ViewJson
+  return parseViewJson(answer)
 }

@@ -47,9 +47,9 @@ interface Listing {
 const TargetRefSchema = v.pipe(
   v.string(),
   v.rawTransform(({ dataset, addIssue, NEVER }) => {
-    const parsed = TargetRef.parse(dataset.value)
-    if (typeof parsed !== 'string') return parsed
-    addIssue({ message: parsed })
+    const parsed = TargetRef.parse(dataset.value).outcome
+    if (parsed.isOk) return parsed.value
+    addIssue({ message: parsed.error })
     return NEVER
   }),
 )

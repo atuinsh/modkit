@@ -1,9 +1,6 @@
 import { asRecord, type HookedCall, type HookedResult } from '@atuin/modkit-target/host'
 
-const OPENCODE_SHELL = 'shell'
-const MOD_SHELL = 'Bash'
-
-const modToolOf = (tool: string): string => (tool === OPENCODE_SHELL ? MOD_SHELL : tool)
+import { OPENCODE_TOOLS } from '../contract'
 
 export interface OcCall {
   tool: string
@@ -25,10 +22,10 @@ export interface OcResult {
 export function callOf({ call, cwd }: { call: OcCall; cwd: string }): HookedCall {
   const input = asRecord(call.input)
   const { command, workdir } = input
-  if (call.tool === OPENCODE_SHELL && typeof command === 'string') {
+  if (OPENCODE_TOOLS.isShell(call.tool) && typeof command === 'string') {
     return { kind: 'shell', id: call.id, command, cwd: typeof workdir === 'string' ? workdir : cwd }
   }
-  return { kind: 'tool', id: call.id, tool: modToolOf(call.tool), input, cwd }
+  return { kind: 'tool', id: call.id, tool: OPENCODE_TOOLS.toModTool(call.tool), input, cwd }
 }
 
 function textOf(content: OcResult['content']): string {

@@ -2,7 +2,7 @@ import type * as v from 'valibot'
 
 import type { Compiled, Diagnostic } from '@atuin/modkit-compiler'
 
-import type { Capabilities } from './capabilities.ts'
+import type { Capabilities } from './host/capabilities.ts'
 
 /** A mod the compiler read without error. */
 export type CompiledMod = Extract<Compiled, { isOk: true }>

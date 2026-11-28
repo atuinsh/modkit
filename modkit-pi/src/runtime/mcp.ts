@@ -8,8 +8,8 @@ import {
   StringEnvSchema,
   StringListSchema,
   type StdioServer,
-  type Unreachable,
 } from '@atuin/modkit-target-node/runtime/servers'
+import { Result } from '@atuin/modkit-target/host'
 
 const EntrySchema = v.object({
   command: v.optional(v.unknown()),
@@ -25,7 +25,7 @@ type Entry = v.InferOutput<typeof EntrySchema>
 
 const ConfigSchema = v.object({ mcpServers: v.record(v.string(), v.unknown()) })
 
-function entryOf({ config, name }: { config: unknown; name: string }): Entry | undefined {
+function findEntry({ config, name }: { config: unknown; name: string }): Entry | undefined {
   const servers = v.safeParse(ConfigSchema, config)
   if (!servers.success) return undefined
   const entry = v.safeParse(EntrySchema, servers.output.mcpServers[name])
@@ -40,7 +40,7 @@ const HOME = '~/'
 const expanded = ({ path, home }: { path: string; home: string }): string =>
   path.startsWith(HOME) ? join(home, path.slice(HOME.length)) : path
 
-function stdioOf({
+function resolveStdio({
   name,
   entry,
   cwd,
@@ -50,23 +50,23 @@ function stdioOf({
   entry: Entry
   cwd: string
   home: string
-}): StdioServer | Unreachable {
+}): Result<StdioServer, string> {
   const { command, args, env, cwd: dir } = entry
   if (typeof command !== 'string') {
-    return {
-      reason: `${name} is an HTTP server, whose login is pi's own; a mod reaches stdio servers only`,
-    }
+    return Result.err(
+      `${name} is an HTTP server, whose login is pi's own; a mod reaches stdio servers only`,
+    )
   }
   const where = typeof dir === 'string' ? expanded({ path: dir, home }) : undefined
-  return {
+  return Result.ok({
     command: expanded({ path: command, home }),
     args: args.map((arg) => expanded({ path: arg, home })),
     env,
     cwd: where === undefined || isAbsolute(where) ? where : resolve(cwd, where),
-  }
+  })
 }
 
-function piServerOf({
+function parsePiServer({
   name,
   user,
   project,
@@ -78,14 +78,14 @@ function piServerOf({
   project: unknown
   cwd: string
   home: string
-}): StdioServer | Unreachable {
-  const own = entryOf({ config: user, name })
-  const local = entryOf({ config: project, name })
+}): Result<StdioServer, string> {
+  const own = findEntry({ config: user, name })
+  const local = findEntry({ config: project, name })
   const entry = local !== undefined && isWhole(local) ? local : own
-  if (entry === undefined) return { reason: `pi's MCP config names no ${name} server` }
+  if (entry === undefined) return Result.err(`pi's MCP config names no ${name} server`)
   const enabled = local?.enabled ?? entry.enabled
-  if (enabled === false) return { reason: `${name} is turned off in pi's MCP config` }
-  return stdioOf({ name, entry, cwd, home })
+  if (enabled === false) return Result.err(`${name} is turned off in pi's MCP config`)
+  return resolveStdio({ name, entry, cwd, home })
 }
 
 function readJson(path: string): unknown {
@@ -107,8 +107,8 @@ export function configuredServer({
   name: string
   cwd: string
   isTrusted: boolean
-}): StdioServer | Unreachable {
-  return piServerOf({
+}): Result<StdioServer, string> {
+  return parsePiServer({
     name,
     user: readJson(join(agentDir(), 'mcp.json')),
     project: isTrusted ? readJson(join(cwd, '.pi', 'mcp.json')) : undefined,

@@ -1,13 +1,13 @@
-import { ModkitTargetRuntime, type Repeat } from '@atuin/modkit-target/host'
+import { ModkitTargetRuntime, type Capabilities, type Repeat } from '@atuin/modkit-target/host'
 
 import { Timers } from './timers'
 
 /**
- * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning interval timer lifetimes via
- * {@link Disposable}.
+ * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning interval timer lifetimes and
+ * disposal state via {@link Disposable}.
  */
-export abstract class NodeTargetRuntime<Engine>
-  extends ModkitTargetRuntime<Engine>
+export abstract class NodeTargetRuntime<Engine, Caps extends Capabilities = Capabilities>
+  extends ModkitTargetRuntime<Engine, Caps>
   implements Disposable
 {
   readonly #timers = new Timers()
@@ -17,6 +17,7 @@ export abstract class NodeTargetRuntime<Engine>
   }
 
   [Symbol.dispose](): void {
+    this.disposeSession()
     this.#timers[Symbol.dispose]()
   }
 }

@@ -1,6 +1,6 @@
 import { MODPARTS, type Diagnostic, type ModpartName } from '@atuin/modkit-compiler'
 
-import type { Support } from './capabilities.ts'
+import type { Support } from './host/capabilities.ts'
 import type { ModPackage } from './package.ts'
 import type { Built, CompiledMod, ModkitTarget } from './target.ts'
 

@@ -9,7 +9,7 @@ import {
 import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
 import { modelFor } from '@atuin/modkit-target-node/runtime/models'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
+import { FileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
   errorMessage,
   failureReporter,
@@ -121,9 +121,8 @@ async function completeWith({
   }
 }
 
-export interface PiSessionResources {
+export interface PiSessionResources extends Disposable {
   readonly harness: HarnessAdapter
-  readonly servers: Servers
   readonly report: (failure: Failure) => void
 }
 
@@ -172,14 +171,12 @@ export function createSessionResources({
   plugin,
   dir,
   state,
-  isStopped,
 }: {
   pi: Pick<ExtensionAPI, 'sendMessage'>
   ctx: ExtensionContext
   plugin: string
   dir: string
   state: Tags
-  isStopped: () => boolean
 }): PiSessionResources {
   const report = failureReporter({
     plugin,
@@ -191,20 +188,19 @@ export function createSessionResources({
     find: async (name) =>
       configuredServer({ name, cwd: ctx.cwd, isTrusted: ctx.isProjectTrusted() }),
   })
-  const rawStore = fileStore({
+  const store = FileStore.open({
     dir: join(dir, 'sessions'),
     session: ctx.sessionManager.getSessionId(),
     tags: state,
     report,
   })
-  // A query still fetching when the session stopped would write its stale state over what the
-  // session's next runtime has saved since.
-  const store: Store = {
-    get: (key) => rawStore.get(key),
-    set: (key, stored) => {
-      if (!isStopped()) rawStore.set(key, stored)
+  const harness = buildPiHarness({ pi, ctx, plugin, servers, store, report })
+  return {
+    harness,
+    report,
+    [Symbol.dispose]: () => {
+      store[Symbol.dispose]()
+      servers[Symbol.dispose]()
     },
   }
-  const harness = buildPiHarness({ pi, ctx, plugin, servers, store, report })
-  return { harness, servers, report }
 }

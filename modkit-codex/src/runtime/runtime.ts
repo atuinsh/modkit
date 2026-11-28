@@ -1,29 +1,29 @@
 import { NodeTargetRuntime } from '@atuin/modkit-target-node/runtime/node-runtime'
-import {
-  NopPaneHost,
-  type Followup,
-  type HarnessAdapter,
-  type PaneHost,
-  type UiNode,
-  type Verdict,
+import type {
+  Followup,
+  HarnessAdapter,
+  Images,
+  Mod,
+  Options,
+  RuntimeHosts,
+  UiNode,
+  Verdict,
 } from '@atuin/modkit-target/host'
 
-import type { CodexHookEvent } from '../protocol'
+import { CODEX_CAPABILITIES, type CodexCapabilities, type CodexHookEvent } from '../protocol'
 import { exitFromTranscript, UNKNOWN_EXIT } from './transcript'
 
 export interface CodexSession {
   readonly harness: HarnessAdapter
 }
 
-export class CodexRuntime extends NodeTargetRuntime<CodexSession> {
-  protected override readonly panes: PaneHost<CodexSession> = new NopPaneHost(
-    'Codex draws no panes',
-  )
-  #opening: Promise<void> | undefined = undefined
+export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilities> {
+  constructor({ mod, options, images }: { mod: Mod<Options>; options: Options; images: Images }) {
+    super({ mod, options, images, capabilities: CODEX_CAPABILITIES })
+  }
 
   async open(session: CodexSession): Promise<void> {
-    this.#opening ??= this.start(session)
-    return this.#opening
+    return this.start(session)
   }
 
   statusLine(): readonly (readonly UiNode[])[] {
@@ -52,5 +52,9 @@ export class CodexRuntime extends NodeTargetRuntime<CodexSession> {
 
   protected override adapter(session: CodexSession): HarnessAdapter {
     return session.harness
+  }
+
+  protected override hosts(): RuntimeHosts<CodexSession, CodexCapabilities> {
+    return {}
   }
 }

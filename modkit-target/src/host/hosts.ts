@@ -1,5 +1,6 @@
 import type { CommandView } from '@atuin/modkit/host'
 
+import type { Capabilities, DroppedSupport, Support } from './capabilities.ts'
 import type { PaneId } from './pane-id.ts'
 
 export type Awaitable<T> = T | Promise<T>
@@ -53,3 +54,26 @@ export const NOP_COMMAND_HOST: CommandHost<unknown> = { register: NOOP }
 
 /** No-op {@link ViewHost} for pull-based or headless harnesses. */
 export const NOP_VIEW_HOST: ViewHost<unknown> = { redraw: NOOP }
+
+type PaneHostRequirement<Engine, S extends Support> = [S] extends [DroppedSupport]
+  ? { readonly panes?: never }
+  : { readonly panes: PaneHost<Engine> }
+
+type CommandHostRequirement<Engine, S extends Support> = [S] extends [DroppedSupport]
+  ? { readonly commands?: never }
+  : { readonly commands: CommandHost<Engine> }
+
+/**
+ * Capability-enforced surface hosts required by a {@link ModkitTargetRuntime}.
+ *
+ * A harness whose `capabilities.panes` or `capabilities.commands` is `'native' | 'lowered'` must
+ * supply the matching host at compile time; a `'dropped'` capability forbids supplying one and
+ * receives a `Nop*Host` carrying the declared `why`.
+ */
+export type RuntimeHosts<Engine, Caps extends Capabilities> = PaneHostRequirement<
+  Engine,
+  Caps['panes']
+> &
+  CommandHostRequirement<Engine, Caps['commands']> & {
+    readonly view?: ViewHost<Engine>
+  }

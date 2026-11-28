@@ -4,5 +4,5 @@
     // Bundled into a Claude Code mod, whose environment has no Node.
     "types": []
   },
-  "include": ["."]
+  "include": [".", "../spec.ts"]
 }

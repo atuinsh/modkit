@@ -1,4 +1,62 @@
-import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
+import * as v from 'valibot'
+
+import {
+  HarnessTools,
+  NATIVE,
+  type Border,
+  type Capabilities,
+  type DroppedSupport,
+  type Hex,
+  type LoweredSupport,
+  type NativeSupport,
+  type Tone,
+} from '@atuin/modkit-target/host'
+
+export interface OpencodeCapabilities extends Capabilities {
+  readonly status: LoweredSupport
+  readonly commands: NativeSupport
+  readonly panes: LoweredSupport
+  readonly beforeShell: NativeSupport
+  readonly afterShell: NativeSupport
+  readonly beforeTool: NativeSupport
+  readonly afterTool: NativeSupport
+  readonly toolCards: DroppedSupport
+}
+
+export const OPENCODE_CAPABILITIES: OpencodeCapabilities = {
+  status: {
+    kind: 'lowered',
+    why: "opencode's footer draws a button as text, which can't be pressed",
+  },
+  commands: NATIVE,
+  panes: {
+    kind: 'lowered',
+    why: 'opencode shows one pane at a time, the newest, and presses a button only by its hotkey',
+  },
+  beforeShell: NATIVE,
+  afterShell: NATIVE,
+  beforeTool: NATIVE,
+  afterTool: NATIVE,
+  toolCards: { kind: 'dropped', why: "opencode draws nothing under a tool's row" },
+}
+
+export const OPENCODE_TOOLS: HarnessTools = new HarnessTools({
+  harness: 'opencode',
+  shell: 'shell',
+  builtin: [
+    'edit',
+    'execute',
+    'glob',
+    'grep',
+    'question',
+    'read',
+    'skill',
+    'subagent',
+    'webfetch',
+    'websearch',
+    'write',
+  ],
+})
 
 export type NodeJson =
   | string
@@ -28,6 +86,74 @@ export interface ViewJson {
   statuses: NodeJson[][]
   panes: PaneJson[]
   commands: { name: string; description: string }[]
+}
+
+const ToneSchema = v.picklist(['plain', 'dim', 'warning', 'success', 'error'])
+const BorderSchema = v.picklist(['single', 'round', 'double', 'bold', 'dashed'])
+const HexSchema = v.custom<Hex>(
+  (value): value is Hex => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/u.test(value),
+)
+
+const NodeJsonSchema: v.GenericSchema<unknown, NodeJson> = v.lazy(() =>
+  v.union([
+    v.string(),
+    v.object({
+      kind: v.literal('Text'),
+      tone: ToneSchema,
+      bold: v.boolean(),
+      color: v.exactOptional(HexSchema),
+      background: v.exactOptional(HexSchema),
+      children: v.array(NodeJsonSchema),
+    }),
+    v.object({
+      kind: v.literal('Link'),
+      href: v.string(),
+      children: v.array(NodeJsonSchema),
+    }),
+    v.object({
+      kind: v.picklist(['Column', 'Row']),
+      gap: v.number(),
+      border: v.exactOptional(BorderSchema),
+      borderTone: v.exactOptional(ToneSchema),
+      paddingX: v.exactOptional(v.number()),
+      paddingY: v.exactOptional(v.number()),
+      children: v.array(NodeJsonSchema),
+    }),
+    v.object({
+      kind: v.literal('Button'),
+      id: v.string(),
+      hotkey: v.exactOptional(v.string()),
+      label: v.string(),
+    }),
+    v.object({ kind: v.literal('Markdown'), text: v.string() }),
+    v.object({
+      kind: v.literal('Img'),
+      png: v.string(),
+      columns: v.number(),
+      rows: v.number(),
+      fallback: v.string(),
+    }),
+  ]),
+)
+
+const PaneJsonSchema: v.GenericSchema<unknown, PaneJson> = v.object({
+  id: v.string(),
+  title: v.string(),
+  body: v.array(NodeJsonSchema),
+})
+
+const ViewJsonSchema: v.GenericSchema<unknown, ViewJson> = v.object({
+  statuses: v.array(v.array(NodeJsonSchema)),
+  panes: v.array(PaneJsonSchema),
+  commands: v.array(v.object({ name: v.string(), description: v.string() })),
+})
+
+export const EMPTY_VIEW: ViewJson = { statuses: [], panes: [], commands: [] }
+
+/** Validate an RPC `view` response against {@link ViewJsonSchema}, falling back to {@link EMPTY_VIEW}. */
+export function parseViewJson(raw: unknown): ViewJson {
+  const parsed = v.safeParse(ViewJsonSchema, raw)
+  return parsed.success ? parsed.output : EMPTY_VIEW
 }
 
 // A JSON Schema, which opencode takes as an open record.

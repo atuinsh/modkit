@@ -2,10 +2,7 @@ import { isPlainObject } from 'es-toolkit/predicate'
 
 import type { Followup, HookedCall, HookedResult } from '@atuin/modkit-target/host'
 
-const PI_SHELL = 'bash'
-const MOD_SHELL = 'Bash'
-
-export const modToolOf = (piTool: string): string => (piTool === PI_SHELL ? MOD_SHELL : piTool)
+import { PI_TOOLS } from '../spec'
 
 export interface PiCall {
   toolName: string
@@ -31,13 +28,13 @@ export interface Block {
 
 export function callOf({ event, cwd }: { event: PiCall; cwd: string }): HookedCall {
   const { command } = event.input
-  if (event.toolName === PI_SHELL && typeof command === 'string') {
+  if (PI_TOOLS.isShell(event.toolName) && typeof command === 'string') {
     return { kind: 'shell', id: event.toolCallId, command, cwd }
   }
   return {
     kind: 'tool',
     id: event.toolCallId,
-    tool: modToolOf(event.toolName),
+    tool: PI_TOOLS.toModTool(event.toolName),
     input: event.input,
     cwd,
   }
@@ -85,7 +82,7 @@ export function resultOf({
   if (call.kind === 'shell') {
     return { ...call, output: commandOutputOf(event), ...exitOf(event) }
   }
-  if (event.toolName === PI_SHELL) return undefined
+  if (PI_TOOLS.isShell(event.toolName)) return undefined
   return { ...call, output: outputOf(event.content), failed: event.isError }
 }
 

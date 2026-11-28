@@ -13,7 +13,6 @@
   "dependencies": {
     "@atuin/modkit-target-node": "workspace:*",
     "es-toolkit": "catalog:",
-    "knitwork": "^1.3.0",
     "valibot": "catalog:"
   },
   "devDependencies": {

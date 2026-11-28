@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 
-import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
+import { SessionPool } from '@atuin/modkit-target-node/runtime/session-pool'
+import { FileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
   failureReporter,
   type Ask,
@@ -12,7 +13,7 @@ import {
 import { buildHarness, type Reached } from './harness'
 import { OpencodeRuntime, type OpencodeSession } from './runtime'
 
-export interface Live {
+export interface Live extends Disposable {
   readonly runtime: OpencodeRuntime
   readonly session: OpencodeSession
   readonly opened: Promise<void>
@@ -33,7 +34,7 @@ export class Sessions implements Disposable {
   readonly #options: Options | undefined
   readonly #problems: readonly string[]
   readonly #ports: Ports
-  readonly #live = new Map<string, Live>()
+  readonly #pool = new SessionPool<Live>()
   readonly #seen = new Set<string>()
 
   constructor({
@@ -66,54 +67,65 @@ export class Sessions implements Disposable {
 
   async live(id: string): Promise<Live | undefined> {
     if (id === '') return undefined
-    const live = this.#live.get(id) ?? this.#started(id)
-    await live?.opened
-    return live
+    const existing = this.#pool.get(id)
+    if (existing !== undefined) {
+      await existing.opened
+      return existing
+    }
+    const created = this.#start(id)
+    await created?.opened
+    return created
   }
 
   all(): Live[] {
-    return [...this.#live.values()]
+    return this.#pool.values()
   }
 
   [Symbol.dispose](): void {
-    for (const { runtime } of this.#live.values()) runtime[Symbol.dispose]()
+    this.#pool[Symbol.dispose]()
   }
 
-  #started(id: string): Live | undefined {
+  #start(id: string): Live | undefined {
     if (!this.#seen.has(id)) {
       this.#seen.add(id)
       for (const text of this.#problems) this.notify({ id, text })
     }
     const options = this.#options
     if (options === undefined) return undefined
-    const runtime = new OpencodeRuntime({ mod: this.#mod, options, images: this.#images })
-    const session: OpencodeSession = {
-      harness: this.#harnessFor(id),
-      changed: () => {
-        this.#ports.changed(id)
-      },
-    }
-    const live: Live = { runtime, session, opened: runtime.open(session), asks: new Map() }
-    this.#live.set(id, live)
-    return live
-  }
-
-  #harnessFor(id: string): OpencodeSession['harness'] {
-    const { reached, dir, tags } = this.#ports
-    const report = failureReporter({
-      plugin: reached.plugin,
-      notify: (text) => {
-        this.notify({ id, text })
-      },
-    })
-    return buildHarness({
-      reached,
-      id,
-      store: fileStore({ dir, session: id, tags, report }),
-      notify: (text) => {
-        this.notify({ id, text })
-      },
-      report,
+    return this.#pool.getOrCreate(id, () => {
+      const { reached, dir, tags } = this.#ports
+      const report = failureReporter({
+        plugin: reached.plugin,
+        notify: (text) => {
+          this.notify({ id, text })
+        },
+      })
+      const store = FileStore.open({ dir, session: id, tags, report })
+      const runtime = new OpencodeRuntime({ mod: this.#mod, options, images: this.#images })
+      const session: OpencodeSession = {
+        harness: buildHarness({
+          reached,
+          id,
+          store,
+          notify: (text) => {
+            this.notify({ id, text })
+          },
+          report,
+        }),
+        changed: () => {
+          this.#ports.changed(id)
+        },
+      }
+      return {
+        runtime,
+        session,
+        opened: runtime.open(session),
+        asks: new Map(),
+        [Symbol.dispose]: () => {
+          store[Symbol.dispose]()
+          runtime[Symbol.dispose]()
+        },
+      }
     })
   }
 }

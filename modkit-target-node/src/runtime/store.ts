@@ -11,7 +11,7 @@ export type Tags = Readonly<Record<string, string>>
 
 // What a file holds of each key whose value still has the shape the mod declares for it: one
 // kept under another tag is of a type the mod has since changed.
-function storedIn({ path, tags }: { path: string; tags: Tags }): Map<string, Stored> {
+function readStored({ path, tags }: { path: string; tags: Tags }): Map<string, Stored> {
   const stored = new Map<string, Stored>()
   try {
     const json: unknown = JSON.parse(readFileSync(path, 'utf8'))
@@ -26,33 +26,82 @@ function storedIn({ path, tags }: { path: string; tags: Tags }): Map<string, Sto
   return stored
 }
 
-export function fileStore({
-  dir,
-  session,
-  tags,
-  report,
-}: {
-  dir: string
-  session: string
-  tags: Tags
-  report: (failure: Failure) => void
-}): Store {
-  const path = join(dir, fileNameOf(session))
-  const stored = storedIn({ path, tags })
-  const tagged = (): Record<string, unknown> =>
-    Object.fromEntries([...stored].map(([key, { value }]) => [key, { tag: tags[key], value }]))
-  return {
-    get: (key) => stored.get(key),
-    set: (key, value) => {
-      stored.set(key, value)
-      try {
-        mkdirSync(dir, { recursive: true })
-        // Written beside and renamed over, so a crash mid-write leaves the last whole file.
-        writeFileSync(`${path}.tmp`, JSON.stringify(tagged()))
-        renameSync(`${path}.tmp`, path)
-      } catch (error) {
-        report({ phase: 'render', error })
-      }
-    },
+/**
+ * Schema-tagged JSON file store for one session.
+ *
+ * Disposing freezes writes so an in-flight async query that finishes after session teardown cannot
+ * overwrite state saved by a subsequent runtime.
+ */
+export class FileStore implements Store, Disposable {
+  readonly #dir: string
+  readonly #path: string
+  readonly #tags: Tags
+  readonly #report: (failure: Failure) => void
+  readonly #stored: Map<string, Stored>
+  #isClosed = false
+
+  private constructor({
+    dir,
+    path,
+    tags,
+    report,
+    stored,
+  }: {
+    dir: string
+    path: string
+    tags: Tags
+    report: (failure: Failure) => void
+    stored: Map<string, Stored>
+  }) {
+    this.#dir = dir
+    this.#path = path
+    this.#tags = tags
+    this.#report = report
+    this.#stored = stored
+  }
+
+  /** Load or initialize a session's persisted state file under `dir`. */
+  static open({
+    dir,
+    session,
+    tags,
+    report,
+  }: {
+    dir: string
+    session: string
+    tags: Tags
+    report: (failure: Failure) => void
+  }): FileStore {
+    const path = join(dir, fileNameOf(session))
+    return new FileStore({ dir, path, tags, report, stored: readStored({ path, tags }) })
+  }
+
+  get(key: string): Stored | undefined {
+    return this.#stored.get(key)
+  }
+
+  set(key: string, value: Stored): void {
+    // Keep the in-memory record current so an in-flight query sees its input stored and terminates,
+    // while skipping disk writes after disposal so it never overwrites a subsequent session's file.
+    this.#stored.set(key, value)
+    if (this.#isClosed) return
+    try {
+      mkdirSync(this.#dir, { recursive: true })
+      const tagged = Object.fromEntries(
+        [...this.#stored].map(([name, held]) => [
+          name,
+          { tag: this.#tags[name], value: held.value },
+        ]),
+      )
+      // Written beside and renamed over, so a crash mid-write leaves the last whole file.
+      writeFileSync(`${this.#path}.tmp`, JSON.stringify(tagged))
+      renameSync(`${this.#path}.tmp`, this.#path)
+    } catch (error) {
+      this.#report({ phase: 'render', error })
+    }
+  }
+
+  [Symbol.dispose](): void {
+    this.#isClosed = true
   }
 }

@@ -3,7 +3,13 @@ import { once } from 'node:events'
 
 import * as v from 'valibot'
 
-import { errorMessage, McpResponse, type McpCall, type McpResult } from '@atuin/modkit-target/host'
+import {
+  errorMessage,
+  McpResponse,
+  type McpCall,
+  type McpResult,
+  type Result,
+} from '@atuin/modkit-target/host'
 
 import { peerOn, type Peer } from './rpc'
 
@@ -37,10 +43,6 @@ export interface StdioServer {
   args: readonly string[]
   env: Readonly<Record<string, string>>
   cwd: string | undefined
-}
-
-export interface Unreachable {
-  reason: string
 }
 
 interface Connection {
@@ -88,7 +90,7 @@ async function connect({
 
 export class Servers implements Disposable {
   readonly #connections = new Map<string, Promise<Connection>>()
-  readonly #find: (name: string) => Promise<StdioServer | Unreachable>
+  readonly #find: (name: string) => Promise<Result<StdioServer, string>>
   readonly #own: string | undefined
   #isClosed = false
 
@@ -96,7 +98,7 @@ export class Servers implements Disposable {
     find,
     own,
   }: {
-    find: (name: string) => Promise<StdioServer | Unreachable>
+    find: (name: string) => Promise<Result<StdioServer, string>>
     own?: string
   }) {
     this.#find = find
@@ -149,9 +151,10 @@ export class Servers implements Disposable {
   }
 
   async #connected(name: string): Promise<Connection> {
-    const server = await this.#find(name)
-    if ('reason' in server) throw new Error(server.reason)
-    return connect({ name, server })
+    const found = await this.#find(name)
+    const { outcome } = found
+    if (!outcome.isOk) throw new Error(outcome.error)
+    return connect({ name, server: outcome.value })
   }
 
   // A server that couldn't be started, or has since gone, is started again on the next call.
