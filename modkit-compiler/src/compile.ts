@@ -71,7 +71,15 @@ function hooksFor({
   }
 }
 
-function compiledIn({ project, dir }: { project: Project; dir: string }): Compiled {
+function compiledIn({
+  project,
+  dir,
+  targetPackages,
+}: {
+  project: Project
+  dir: string
+  targetPackages: readonly string[]
+}): Compiled {
   const mod = modInfo(dir)
   const typeErrors = typeErrorsIn(project)
   const path = resolve(dir, 'mod.tsx')
@@ -85,7 +93,7 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
   const settings = optionsIn({ project, mod: call })
   const literals = literalsIn({ project, mod: call, dir })
   const diagnostics = [
-    ...hostImportsIn(project),
+    ...hostImportsIn(project, targetPackages),
     ...declared.diagnostics,
     ...settings.diagnostics,
     ...literals.diagnostics,
@@ -106,7 +114,13 @@ function compiledIn({ project, dir }: { project: Project; dir: string }): Compil
   }
 }
 
-export function compile({ dir }: { dir: string }): Compiled {
+export function compile({
+  dir,
+  targetPackages = [],
+}: {
+  dir: string
+  targetPackages?: readonly string[]
+}): Compiled {
   const tsconfig = tsconfigAt(dir)
   if (typeof tsconfig !== 'string') {
     const mod = modInfo(dir)
@@ -114,7 +128,7 @@ export function compile({ dir }: { dir: string }): Compiled {
   }
   const project = openProject({ tsconfig })
   try {
-    return compiledIn({ project, dir })
+    return compiledIn({ project, dir, targetPackages })
   } finally {
     project.close()
   }

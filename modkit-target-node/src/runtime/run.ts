@@ -10,8 +10,6 @@ const MAX_OUTPUT_BYTES = 16_777_216
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
 
-const textOf = (value: unknown): string => (typeof value === 'string' ? value : '')
-
 // A command that ran and failed has a number for a code; one that couldn't start, a name.
 function failedRun({ command, error }: { command: string; error: unknown }): RunResult {
   if (!isError(error)) throw error
@@ -20,10 +18,12 @@ function failedRun({ command, error }: { command: string; error: unknown }): Run
   if (isUnstarted) {
     throw new Error(`couldn't run ${command}: ${error.message}`, { cause: error })
   }
+  const stdout: unknown = 'stdout' in error ? error.stdout : undefined
+  const stderr: unknown = 'stderr' in error ? error.stderr : undefined
   return {
     exitCode: typeof code === 'number' ? code : null,
-    stdout: textOf('stdout' in error ? error.stdout : undefined),
-    stderr: textOf('stderr' in error ? error.stderr : undefined),
+    stdout: typeof stdout === 'string' ? stdout : '',
+    stderr: typeof stderr === 'string' ? stderr : '',
   }
 }
 
@@ -52,7 +52,7 @@ export async function run({
 }
 
 // The checkout `cwd` is in, or `cwd` itself outside one, for a harness that names only a directory.
-export async function projectRootOf(cwd: string): Promise<string> {
+export async function findProjectRoot(cwd: string): Promise<string> {
   try {
     const found = await run({
       argv: ['git', 'rev-parse', '--show-toplevel'],

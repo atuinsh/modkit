@@ -16,6 +16,7 @@ export {
   type NativeSupport,
   type Support,
 } from './capabilities.ts'
+export { Duration } from './duration.ts'
 export {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
@@ -28,7 +29,6 @@ export {
   type ViewHost,
 } from './hosts.ts'
 export { McpResponse } from './mcp-response.ts'
-export { PaneId } from './pane-id.ts'
 export { Result } from './result.ts'
 export {
   ModkitTargetRuntime,
@@ -38,10 +38,18 @@ export {
   type Repeat,
 } from './runtime.ts'
 export { HarnessTools } from './tools.ts'
-export { buttonKey, flattenTextSpans, visitUiNode, type StyledSpan, type UiVisitor } from './ui.ts'
+export {
+  buttonKey,
+  collectButtons,
+  flattenTextSpans,
+  visitUiNode,
+  type StyledSpan,
+  type UiVisitor,
+} from './ui.ts'
 export { asRecord, errorMessage } from './values.ts'
 export { failureReporter, ModVerdict, type VerdictOutcome } from './verdict.ts'
 export {
+  PaneId,
   textOf,
   type ButtonNode,
   type CommandView,

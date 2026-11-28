@@ -116,3 +116,18 @@ export function visitUiNode<Out>(node: UiNode, visitor: UiVisitor<Out>): Out {
   }
   return visitor.markdown(node)
 }
+
+/** Collect every {@link ButtonNode} in `nodes` in document order using {@link visitUiNode}. */
+export function collectButtons(nodes: readonly UiNode[]): readonly ButtonNode[] {
+  return nodes.flatMap((node): readonly ButtonNode[] =>
+    visitUiNode<readonly ButtonNode[]>(node, {
+      string: () => [],
+      text: (textNode) => collectButtons(textNode.children),
+      link: (linkNode) => collectButtons(linkNode.children),
+      stack: (stack) => collectButtons(stack.children),
+      button: (button) => [button],
+      img: () => [],
+      markdown: () => [],
+    }),
+  )
+}

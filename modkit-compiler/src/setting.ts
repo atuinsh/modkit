@@ -110,34 +110,50 @@ export class Setting {
   }
 
   /** The option the prop declares, or the diagnostic saying why it can't be one. */
-  option(): OptionDecl | Diagnostic {
+  option(): { isOk: true; option: OptionDecl } | { isOk: false; diagnostic: Diagnostic } {
     const { name } = this.#field
     const kind = kindOf(this.#field.shape)
     if (kind === undefined) {
-      return diagnosticAt({ code: 'option-type', message: cantBe({ name }), node: this.#where() })
+      return {
+        isOk: false,
+        diagnostic: diagnosticAt({
+          code: 'option-type',
+          message: cantBe({ name }),
+          node: this.#where(),
+        }),
+      }
     }
     const description = this.#description()
     if (description === '') {
-      const message = `${name} has no doc comment, which Claude Code shows as the setting's description`
-      return diagnosticAt({ code: 'option-no-description', message, node: this.#where() })
+      const message = `${name} has no doc comment, which harnesses show as the setting's description`
+      return {
+        isOk: false,
+        diagnostic: diagnosticAt({ code: 'option-no-description', message, node: this.#where() }),
+      }
     }
     const held = this.#defaulted(kind)
     if (held === undefined) {
-      const message = `${name}'s default is written into plugin.json, so it's a literal or a const holding one`
-      return diagnosticAt({
-        code: 'option-default',
-        message,
-        node: this.#initializer ?? this.#where(),
-      })
+      const message = `${name}'s default is written into the built manifest, so it's a literal or a const holding one`
+      return {
+        isOk: false,
+        diagnostic: diagnosticAt({
+          code: 'option-default',
+          message,
+          node: this.#initializer ?? this.#where(),
+        }),
+      }
     }
     const { title, isSensitive } = this.#tags()
     return {
-      ...held,
-      name,
-      title: title ?? titleOf(name),
-      description,
-      isRequired: !this.#field.optional && this.#initializer === undefined,
-      isSensitive,
+      isOk: true,
+      option: {
+        ...held,
+        name,
+        title: title ?? titleOf(name),
+        description,
+        isRequired: !this.#field.optional && this.#initializer === undefined,
+        isSensitive,
+      },
     }
   }
 

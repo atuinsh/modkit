@@ -17,6 +17,7 @@ import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view.ts'
 
 export interface OpencodeSession {
   readonly harness: HarnessAdapter
+  readonly store: Disposable
   readonly changed: () => void
 }
 
@@ -78,6 +79,7 @@ export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession, Opencode
   }
 
   protected override adapter(session: OpencodeSession): HarnessAdapter {
+    this.own(session.store)
     return session.harness
   }
 

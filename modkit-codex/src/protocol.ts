@@ -2,6 +2,7 @@ import * as v from 'valibot'
 
 import {
   asRecord,
+  Duration,
   HarnessTools,
   NATIVE,
   type Capabilities,
@@ -52,6 +53,7 @@ export const CODEX_TOOLS: HarnessTools = new HarnessTools({
 
 // Long enough for the user to read and answer an elicitation prompt before Codex aborts the hook.
 const ASKING_TIMEOUT_S = 600
+const ASKING_TIMEOUT = Duration.seconds(ASKING_TIMEOUT_S)
 
 export type HookEventName =
   | 'SessionStart'
@@ -88,7 +90,7 @@ const TOOL = {
 interface HookSpec {
   readonly fields: Readonly<Record<string, unknown>>
   readonly carriesContext: boolean
-  readonly timeoutS?: number
+  readonly timeout?: Duration
 }
 
 const HOOKS = {
@@ -97,7 +99,7 @@ const HOOKS = {
   PreToolUse: {
     fields: { ...TOOL, permission_mode: v.optional(v.unknown()) },
     carriesContext: true,
-    timeoutS: ASKING_TIMEOUT_S,
+    timeout: ASKING_TIMEOUT,
   },
   PostToolUse: {
     fields: {
@@ -120,9 +122,9 @@ const HookSchema = v.variant('event', [
 
 type WireHookEvent = v.InferOutput<typeof HookSchema>
 
-export const hookTimeout = (event: HookEventName): number | undefined => {
+export const hookTimeout = (event: HookEventName): Duration | undefined => {
   const spec: HookSpec = HOOKS[event]
-  return spec.timeoutS
+  return spec.timeout
 }
 
 /** Build the `${field}` input map for a Codex hook from its wire schema. */

@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import * as v from 'valibot'
 
 import {
+  Duration,
   errorMessage,
   McpResponse,
   type McpCall,
@@ -14,8 +15,10 @@ import {
 import { peerOn, type Peer } from './rpc.ts'
 
 const PROTOCOL_VERSION = '2025-06-18'
-const START_MS = 30_000
-const CALL_MS = 120_000
+const START_TIMEOUT_S = 30
+const CALL_TIMEOUT_S = 120
+const START_TIMEOUT = Duration.seconds(START_TIMEOUT_S)
+const CALL_TIMEOUT = Duration.seconds(CALL_TIMEOUT_S)
 
 /** Valibot schema for an optional list of strings, falling back to `[]`. */
 export const StringListSchema: v.GenericSchema<unknown, string[]> = v.fallback(
@@ -75,7 +78,7 @@ async function connect({
       capabilities: {},
       clientInfo: { name: 'modkit', version: '0' },
     },
-    timeout: { ms: START_MS, what: `starting ${name}` },
+    timeout: { duration: START_TIMEOUT, what: `starting ${name}` },
   })
   try {
     await initialized
@@ -113,7 +116,7 @@ export class Servers implements Disposable {
       const result = await peer.request({
         method: 'tools/call',
         params: { name: tool, arguments: input ?? {} },
-        timeout: { ms: CALL_MS, what: `${server}'s ${tool}` },
+        timeout: { duration: CALL_TIMEOUT, what: `${server}'s ${tool}` },
       })
       return McpResponse.parse(result).toResult()
     } catch (error) {

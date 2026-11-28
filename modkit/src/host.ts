@@ -12,6 +12,7 @@
 export type { Failure, HarnessAdapter, Phase, Store, Stored } from './harness/index.ts'
 export { textOf } from './runtime/element.ts'
 export { mount, type Mounted, type View } from './runtime/mount.ts'
+export { PaneId } from './runtime/pane-id.ts'
 export {
   dismissed,
   nextShown,

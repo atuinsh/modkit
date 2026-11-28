@@ -6,17 +6,53 @@ import {
   type KeyId,
 } from '@earendil-works/pi-tui'
 
-import type { ButtonNode, UiNode } from '@atuin/modkit-target/host'
+import { collectButtons, type ButtonNode, type UiNode } from '@atuin/modkit-target/host'
 
 import { linesOf, PICK_MARK, type Paint } from './lines.ts'
 
 export const FOCUS_KEY = 'alt+m'
 
-function buttonsIn(nodes: readonly UiNode[]): ButtonNode[] {
-  return nodes.flatMap((node): ButtonNode[] => {
-    if (typeof node === 'string' || node.kind === 'Markdown' || node.kind === 'Img') return []
-    return node.kind === 'Button' ? [node] : buttonsIn(node.children)
-  })
+const MODIFIERS = new Set(['ctrl', 'shift', 'alt', 'super'])
+const SPECIAL_KEYS = new Set([
+  'escape',
+  'esc',
+  'enter',
+  'return',
+  'tab',
+  'space',
+  'backspace',
+  'delete',
+  'insert',
+  'clear',
+  'home',
+  'end',
+  'pageUp',
+  'pageDown',
+  'up',
+  'down',
+  'left',
+  'right',
+  'f1',
+  'f2',
+  'f3',
+  'f4',
+  'f5',
+  'f6',
+  'f7',
+  'f8',
+  'f9',
+  'f10',
+  'f11',
+  'f12',
+])
+const BASE_CHAR = /^[a-z0-9`\-=[\]\\;',./!@#$%^&*()_+|~{}:"<>?]$/u
+
+function isKeyId(raw: string): raw is KeyId {
+  const parts = raw.split('+')
+  const base = parts.at(-1)
+  if (base === undefined || (!BASE_CHAR.test(base) && !SPECIAL_KEYS.has(base))) return false
+  const mods = parts.slice(0, -1)
+  return new Set(mods).size === mods.length && mods.every((mod) => MODIFIERS.has(mod))
 }
 
 export interface PaneState {
@@ -112,7 +148,7 @@ function paneLines({
     0,
     Math.min(isRevealing ? revealing({ scroll, body, room }) : scroll, body.length - room),
   )
-  const hasButtons = buttonsIn(pane.body).length > 0
+  const hasButtons = collectButtons(pane.body).length > 0
   const hint = hintOf({ isFocused, canScroll: body.length > room, hasButtons })
   const top = `╭─${edged({ text: ` ${pane.title} `, width, end: '…', isAfter: true })}╮`
   const bottom = `╰${edged({ text: hint, width, end: '', isAfter: false })}─╯`
@@ -210,13 +246,12 @@ export class PaneComponent implements Component {
   }
 
   #pickedButton(): ButtonNode | undefined {
-    return this.#picked === undefined ? undefined : buttonsIn(this.#pane.body)[this.#picked]
+    return this.#picked === undefined ? undefined : collectButtons(this.#pane.body)[this.#picked]
   }
 
   #hotkeyed(data: string): ButtonNode | undefined {
-    return buttonsIn(this.#pane.body).find(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- a mod's hotkey is a key as pi spells one
-      ({ hotkey }) => hotkey !== undefined && matchesKey(data, hotkey as KeyId),
+    return collectButtons(this.#pane.body).find(
+      ({ hotkey }) => hotkey !== undefined && isKeyId(hotkey) && matchesKey(data, hotkey),
     )
   }
 
@@ -231,7 +266,7 @@ export class PaneComponent implements Component {
   // Tab moves the keyboard to the next of the pane's buttons, and shift+tab to the one before.
   #moved(data: string): boolean {
     const step = PICKS.find(({ key }) => matchesKey(data, key))?.by
-    const count = buttonsIn(this.#pane.body).length
+    const count = collectButtons(this.#pane.body).length
     if (step === undefined || count === 0) return false
     const from = this.#picked ?? (step > 0 ? -1 : 0)
     this.#picked = (from + step + count) % count

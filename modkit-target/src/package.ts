@@ -116,9 +116,11 @@ export class ModPackage {
     return this.#dir
   }
 
-  /** Compile the mod the package holds. */
+  /** Compile the mod the package holds, blocking imports of its listed target packages too. */
   compile(): Compiled {
-    return compile({ dir: this.#dir })
+    const listed = this.#listed()
+    const targetPackages = listed.isOk ? listed.value.map((one) => one.ref.packageName) : []
+    return compile({ dir: this.#dir, targetPackages })
   }
 
   /** Load each target the package lists from its `node_modules`, or say why one can't be. */

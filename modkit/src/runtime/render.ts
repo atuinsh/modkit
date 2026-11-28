@@ -7,6 +7,7 @@ import { Status } from '../modparts/status.ts'
 import type { UiNode } from '../ui/node.ts'
 import { Fragment, isElement, isTag, nameOf, primitiveOf, type ModElement } from './element.ts'
 import { withFrame, type RenderScope } from './frame.ts'
+import { PaneId } from './pane-id.ts'
 import { CallbackSchema, checked, describe, type Callback } from './schema.ts'
 
 /** Resolved slash command ready for a harness target to register. */
@@ -14,7 +15,7 @@ export interface CommandView {
   name: string
   description: string
   skill: string | undefined
-  pane: { title: string; body: readonly UiNode[] } | undefined
+  pane: { id: PaneId; title: string; body: readonly UiNode[] } | undefined
 }
 
 /** Resolved top-level pane ready for a harness target to open and render. */
@@ -100,6 +101,32 @@ function exceptBash({
   return byTool(handlers)
 }
 
+function checkPaneIds({
+  commands,
+  panes,
+}: {
+  commands: readonly CommandView[]
+  panes: readonly PaneView[]
+}): void {
+  const byPaneId = new Map<string, string>()
+  for (const command of commands) {
+    if (command.pane === undefined) continue
+    const key = command.pane.id.toString()
+    const earlier = byPaneId.get(key)
+    if (earlier !== undefined) {
+      throw new Error(
+        `/${command.name}'s pane shares the sanitized id ${key} with /${earlier}'s pane; rename one`,
+      )
+    }
+    byPaneId.set(key, command.name)
+  }
+  const shared = panes.find((pane) => byPaneId.has(pane.id))
+  if (shared !== undefined) {
+    const owner = byPaneId.get(shared.id) ?? shared.id
+    throw new Error(`the <Pane> id ${shared.id} names /${owner}'s pane already; give it another`)
+  }
+}
+
 /**
  * One render of a mod, inside the {@link RenderScope} its hooks read and write through.
  *
@@ -128,13 +155,7 @@ export class Render {
       this.#command(name, command),
     )
     const panes = this.#panes(parts.panes ?? [])
-    const toggled = new Set(commands.flatMap((one) => (one.pane === undefined ? [] : [one.name])))
-    const shared = panes.views.find((pane) => toggled.has(pane.id))
-    if (shared !== undefined) {
-      throw new Error(
-        `the <Pane> id ${shared.id} names /${shared.id}'s pane already; give it another`,
-      )
-    }
+    checkPaneIds({ commands, panes: panes.views })
     return {
       statuses: statuses.map((status) => this.#walk(childrenOf(status))),
       commands,
@@ -239,7 +260,7 @@ export class Render {
       name,
       description,
       skill,
-      pane: { title, body: this.#walk(childrenOf(element)) },
+      pane: { id: PaneId.fromCommand(name), title, body: this.#walk(childrenOf(element)) },
     }
   }
 

@@ -34,7 +34,7 @@ interface Drawn {
   done: () => void
 }
 
-export class Overlays {
+export class Overlays implements Disposable {
   readonly #press: (pressed: { ctx: ExtensionContext; button: ButtonNode }) => void
   readonly #dismiss: (id: string) => void
   readonly #report: (failure: Failure) => void
@@ -87,6 +87,10 @@ export class Overlays {
   stop(): void {
     for (const pane of this.#panes.values()) pane.close?.()
     this.#panes.clear()
+  }
+
+  [Symbol.dispose](): void {
+    this.stop()
   }
 
   #layoutOf(id: string): { below: number; room: number | undefined } {

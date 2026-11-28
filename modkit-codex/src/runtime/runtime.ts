@@ -15,6 +15,7 @@ import { exitFromTranscript, UNKNOWN_EXIT } from './transcript.ts'
 
 export interface CodexSession {
   readonly harness: HarnessAdapter
+  readonly store: Disposable
 }
 
 export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilities> {
@@ -51,6 +52,7 @@ export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilit
   }
 
   protected override adapter(session: CodexSession): HarnessAdapter {
+    this.own(session.store)
     return session.harness
   }
 

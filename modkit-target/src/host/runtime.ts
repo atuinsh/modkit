@@ -15,6 +15,7 @@ import {
   mount,
   nextShown,
   NOTHING_SHOWN,
+  PaneId,
   type ButtonNode,
   type HarnessAdapter,
   type Images,
@@ -24,6 +25,7 @@ import {
 } from '@atuin/modkit/host'
 
 import type { Capabilities } from './capabilities.ts'
+import { Duration } from './duration.ts'
 import {
   NOP_COMMAND_HOST,
   NOP_VIEW_HOST,
@@ -34,10 +36,9 @@ import {
   type RuntimeHosts,
   type ViewHost,
 } from './hosts.ts'
-import { PaneId } from './pane-id.ts'
 
 // How often a session refreshes the mod's resources.
-const TICK_MS = 1000
+const TICK = Duration.seconds(1)
 
 // Until a session starts, a failure has nowhere to be reported.
 const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
@@ -147,9 +148,10 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     return this.#opening
   }
 
-  /** Mark the session torn down so late subscriptions stop redrawing or syncing panes. */
+  /** Mark the session torn down, stopping queries and suppressing further redraws or pane syncs. */
   protected disposeSession(): void {
     this.#isDisposed = true
+    this.#mounted?.dispose()
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
@@ -201,7 +203,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
   protected paneBody(id: string | PaneId): readonly UiNode[] | undefined {
     const key = paneKey(id)
     const view = this.#mounted?.view()
-    const command = view?.commands.find((one) => PaneId.fromCommand(one.name).equals(key))
+    const command = view?.commands.find((one) => one.pane?.id.equals(key) === true)
     return command?.pane?.body ?? view?.panes.find((pane) => pane.id === key)?.body
   }
 
@@ -216,7 +218,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
     if (command.pane === undefined) {
       return (await this.#answering(engine, async () => mounted.ran(name))) ?? ''
     }
-    return this.#toggled(engine, { id: PaneId.fromCommand(name), title: command.pane.title })
+    return this.#toggled(engine, { id: command.pane.id, title: command.pane.title })
   }
 
   /** Answer the person pressing one of the mod's buttons, on the engine of the hook that drew it. */
@@ -252,7 +254,7 @@ export abstract class ModkitTargetRuntime<Engine, Caps extends Capabilities = Ca
       await this.#commands.register(engine, command)
     }
     this.repeat(engine, {
-      everyMs: TICK_MS,
+      everyMs: TICK.ms,
       tick: () => {
         if (!this.#isDisposed) void mounted.tick()
       },

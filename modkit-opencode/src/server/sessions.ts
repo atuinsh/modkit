@@ -112,6 +112,7 @@ export class Sessions implements Disposable {
           },
           report,
         }),
+        store,
         changed: () => {
           this.#ports.changed(id)
         },
@@ -122,7 +123,6 @@ export class Sessions implements Disposable {
         opened: runtime.open(session),
         asks: new Map(),
         [Symbol.dispose]: () => {
-          store[Symbol.dispose]()
           runtime[Symbol.dispose]()
         },
       }

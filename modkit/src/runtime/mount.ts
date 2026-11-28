@@ -43,6 +43,8 @@ export interface Mounted {
   closed(id: string): Promise<void>
   /** Register `listener` to run after each state-driven re-render. Returns an unsubscribe fn. */
   subscribe(listener: () => void): () => void
+  /** Stop queries and clear listeners when the session ends. */
+  dispose(): void
 }
 
 const NOTHING: Rendered = {
@@ -66,6 +68,7 @@ class MountedMod implements Mounted {
   readonly #listeners = new Set<() => void>()
   readonly #queries: Queries
   #rendered: Rendered = NOTHING
+  #isDisposed = false
 
   constructor({
     setup,
@@ -158,10 +161,17 @@ class MountedMod implements Mounted {
   }
 
   subscribe(listener: () => void): () => void {
+    if (this.#isDisposed) return () => undefined
     this.#listeners.add(listener)
     return () => {
       this.#listeners.delete(listener)
     }
+  }
+
+  dispose(): void {
+    this.#isDisposed = true
+    this.#queries.dispose()
+    this.#listeners.clear()
   }
 
   // A handler that throws, or answers what `answer` refuses, has no say: the mod fails open.
@@ -231,6 +241,7 @@ class MountedMod implements Mounted {
   }
 
   #write(change: Parameters<RenderScope['write']>[0]): void {
+    if (this.#isDisposed) return
     if (isRendering()) throw new Error('a state setter runs in a handler, never while rendering')
     checked({ holder: change.key, schema: JsonSchema, value: change.stored.value })
     this.#adapter.store.set(change.key, change.stored)

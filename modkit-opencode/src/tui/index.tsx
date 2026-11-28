@@ -13,7 +13,7 @@ import {
 } from 'solid-js'
 
 import type { ViewJson } from '../contract.ts'
-import { EMPTY_VIEW, hotkeysIn, specsOf, viewOf, type Paint, type Span, type Spec } from './draw.js'
+import { EMPTY_VIEW, OpenTuiView, type Paint, type Span, type Spec } from './draw.js'
 import { CONTRACT, PLUGIN } from './mod.js'
 
 const PANEL = `${PLUGIN}.pane`
@@ -176,7 +176,7 @@ function usePaneKeys(shared: Shared): void {
             void mod().close({ sessionID: id, pane: pane.id })
           },
         },
-        ...[...hotkeysIn(pane.body)].map(([hotkey, button]) => ({
+        ...[...OpenTuiView.hotkeys(pane.body)].map(([hotkey, button]) => ({
           id: `${PLUGIN}.pane.press.${hotkey}`,
           bind: hotkey,
           run: () => {
@@ -202,7 +202,7 @@ function Pane(props: { panel: PanelInput; shared: Shared }) {
           paddingRight={1}
         >
           <For
-            each={specsOf({
+            each={OpenTuiView.render({
               nodes: pane().body,
               hasKeys: true,
               spellsUrls: isLinkless(props.shared.ctx),
@@ -222,7 +222,7 @@ function Statuses(props: { shared: Shared }) {
       <For each={props.shared.view().statuses}>
         {(status) => (
           <box flexDirection="row" flexShrink={0}>
-            <For each={specsOf({ nodes: status, hasKeys: false, spellsUrls: false })}>
+            <For each={OpenTuiView.render({ nodes: status, hasKeys: false, spellsUrls: false })}>
               {(spec) => drawn({ spec, shared: props.shared, flow: 'line' })}
             </For>
           </box>
@@ -245,8 +245,7 @@ function commandKeys(shared: Shared): void {
         const id = shared.session()
         if (id === undefined) return
         const said: unknown = await clientOf(ctx).run({ sessionID: id, command: command.name })
-        const text =
-          typeof said === 'object' && said !== null && 'text' in said ? String(said.text) : ''
+        const text = OpenTuiView.parseRunReply(said)
         if (text !== '') ctx.ui.toast.show({ message: text })
       },
     })),
@@ -301,7 +300,9 @@ export default Plugin.define({
       const mine = asked
       const id = session()
       const next =
-        id === undefined ? EMPTY_VIEW : viewOf(await clientOf(ctx).view({ sessionID: id }))
+        id === undefined
+          ? EMPTY_VIEW
+          : OpenTuiView.parse(await clientOf(ctx).view({ sessionID: id }))
       if (mine === asked) setView(next)
     }
     listen({ shared, refresh })

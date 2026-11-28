@@ -102,7 +102,7 @@ function envIn(project: Project): { env: string[]; diagnostics: Diagnostic[] } {
   )
   const names = reads.map((call) => ({ call, name: textOf({ project, node: call.arguments[0] }) }))
   const message =
-    'harness.env names its variable with a string literal: Claude Code lists the variables a mod reads'
+    'harness.env names its variable with a string literal: targets list the variables a mod reads'
   return {
     env: sorted(names.flatMap(({ name }) => (name === undefined ? [] : [name]))),
     diagnostics: names.flatMap(({ call, name }) =>
