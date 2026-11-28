@@ -7,6 +7,10 @@
       "entry": ["mod.tsx!"],
       "ignoreDependencies": ["@atuin/modkit-(claude-code|codex|opencode|pi)"],
     },
+    "modkit-cli": {
+      // `modkit dev` runs dekit's shim, which it finds with `require.resolve` rather than imports.
+      "ignoreDependencies": ["@dekit/cli"],
+    },
     "modkit-claude-code": {
       // Claude Code provides `claude-code` to a mod, and the codegen writes `modkit-claude:state`.
       "ignoreDependencies": ["claude-code", "modkit-claude"],

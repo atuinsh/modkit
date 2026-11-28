@@ -2,6 +2,7 @@ import type * as v from 'valibot'
 
 import type { Compiled, Diagnostic } from '@atuin/modkit-compiler'
 
+import type { DevHarness, DevInput } from './dev.ts'
 import type { Capabilities } from './host/capabilities.ts'
 
 /** A mod the compiler read without error. */
@@ -45,4 +46,7 @@ export abstract class ModkitTarget<Options = unknown> {
 
   /** Write the mod's package for the harness into `input.out`. */
   abstract build(input: BuildInput<Options>): Promise<Built>
+
+  /** The harness `modkit dev` runs the build in `input.out` in. */
+  abstract dev(input: DevInput): DevHarness
 }

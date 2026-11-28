@@ -11,6 +11,12 @@ const PROVIDED = /^@(?:earendil-works|mariozechner)\//u
 export const target: ModkitTarget<undefined> = Target.define('pi')
   .capabilities(PI_CAPABILITIES)
   .knownTools(PI_TOOLS)
+  // `/reload` reloads only the extensions pi discovers, not one given with `-e`, so a rebuild
+  // restarts it.
+  .dev(({ out }) => ({
+    reload: 'restarted',
+    command: ({ id }) => ({ program: 'pi', args: ['-e', out, '--session-id', id], env: {} }),
+  }))
   .build(({ compiled, dir, out, plugin, emit }) => {
     const { mod, entry, state, options, images, hooks } = compiled
     const pluginName = plugin.toString()

@@ -1,7 +1,7 @@
 {
   "name": "@atuin/modkit-cli",
   "private": true,
-  "description": "The modkit command: build a mod for each harness it targets, once or on every save",
+  "description": "The modkit command: build a mod for each harness it targets, once, on every save, or with each harness running on it in dekit",
   "bin": {
     "modkit": "./src/main.ts"
   },
@@ -11,13 +11,17 @@
   },
   "dependencies": {
     "@atuin/modkit-compiler": "workspace:*",
+    "@dekit/cli": "^0.10.3",
     "chokidar": "^6.0.0",
     "citty": "^0.2.2",
-    "es-toolkit": "catalog:"
+    "es-toolkit": "catalog:",
+    "valibot": "catalog:",
+    "which": "^6.0.1"
   },
   "devDependencies": {
     "@atuin/modkit-target": "workspace:*",
     "@types/node": "catalog:",
+    "@types/which": "^3.0.4",
     "typescript": "catalog:"
   },
   "peerDependencies": {

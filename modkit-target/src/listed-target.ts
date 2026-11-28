@@ -1,5 +1,6 @@
 import { MODPARTS, type Diagnostic, type ModpartName } from '@atuin/modkit-compiler'
 
+import type { DevHarness, DevInput } from './dev.ts'
 import type { Support } from './host/capabilities.ts'
 import type { ModPackage } from './package.ts'
 import type { Built, CompiledMod, ModkitTarget } from './target.ts'
@@ -77,6 +78,11 @@ export class ListedTarget {
   async build(compiled: CompiledMod, out: string): Promise<Built> {
     const { dir } = this.#listedBy
     return this.#target.build({ compiled, dir, out, options: this.#options })
+  }
+
+  /** The harness `modkit dev` runs the target's build in. */
+  dev(input: DevInput): DevHarness {
+    return this.#target.dev(input)
   }
 
   #found(modpart: ModpartName, compiled: CompiledMod): Found {

@@ -3,6 +3,7 @@ import { emitRuntimeEntry, settingDecl, stateTags } from '@atuin/modkit-target-n
 
 import { CODEX_CAPABILITIES, CODEX_TOOLS } from '../protocol.ts'
 import type { serve } from '../runtime/index.ts'
+import { CodexDev } from './dev.ts'
 import { CodexPluginManifest } from './manifest.ts'
 
 const RUNTIME_URL = new URL('../runtime/index.ts', import.meta.url)
@@ -10,6 +11,7 @@ const RUNTIME_URL = new URL('../runtime/index.ts', import.meta.url)
 export const target: ModkitTarget<undefined> = Target.define('codex')
   .capabilities(CODEX_CAPABILITIES)
   .knownTools(CODEX_TOOLS)
+  .dev((input) => new CodexDev(input))
   .build(({ compiled, dir, plugin, emit }) => {
     const { mod, entry, state, options, env, images, hooks } = compiled
     const { hasStatus } = hooks
