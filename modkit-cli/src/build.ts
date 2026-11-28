@@ -15,7 +15,8 @@ import {
   type ListedTarget,
 } from '@atuin/modkit-target'
 
-const QUIET_MS = 150
+/** How long the mod's directory stays unchanged before a build starts. */
+const QUIET = Temporal.Duration.from({ milliseconds: 150 })
 
 function shown(path: string): string {
   const near = relative(process.cwd(), path)
@@ -131,7 +132,7 @@ export class Build {
     let last: Promise<unknown> = Promise.resolve()
     const rebuild = debounce(() => {
       last = last.then(async () => round(once))
-    }, QUIET_MS)
+    }, QUIET.total('millisecond'))
     const watcher = watch(this.#package.dir, {
       ignoreInitial: true,
       // The build writes inside `dir` by default; its own output must not start the next build.

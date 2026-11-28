@@ -23,7 +23,7 @@ import {
 
 import type { Build, TargetBuild } from './build.ts'
 import { Dekit } from './dekit.ts'
-import { clock, digestOf, Landed } from './landed.ts'
+import { digestOf, Landed } from './landed.ts'
 import type { DevLayout } from './layout.ts'
 import type { TargetPlace } from './target-place.ts'
 
@@ -88,12 +88,12 @@ export class HarnessTask implements AsyncDisposable {
     if (way === 'kept') return
     if (way === 'started') await harness.built()
     const session = this.#session
-    const landed = new Landed({ digest, plugin, hasStatus, session, at: new Date() })
+    const landed = new Landed({ digest, plugin, hasStatus, session, at: Temporal.Now.instant() })
     // The harness's task reads the record as it starts, so it is written before the restart.
     await this.#place.land(landed)
     this.#loaded = landed
     if (way === 'started') await this.#dekit.restart(this.#place.slug)
-    console.log(`${this.name}: ${way} on the ${clock(landed.at)} build`)
+    console.log(`${this.name}: ${way} on the ${landed.time} build`)
   }
 
   /**
@@ -155,7 +155,7 @@ export class HarnessTask implements AsyncDisposable {
     const digest = await digestOf({ dir: out, skipped: harness.writes })
     if (digest !== landed.digest) {
       return Result.err(
-        `${this.name}: not started, since a build that never landed wrote over the ${clock(landed.at)} one; the next build that does starts it`,
+        `${this.name}: not started, since a build that never landed wrote over the ${landed.time} one; the next build that does starts it`,
       )
     }
     return Result.ok(harness.command({ id: landed.session }))
@@ -163,7 +163,7 @@ export class HarnessTask implements AsyncDisposable {
 
   #failed(): void {
     const loaded = this.#loaded
-    const on = loaded === undefined ? 'none to start on yet' : `still on the ${clock(loaded.at)}`
+    const on = loaded === undefined ? 'none to start on yet' : `still on the ${loaded.time}`
     console.error(`${this.name}: build failed; ${on}`)
   }
 
