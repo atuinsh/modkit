@@ -29,30 +29,39 @@ import {
   type ModpartName,
 } from '@atuin/modkit-compiler'
 
+import { errorMessage } from './host/values.ts'
 import { ListedTarget } from './listed-target.ts'
+import { TargetRef } from './target-ref.ts'
 import { ModkitTarget } from './target.ts'
 
 export type Read<T> = { isOk: true; value: T } | { isOk: false; diagnostics: Diagnostic[] }
 
-/** One target a mod lists: its name, the gaps the mod accepts there, and the rest of its section. */
+/** One target a mod lists: its ref, the gaps the mod accepts there, and the rest of its section. */
 interface Listing {
-  name: string
+  ref: TargetRef
   gaps: readonly ModpartName[]
   /** The target's section of the `modkit` field less its `gaps`, for the target's options. */
   options: Readonly<Record<string, unknown>>
 }
 
-const TargetNameSchema = v.pipe(
+const TargetRefSchema = v.pipe(
   v.string(),
-  v.regex(/^[a-z][a-z0-9-]*$/u, 'a target name is lowercase letters, digits and -'),
-  v.check((name) => name !== 'targets', '`targets` names the list, not a target'),
+  v.rawTransform(({ dataset, addIssue, NEVER }) => {
+    const parsed = TargetRef.parse(dataset.value)
+    if (typeof parsed !== 'string') return parsed
+    addIssue({ message: parsed })
+    return NEVER
+  }),
 )
 
 const FieldSchema = v.looseObject({
   targets: v.pipe(
-    v.array(TargetNameSchema),
+    v.array(TargetRefSchema),
     v.minLength(1, 'a mod builds for at least one target'),
-    v.check((names) => new Set(names).size === names.length, 'a target is listed once'),
+    v.check(
+      (refs) => new Set(refs.map((ref) => ref.name)).size === refs.length,
+      'a target is listed once',
+    ),
   ),
 })
 
@@ -93,11 +102,6 @@ const issuesAt = ({
       return `${path === null ? at : `${at}.${path}`}: ${issue.message}`
     })
     .join('; ')
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
-const packageOf = (name: string): string => `@atuin/modkit-${name}`
 
 /** The package of a mod in `dir`: the mod the compiler reads, and the targets it builds for. */
 export class ModPackage {
@@ -154,22 +158,23 @@ export class ModPackage {
       return this.#failed('targets', issuesAt({ at: 'modkit', issues: parsed.issues }))
     }
     const { targets, ...sections } = parsed.output
-    const listed = targets.map((name) => this.#listing(name, sections[name]))
+    const names = targets.map((ref) => ref.name)
+    const listed = targets.map((ref) => this.#listing(ref, sections[ref.name]))
     const diagnostics = [
-      ...this.#strays(targets, sections),
+      ...this.#strays(names, sections),
       ...listed.flatMap((one) => (one.isOk ? [] : one.diagnostics)),
     ]
     if (diagnostics.length > 0) return { isOk: false, diagnostics }
     return { isOk: true, value: listed.flatMap((one) => (one.isOk ? [one.value] : [])) }
   }
 
-  #listing(name: string, section: unknown): Read<Listing> {
+  #listing(ref: TargetRef, section: unknown): Read<Listing> {
     const parsed = v.safeParse(SectionSchema, section ?? {})
     if (!parsed.success) {
-      return this.#failed('targets', issuesAt({ at: `modkit.${name}`, issues: parsed.issues }))
+      return this.#failed('targets', issuesAt({ at: `modkit.${ref.name}`, issues: parsed.issues }))
     }
     const { gaps, ...options } = parsed.output
-    return { isOk: true, value: { name, gaps, options } }
+    return { isOk: true, value: { ref, gaps, options } }
   }
 
   // Sections of the `modkit` field for targets it does not list.
@@ -203,44 +208,44 @@ export class ModPackage {
     }
   }
 
-  // The URL of target `name`'s codegen, resolved from the mod as an import, so a target's package
+  // The URL of target `ref`'s codegen, resolved from the mod as an import, so a target's package
   // can export it under an `import` condition and the CLI loads the build the mod itself would.
-  #entryOf(name: string): Read<string> {
-    const pkg = packageOf(name)
+  #entryOf(ref: TargetRef): Read<string> {
+    const pkg = ref.packageName
     if (!this.#isInstalled(pkg)) {
-      const message = `modkit.targets lists ${name}; add ${pkg} to the mod's devDependencies`
+      const message = `modkit.targets lists ${ref.name}; add ${pkg} to the mod's devDependencies`
       return this.#failed('target-missing', message)
     }
     try {
       return { isOk: true, value: resolveImport(`${pkg}/codegen`, this.#importer) }
     } catch (error) {
-      const message = `${pkg} is installed, but its ./codegen does not resolve as an import: ${messageOf(error)}`
+      const message = `${pkg} is installed, but its ./codegen does not resolve as an import: ${errorMessage(error)}`
       return this.#failed('target-missing', message)
     }
   }
 
-  async #targetNamed(name: string): Promise<Read<ModkitTarget>> {
-    const entry = this.#entryOf(name)
+  async #targetNamed(ref: TargetRef): Promise<Read<ModkitTarget>> {
+    const entry = this.#entryOf(ref)
     if (!entry.isOk) return entry
     const module: unknown = await import(entry.value)
     const exported = v.safeParse(ModuleSchema, module)
     if (!exported.success) {
       const [issue] = exported.issues
-      const message = `${packageOf(name)}/codegen exports no target ${name}: ${issue.message}`
+      const message = `${ref.packageName}/codegen exports no target ${ref.name}: ${issue.message}`
       return this.#failed('target-missing', message)
     }
     const { target } = exported.output
-    if (target.name === name) return { isOk: true, value: target }
-    const message = `${packageOf(name)}/codegen exports target ${target.name}, not ${name}`
+    if (target.name === ref.name) return { isOk: true, value: target }
+    const message = `${ref.packageName}/codegen exports target ${target.name}, not ${ref.name}`
     return this.#failed('target-missing', message)
   }
 
   async #loaded(listing: Listing): Promise<Read<ListedTarget>> {
-    const target = await this.#targetNamed(listing.name)
+    const target = await this.#targetNamed(listing.ref)
     if (!target.isOk) return target
     const options = v.safeParse(target.value.options, listing.options)
     if (!options.success) {
-      const message = issuesAt({ at: `modkit.${listing.name}`, issues: options.issues })
+      const message = issuesAt({ at: `modkit.${listing.ref.name}`, issues: options.issues })
       return this.#failed('target-options', message)
     }
     const { gaps } = listing

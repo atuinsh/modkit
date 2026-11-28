@@ -1,25 +1,18 @@
 import * as v from 'valibot'
 
-import type { StdioServer, Unreachable } from '@atuin/modkit-target-node/runtime/servers'
+import {
+  StringEnvSchema,
+  StringListSchema,
+  type StdioServer,
+  type Unreachable,
+} from '@atuin/modkit-target-node/runtime/servers'
 
 const ConfigSchema = v.object({
   disabled: v.optional(v.unknown()),
   enabled: v.optional(v.unknown()),
   type: v.optional(v.unknown()),
-  command: v.fallback(v.array(v.string()), []),
-  environment: v.fallback(
-    v.pipe(
-      v.record(v.string(), v.unknown()),
-      v.transform((env) =>
-        Object.fromEntries(
-          Object.entries(env).flatMap(([key, value]) =>
-            typeof value === 'string' ? [[key, value]] : [],
-          ),
-        ),
-      ),
-    ),
-    {},
-  ),
+  command: StringListSchema,
+  environment: StringEnvSchema,
 })
 
 export function opencodeServerOf({

@@ -6,19 +6,17 @@ import {
   RpcError,
 } from '@atuin/modkit-target-node/runtime/errors'
 import { peerOn, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
-import { resolveVerdict, type Followup } from '@atuin/modkit-target/host'
+import { asRecord, errorMessage, ModVerdict, type Followup } from '@atuin/modkit-target/host'
 
 import {
-  carriesContext,
+  CodexHookEvent,
   HOOK_TOOL,
-  parseHook,
-  serverNameOf,
   STATUSLINE_TOOL,
-  type HookEvent,
+  type Decision,
+  type WireHookOutput,
 } from '../protocol'
-import { hookOutputOf, withFollowup, type Decision, type Delivered } from './hooks'
-import { Sessions, type Live, type Served } from './sessions'
-import { statusLineOf } from './statusline'
+import { Sessions, type LiveSession, type Served } from './sessions'
+import { CodexStatusLine } from './statusline'
 
 export type { Served } from './sessions'
 
@@ -32,23 +30,18 @@ const ASK_SCHEMA = {
   required: ['run'],
 } as const
 
-function confirmedFrom(result: unknown): boolean | undefined {
+type Json = Readonly<Record<string, unknown>>
+
+function parseConfirmation(result: unknown): boolean | undefined {
   if (!isPlainObject(result)) return undefined
-  const { action, content }: Readonly<Record<string, unknown>> = result
+  const { action, content }: Json = result
   if (action !== 'accept' && action !== 'decline' && action !== 'cancel') return undefined
   return action === 'accept' && isPlainObject(content) && content['run'] === true
 }
 
-type Json = Readonly<Record<string, unknown>>
-
-const recordOf = (value: unknown): Json => (isPlainObject(value) ? value : {})
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
 const statusUri = (plugin: string): string => `ui://${plugin}/statusline`
 
-function toolsOf(served: Served): readonly Json[] {
+function listTools(served: Served): readonly Json[] {
   // `visibility` without "model" keeps a tool out of the model's list (MCP Apps), as only Codex's
   // hooks and its status line picker are meant to call these.
   const hidden = { ui: { visibility: ['app'] } }
@@ -74,12 +67,6 @@ function toolsOf(served: Served): readonly Json[] {
   return [hook, status]
 }
 
-function drained({ live, event }: { live: Live; event: HookEvent['event'] }): Delivered {
-  const notes = live.state.notes.splice(0)
-  const context = carriesContext(event) ? live.state.context.splice(0) : []
-  return { notes, context }
-}
-
 interface Acted {
   decision: Decision
   followup: Followup
@@ -88,10 +75,10 @@ interface Acted {
 const NOTHING: Acted = { decision: { kind: 'none' }, followup: {} }
 
 // The thread a status line read is for, which Codex names in the request's `_meta`.
-function threadOf(params: unknown): { id: string; cwd: string | undefined } | undefined {
-  const { thread } = recordOf(recordOf(recordOf(params)['_meta'])[STATUSLINE_STATE])
-  const { id, workspace } = recordOf(thread)
-  const { cwd } = recordOf(workspace)
+function parseThread(params: unknown): { id: string; cwd: string | undefined } | undefined {
+  const { thread } = asRecord(asRecord(asRecord(params)['_meta'])[STATUSLINE_STATE])
+  const { id, workspace } = asRecord(thread)
+  const { cwd } = asRecord(workspace)
   if (typeof id !== 'string') return undefined
   return { id, cwd: typeof cwd === 'string' ? cwd : undefined }
 }
@@ -114,7 +101,7 @@ class Server {
       case 'ping':
         return {}
       case 'tools/list':
-        return { tools: toolsOf(this.#served) }
+        return { tools: listTools(this.#served) }
       case 'tools/call':
         return this.#toolCall(params)
       case 'resources/list':
@@ -132,16 +119,16 @@ class Server {
   async run(peer: Peer): Promise<void> {
     this.#peer = peer
     await peer.closed
-    this.#sessions.close()
+    this.#sessions[Symbol.dispose]()
   }
 
   #initialize(params: unknown): Json {
-    const { capabilities, protocolVersion: asked } = recordOf(params)
-    this.#canElicit = isPlainObject(recordOf(capabilities)['elicitation'])
+    const { capabilities, protocolVersion: asked } = asRecord(params)
+    this.#canElicit = isPlainObject(asRecord(capabilities)['elicitation'])
     return {
       protocolVersion: typeof asked === 'string' ? asked : PROTOCOL_VERSION,
       capabilities: { tools: {}, resources: {} },
-      serverInfo: { name: serverNameOf(this.#served.plugin), version: this.#served.version },
+      serverInfo: { name: `${this.#served.plugin}-mod`, version: this.#served.version },
     }
   }
 
@@ -152,29 +139,29 @@ class Server {
         method: 'elicitation/create',
         params: { message: `${this.#served.plugin}: ${ask}`, requestedSchema: ASK_SCHEMA },
       })
-      return confirmedFrom(result)
+      return parseConfirmation(result)
     } catch {
       return undefined
     }
   }
 
-  async #acted({ live, event }: { live: Live; event: HookEvent }): Promise<Acted> {
+  async #act({ live, event }: { live: LiveSession; event: CodexHookEvent }): Promise<Acted> {
     const { runtime } = live
     if (runtime === undefined) return NOTHING
-    switch (event.event) {
+    switch (event.kind) {
       case 'Stop':
         runtime.endTurn()
         return NOTHING
       case 'PreToolUse': {
-        const outcome = await resolveVerdict({
-          verdict: await runtime.verdictOn(event),
+        const verdict = ModVerdict.from(await runtime.verdictOn(event))
+        const outcome = await verdict.resolve({
           canAsk: event.canAsk,
           confirm: async (ask) => this.#elicit(ask),
         })
         if (!outcome.allow) {
           return { ...NOTHING, decision: { kind: 'deny', reason: outcome.reason } }
         }
-        if (outcome.note !== undefined) live.state.notes.push(outcome.note)
+        if (outcome.note !== undefined) live.queueNote(outcome.note)
         return NOTHING
       }
       case 'PostToolUse':
@@ -187,32 +174,31 @@ class Server {
     return NOTHING
   }
 
-  async #hook(args: unknown): Promise<Json> {
-    const event = parseHook(args)
-    const live = await this.#sessions.open({ id: event.session, cwd: event.cwd })
-    const { decision, followup } = await this.#acted({ live, event })
-    const delivered = withFollowup({ delivered: drained({ live, event: event.event }), followup })
-    return hookOutputOf({ event: event.event, delivered, decision })
+  async #hook(args: unknown): Promise<WireHookOutput> {
+    const event = CodexHookEvent.parse(args)
+    const live = await this.#sessions.open({ id: event.sessionId, cwd: event.cwd })
+    const { decision, followup } = await this.#act({ live, event })
+    return event.reply({ delivered: live.drain(event.carriesContext), followup, decision })
   }
 
   async #statusLine(params: unknown): Promise<string> {
-    const thread = threadOf(params)
+    const thread = parseThread(params)
     if (thread === undefined) return JSON.stringify(null)
     const { id, cwd } = thread
     // A thread the hooks haven't reached yet, as before its first turn, mounts here.
     const live =
       this.#sessions.known(id) ??
       (cwd === undefined ? undefined : await this.#sessions.open({ id, cwd }))
-    return JSON.stringify(statusLineOf(live?.runtime?.statusLine() ?? []))
+    return JSON.stringify(CodexStatusLine.render(live?.runtime?.statusLine() ?? []))
   }
 
   async #toolCall(params: unknown): Promise<unknown> {
-    const { name, arguments: args } = recordOf(params)
+    const { name, arguments: args } = asRecord(params)
     if (name === HOOK_TOOL) {
       try {
         return { content: [{ type: 'text', text: JSON.stringify(await this.#hook(args)) }] }
       } catch (error) {
-        return { isError: true, content: [{ type: 'text', text: messageOf(error) }] }
+        return { isError: true, content: [{ type: 'text', text: errorMessage(error) }] }
       }
     }
     if (name === STATUSLINE_TOOL && this.#served.hasStatus) {
@@ -224,7 +210,7 @@ class Server {
   }
 
   async #read(params: unknown): Promise<unknown> {
-    const { uri } = recordOf(params)
+    const { uri } = asRecord(params)
     if (!this.#served.hasStatus || uri !== statusUri(this.#served.plugin)) {
       throw new RpcError({ code: INVALID_PARAMS, message: `no resource ${String(uri)}` })
     }

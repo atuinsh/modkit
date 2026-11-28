@@ -1,15 +1,36 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
 
-import { isPlainObject } from 'es-toolkit/predicate'
+import * as v from 'valibot'
 
-import type { McpCall, McpResult } from '@atuin/modkit-target/host'
+import { errorMessage, McpResponse, type McpCall, type McpResult } from '@atuin/modkit-target/host'
 
 import { peerOn, type Peer } from './rpc'
 
 const PROTOCOL_VERSION = '2025-06-18'
 const START_MS = 30_000
 const CALL_MS = 120_000
+
+/** Valibot schema for an optional list of strings, falling back to `[]`. */
+export const StringListSchema: v.GenericSchema<unknown, string[]> = v.fallback(
+  v.array(v.string()),
+  [],
+)
+
+/** Valibot schema for a string-only env var map, dropping non-string values and falling back to `{}`. */
+export const StringEnvSchema: v.GenericSchema<unknown, Record<string, string>> = v.fallback(
+  v.pipe(
+    v.record(v.string(), v.unknown()),
+    v.transform((env) =>
+      Object.fromEntries(
+        Object.entries(env).flatMap(([key, value]) =>
+          typeof value === 'string' ? [[key, value]] : [],
+        ),
+      ),
+    ),
+  ),
+  {},
+)
 
 export interface StdioServer {
   command: string
@@ -18,38 +39,8 @@ export interface StdioServer {
   cwd: string | undefined
 }
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
 export interface Unreachable {
   reason: string
-}
-
-function joinedText(content: unknown): string {
-  const blocks: readonly unknown[] = Array.isArray(content) ? content : []
-  return blocks
-    .flatMap((block) =>
-      isPlainObject(block) && block['type'] === 'text' && typeof block['text'] === 'string'
-        ? [block['text']]
-        : [],
-    )
-    .join('\n')
-}
-
-export function mcpResultOf(result: unknown): McpResult {
-  if (!isPlainObject(result)) {
-    return { isOk: false, reason: 'the server answered something not MCP' }
-  }
-  const {
-    content,
-    isError,
-    structuredContent: structured,
-  }: Readonly<Record<string, unknown>> = result
-  const text = joinedText(content)
-  if (isError === true) {
-    return { isOk: false, reason: text === '' ? 'the tool reported a failure' : text }
-  }
-  return { isOk: true, text, ...(structured !== undefined && { structured }) }
 }
 
 interface Connection {
@@ -72,7 +63,7 @@ async function connect({
   try {
     await once(child, 'spawn')
   } catch (error) {
-    throw new Error(`couldn't start ${name}: ${messageOf(error)}`, { cause: error })
+    throw new Error(`couldn't start ${name}: ${errorMessage(error)}`, { cause: error })
   }
   const peer = peerOn({ input: child.stdout, output: child.stdin })
   const initialized = peer.request({
@@ -95,7 +86,7 @@ async function connect({
   return { peer, child }
 }
 
-export class Servers {
+export class Servers implements Disposable {
   readonly #connections = new Map<string, Promise<Connection>>()
   readonly #find: (name: string) => Promise<StdioServer | Unreachable>
   readonly #own: string | undefined
@@ -122,9 +113,9 @@ export class Servers {
         params: { name: tool, arguments: input ?? {} },
         timeout: { ms: CALL_MS, what: `${server}'s ${tool}` },
       })
-      return mcpResultOf(result)
+      return McpResponse.parse(result).toResult()
     } catch (error) {
-      return { isOk: false, reason: messageOf(error) }
+      return { isOk: false, reason: errorMessage(error) }
     }
   }
 
@@ -133,6 +124,10 @@ export class Servers {
     this.#isClosed = true
     for (const connecting of this.#connections.values()) void Servers.#killed(connecting)
     this.#connections.clear()
+  }
+
+  [Symbol.dispose](): void {
+    this.close()
   }
 
   static async #killed(connecting: Promise<Connection>): Promise<void> {

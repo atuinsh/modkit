@@ -5,7 +5,7 @@ import type { Plugin } from '@opencode/plugin'
 import { isPlainObject } from 'es-toolkit/predicate'
 
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import { settingsOf } from '@atuin/modkit-target-node/runtime/settings'
+import { SettingsSchema } from '@atuin/modkit-target-node/runtime/settings'
 
 import { contractOf, type ViewJson } from '../contract'
 import { hookCalls } from './calls'
@@ -109,7 +109,7 @@ function sessionsOf({
 }): Sessions {
   const { plugin } = served
   const where = `${plugin}'s options in opencode.json`
-  const settings = settingsOf({ decls: served.settings, given: ctx.options, where })
+  const settings = SettingsSchema.from(served.settings).parse(ctx.options, where)
   return new Sessions({
     mod: served.mod,
     images: served.images,
@@ -146,11 +146,11 @@ async function setUp({
   void followEvents({ ctx, sessions, signal: stop.signal })
   return () => {
     stop.abort()
-    sessions.dispose()
-    servers.close()
+    sessions[Symbol.dispose]()
+    servers[Symbol.dispose]()
   }
 }
 
-export function serverOf(served: Served): Plugin.Plugin {
+export function createOpencodeServer(served: Served): Plugin.Plugin {
   return { id: `${served.plugin}-mod`, setup: async (ctx) => setUp({ ctx, served }) }
 }

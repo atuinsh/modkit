@@ -1,12 +1,13 @@
+import { NodeTargetRuntime } from '@atuin/modkit-target-node/runtime/node-runtime'
 import {
-  ModkitTargetRuntime,
+  PaneId,
+  type CommandHost,
   type CommandView,
   type Followup,
   type HarnessAdapter,
-  type PaneOpened,
-  type PaneOpening,
-  type Repeat,
+  type PaneHost,
   type Verdict,
+  type ViewHost,
 } from '@atuin/modkit-target/host'
 
 import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './hooks'
@@ -15,14 +16,38 @@ import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view'
 export interface OpencodeSession {
   readonly harness: HarnessAdapter
   readonly changed: () => void
-  readonly repeats: NodeJS.Timeout[]
 }
 
-export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
+export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession> {
   readonly #commands: Pick<CommandView, 'name' | 'description'>[] = []
   // The panes on show and their titles, oldest first: the TUI part draws the newest.
   readonly #panes = new Map<string, string>()
   #opening: Promise<void> | undefined = undefined
+
+  protected override readonly panes: PaneHost<OpencodeSession> = {
+    open: (session, { id, title }) => {
+      this.#panes.set(id.toString(), title)
+      session.changed()
+      return { isPlaced: true }
+    },
+    close: (session, id) => {
+      this.#panes.delete(id.toString())
+      session.changed()
+    },
+    isShown: (_session, id) => this.#panes.has(id.toString()),
+  }
+
+  protected override readonly commands: CommandHost<OpencodeSession> = {
+    register: (_session, { name, description }) => {
+      this.#commands.push({ name, description })
+    },
+  }
+
+  protected override readonly view: ViewHost<OpencodeSession> = {
+    redraw: (session) => {
+      session.changed()
+    },
+  }
 
   async open(session: OpencodeSession): Promise<void> {
     this.#opening ??= this.start(session)
@@ -52,7 +77,7 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
   }
 
   async close(session: OpencodeSession, pane: string): Promise<void> {
-    await this.closePane(session, pane)
+    await this.panes.close(session, PaneId.parse(pane))
     await this.dismiss(pane)
   }
 
@@ -73,43 +98,7 @@ export class OpencodeRuntime extends ModkitTargetRuntime<OpencodeSession> {
     return this.followupFor(failedResultOf(failed))
   }
 
-  protected override async adapter(session: OpencodeSession): Promise<HarnessAdapter> {
+  protected override adapter(session: OpencodeSession): HarnessAdapter {
     return session.harness
-  }
-
-  protected override async redraw(session: OpencodeSession): Promise<unknown> {
-    session.changed()
-    return undefined
-  }
-
-  protected override async openPane(
-    session: OpencodeSession,
-    { id, title }: PaneOpening,
-  ): Promise<PaneOpened> {
-    this.#panes.set(id, title)
-    session.changed()
-    return { isPlaced: true }
-  }
-
-  protected override async closePane(session: OpencodeSession, id: string): Promise<unknown> {
-    this.#panes.delete(id)
-    session.changed()
-    return undefined
-  }
-
-  protected override async isPaneShown(_session: OpencodeSession, id: string): Promise<boolean> {
-    return this.#panes.has(id)
-  }
-
-  protected override async registerCommand(
-    _session: OpencodeSession,
-    { name, description }: CommandView,
-  ): Promise<unknown> {
-    this.#commands.push({ name, description })
-    return undefined
-  }
-
-  protected override repeat(session: OpencodeSession, { everyMs, tick }: Repeat): void {
-    session.repeats.push(setInterval(tick, everyMs).unref())
   }
 }

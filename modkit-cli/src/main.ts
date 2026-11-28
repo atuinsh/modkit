@@ -23,6 +23,7 @@ import { debounce } from 'es-toolkit/function'
 
 import { formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
 import {
+  errorMessage,
   gapText,
   ModPackage,
   type CompiledMod,
@@ -36,9 +37,6 @@ function shown(path: string): string {
   const near = relative(process.cwd(), path)
   return near === '' ? '.' : near
 }
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 function failed(diagnostics: readonly Diagnostic[]): false {
   const lines = diagnostics.map((one) => formatDiagnostic({ ...one, file: shown(one.file) }))
@@ -72,7 +70,7 @@ class Build {
 
   /** Compile once, then build for each target in turn, reporting each; true when every one built. */
   async once(): Promise<boolean> {
-    const targets = await this.#package.targets().catch((error: unknown) => messageOf(error))
+    const targets = await this.#package.targets().catch((error: unknown) => errorMessage(error))
     if (typeof targets === 'string') {
       console.error(targets)
       return false
@@ -112,13 +110,13 @@ class Build {
     })
     watcher.on('all', rebuild)
     watcher.on('error', (error: unknown) => {
-      console.error(messageOf(error))
+      console.error(errorMessage(error))
     })
   }
 
   async #for(target: ListedTarget, { compiled, gaps }: Checked): Promise<boolean> {
     const out = join(this.#out, target.name)
-    const built = await target.build(compiled, out).catch((error: unknown) => messageOf(error))
+    const built = await target.build(compiled, out).catch((error: unknown) => errorMessage(error))
     if (typeof built === 'string') {
       console.error(built)
       return false

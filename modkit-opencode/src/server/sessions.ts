@@ -9,7 +9,7 @@ import {
   type Options,
 } from '@atuin/modkit-target/host'
 
-import { harnessFor, type Reached } from './harness'
+import { buildHarness, type Reached } from './harness'
 import { OpencodeRuntime, type OpencodeSession } from './runtime'
 
 export interface Live {
@@ -27,7 +27,7 @@ export interface Ports {
   notified: (notice: { id: string; text: string }) => void
 }
 
-export class Sessions {
+export class Sessions implements Disposable {
   readonly #mod: Mod<Options>
   readonly #images: Images
   readonly #options: Options | undefined
@@ -75,10 +75,8 @@ export class Sessions {
     return [...this.#live.values()]
   }
 
-  dispose(): void {
-    for (const { session } of this.#live.values()) {
-      for (const repeat of session.repeats) clearInterval(repeat)
-    }
+  [Symbol.dispose](): void {
+    for (const { runtime } of this.#live.values()) runtime[Symbol.dispose]()
   }
 
   #started(id: string): Live | undefined {
@@ -94,7 +92,6 @@ export class Sessions {
       changed: () => {
         this.#ports.changed(id)
       },
-      repeats: [],
     }
     const live: Live = { runtime, session, opened: runtime.open(session), asks: new Map() }
     this.#live.set(id, live)
@@ -109,7 +106,7 @@ export class Sessions {
         this.notify({ id, text })
       },
     })
-    return harnessFor({
+    return buildHarness({
       reached,
       id,
       store: fileStore({ dir, session: id, tags, report }),
