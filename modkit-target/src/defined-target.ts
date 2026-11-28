@@ -82,7 +82,7 @@ async function flush({
   }
 }
 
-// What `modkit dev` runs in the pane of a target that declares no harness for it.
+// What `modkit dev` runs in the task of a target that declares no harness for it.
 const noHarness = (name: string): DevHarness => ({
   reload: 'restarted',
   command: () => ({

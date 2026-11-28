@@ -16,12 +16,10 @@ export const claudeCodeDev = ({ out, env }: DevInput): DevHarness => ({
   reload: 'watched',
   // Types and a tsconfig.json for editing the plugin, which it writes into a `--plugin-dir`.
   writes: ['tsconfig.json', '.claude-plugin/types'],
-  command: ({ id, hasStarted }) => {
-    const isResumed = hasStarted && hasTranscript({ env, id })
-    return {
-      program: 'claude',
-      args: ['--plugin-dir', out, isResumed ? '--resume' : '--session-id', id],
-      env: {},
-    }
-  },
+  // A session's id is new to Claude Code until it writes the session's transcript.
+  command: ({ id }) => ({
+    program: 'claude',
+    args: ['--plugin-dir', out, hasTranscript({ env, id }) ? '--resume' : '--session-id', id],
+    env: {},
+  }),
 })

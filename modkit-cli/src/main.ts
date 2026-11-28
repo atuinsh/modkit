@@ -7,7 +7,7 @@
  *                                             it lists, and again on every save with --watch
  * modkit dev   [dir] [--out <dir>] [--cwd <dir>] [--only <a,b>]
  *                                             Build, and run each target's harness on the build
- *                                             side by side in tmux, bringing each onto every save
+ *                                             in dekit, bringing each onto every save
  * ```
  *
  * `dir` defaults to the current working directory and `--out` defaults to `<dir>/dist`. A mod lists
@@ -64,7 +64,7 @@ const buildCommand = defineCommand({
 const devCommand = defineCommand({
   meta: {
     name: 'dev',
-    description: "Run each target's harness on the mod side by side in tmux, rebuilt on every save",
+    description: "Run each target's harness on the mod in dekit, rebuilt on every save",
   },
   args: {
     ...buildArgs,

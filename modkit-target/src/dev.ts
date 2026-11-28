@@ -1,6 +1,6 @@
 /**
- * What a target tells `modkit dev`, which runs each target's harness on the mod's build in a pane
- * of its own and brings it onto each rebuild.
+ * What a target tells `modkit dev`, which runs each target's harness on the mod's build in a dekit
+ * task of its own and brings it onto each rebuild.
  *
  * @module
  */
@@ -12,11 +12,9 @@ export type Env = Readonly<Record<string, string | undefined>>
 export interface DevSession {
   /** A UUID, which a target spells the way its harness spells a session's id. */
   id: string
-  /** Whether `modkit dev` has started the harness on this session before. */
-  hasStarted: boolean
 }
 
-/** What `modkit dev` runs in a harness's pane: `claude --plugin-dir dist/claude-code`. */
+/** What `modkit dev` runs in a harness's task: `claude --plugin-dir dist/claude-code`. */
 export interface DevCommand {
   /** The program, looked up on `PATH`: `claude`. */
   program: string

@@ -1,104 +1,67 @@
 /**
- * The tmux window `modkit dev` runs in: a pane per target, side by side, each running the target's
- * harness on the mod's build, above the pane `modkit dev` prints its builds in.
+ * The `modkit` task of `modkit dev`'s dekit project, which builds the mod on every save and brings
+ * each harness's task onto its target's build.
  *
- * On each build, a harness whose build changed is brought onto it: Claude Code reloads its own,
- * the rest are restarted on the session they were on. A harness whose build failed keeps running
- * the last one. The log pane takes keys: `r` restarts every harness, a pane's number restarts
- * that one, `p` types a prompt into each, and `q` quits, undoing what the harnesses registered.
+ * Claude Code reloads its build itself; the rest are restarted onto theirs on the session they
+ * were on. A harness whose build failed keeps running the last one. When dekit stops the task, as
+ * it does on quit, it undoes what the harnesses registered before it exits.
  *
  * @module
  */
 
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { emitKeypressEvents, type Key } from 'node:readline'
-import { createInterface } from 'node:readline/promises'
 
 import { errorMessage, type Env } from '@atuin/modkit-target'
 
 import type { Build, TargetBuild } from './build.ts'
-import { HarnessPane } from './harness-pane.ts'
-import { hasExtendedKeys, type Pane } from './tmux.ts'
+import type { Dekit } from './dekit.ts'
+import { HarnessTask } from './harness-task.ts'
 
-/** Which of the mod's targets get a pane. */
-export type Picked = { kind: 'all' } | { kind: 'only'; names: readonly string[] }
-
-/** The share of the window's height the harnesses' row takes from the log pane below it. */
-const HARNESS_ROW_PERCENT = 80
-const PERCENT = 100
-
-const waitingFor = (name: string): string[] => ['echo', `waiting for a build of ${name}`]
-
-/** What a workspace is opened on. */
+/** What a workspace runs on. */
 export interface WorkspaceInput {
   build: Build
-  /** The pane `modkit dev` runs in, which prints its builds and reads keys. */
-  log: Pane
-  /** The directory the harnesses start in. */
-  cwd: string
-  picked: Picked
-  env: Env
-  /** Whether `modkit dev` made the tmux session, and so may set its options and kill it. */
-  hasSession: boolean
-}
-
-/** A pane for each of `names`, all the same width, in a row above `log`. */
-async function rowOf({
-  log,
-  names,
-}: {
-  log: Pane
+  dekit: Dekit
+  /** The targets that get a harness, which the mod's package.json lists. */
   names: readonly string[]
-}): Promise<{ pane: Pane; name: string }[]> {
-  const [first, ...rest] = names
-  if (first === undefined) return []
-  const panes = [
-    await log.split({ side: 'above', percent: HARNESS_ROW_PERCENT, argv: waitingFor(first) }),
-  ]
-  for (const [index, name] of rest.entries()) {
-    // Each pane gives up the share the panes still to come take, so all end the same width.
-    const after = rest.length - index
-    const percent = Math.round((after / (after + 1)) * PERCENT)
-    const left = panes.at(-1) ?? log
-    // oxlint-disable-next-line no-await-in-loop -- each pane splits off the one before it
-    panes.push(await left.split({ side: 'right', percent, argv: waitingFor(name) }))
-  }
-  return names.map((name, index) => ({ pane: panes[index] ?? log, name }))
+  /** The environment the harnesses start in. */
+  env: Env
 }
 
-const HELP = 'modkit · r restarts all · 1-9 restarts one · p prompts all · q quits'
-
-/** The window `modkit dev` lays out and runs the harnesses in. */
+/** The `modkit` task: the build on every save, and each harness's task brought onto it. */
 export class Workspace {
   readonly #input: WorkspaceInput
-  #panes: HarnessPane[] | undefined
+  readonly #tasks: readonly HarnessTask[]
   #queue: Promise<unknown> = Promise.resolve()
   #closing: Promise<never> | undefined
 
   constructor(input: WorkspaceInput) {
     this.#input = input
+    const { dekit, env } = input
+    this.#tasks = input.names.map((name) => new HarnessTask({ name, dekit, env }))
   }
 
-  /** Lay the window out, then build the mod on every save and bring the harnesses onto it. */
+  /** Build the mod on every save, bringing the harnesses onto each build. */
   async run(): Promise<void> {
-    const { log, hasSession } = this.#input
-    await log.decorate({ hasSession })
-    await log.label(HELP)
-    if (!(await hasExtendedKeys())) {
-      console.log(
-        "tmux's extended-keys is off, so the harnesses read Shift+Enter as Enter; tmux.conf turns it on with `set -s extended-keys on` and `set -s extended-keys-format csi-u`",
-      )
+    for (const signal of ['SIGHUP', 'SIGINT', 'SIGTERM'] as const) {
+      process.on(signal, () => {
+        void this.close()
+      })
     }
-    this.#listen()
     await this.#input.build.watch(async (build) =>
       this.#serial(async () => this.#landed(await build())),
     )
   }
 
+  /** Where a quit that left something to undo says what, in the dekit project's `root`. */
+  static unclosedPathOf(root: string): string {
+    return join(root, 'unclosed.txt')
+  }
+
   /**
-   * Undo what the harnesses registered, then kill the window, and with it this process.
+   * Undo what the harnesses registered, then exit.
    *
-   * A harness that fails to undo it leaves the window open, with the log pane saying why.
+   * A harness that fails to undo it exits non-zero, saying why in {@link Workspace.unclosedPathOf}.
    */
   async close(): Promise<never> {
     this.#closing ??= this.#closed()
@@ -106,34 +69,30 @@ export class Workspace {
   }
 
   async #closed(): Promise<never> {
-    // The window may be going already, and the terminal these would print to with it.
-    process.stdout.on('error', () => undefined)
-    process.stderr.on('error', () => undefined)
-    // A step under way may be registering what closing the panes undoes, so it finishes first;
-    // `#serial` starts none once closing has begun.
+    // A step under way may be registering what closing the harnesses undoes, so it finishes
+    // first; `#serial` starts none once closing has begun.
     await this.#queue
-    const panes = this.#panes ?? []
-    const closed = await Promise.all(
-      panes.map(async (pane) => {
+    const failures = await Promise.all(
+      this.#tasks.map(async (task): Promise<string[]> => {
         try {
-          await pane.close()
-          return true
+          await task.close()
+          return []
         } catch (error) {
-          console.error(`${pane.name}: ${errorMessage(error)}`)
-          return false
+          return [`${task.name}: ${errorMessage(error)}`]
         }
       }),
     )
-    if (!closed.every(Boolean)) {
-      console.error('modkit dev quit, but the above is still to undo by hand')
-      process.exit(1)
-    }
-    await this.#input.log.killAll({ hasSession: this.#input.hasSession }).catch(() => undefined)
-    process.exit(0)
+    const failed = failures.flat()
+    if (failed.length === 0) process.exit(0)
+    const report = [...failed, 'modkit dev quit, but the above is still to undo by hand'].join('\n')
+    console.error(report)
+    // This task's screen goes with dekit as it quits, so `modkit dev` prints the report after.
+    await writeFile(Workspace.unclosedPathOf(this.#input.dekit.root), `${report}\n`)
+    process.exit(1)
   }
 
-  // Runs `step` once every step before it has finished, so no harness starts on a build still
-  // being written and restarts and prompts never overlap on one pane; drops it once closing.
+  // Runs `step` once every step before it has finished, so a harness is never brought onto a
+  // build while the next is being written; drops it once closing.
   async #serial(step: () => Promise<unknown>): Promise<void> {
     if (this.#closing !== undefined) return
     const next = this.#queue.then(step)
@@ -144,90 +103,14 @@ export class Workspace {
   }
 
   async #landed(builds: readonly TargetBuild[]): Promise<void> {
-    // No targets could be read, and the build said why.
-    if (builds.length === 0) return
-    this.#panes ??= await this.#laidOut(builds.map((one) => one.target.name))
-    const scratch = join(this.#input.build.out, '.dev')
     await Promise.all(
-      (this.#panes ?? []).map(async (pane) => {
-        const build = builds.find((one) => one.target.name === pane.name)
+      this.#tasks.map(async (task) => {
+        const build = builds.find((one) => one.target.name === task.name)
         if (build === undefined) return
-        await pane
-          .land({ build, scratch: join(scratch, pane.name) })
-          .catch(async (error: unknown) => {
-            console.error(`${pane.name}: ${errorMessage(error)}`)
-            await pane.label('could not start; the log says why')
-          })
+        await task.land(build).catch((error: unknown) => {
+          console.error(`${task.name}: ${errorMessage(error)}`)
+        })
       }),
     )
-  }
-
-  // One pane per picked target in a row above the log pane; undefined when the targets picked
-  // aren't all the mod's.
-  async #laidOut(listed: readonly string[]): Promise<HarnessPane[] | undefined> {
-    const { picked, log, cwd, env } = this.#input
-    const names = picked.kind === 'all' ? listed : picked.names
-    const unlisted = names.filter((name) => !listed.includes(name))
-    if (unlisted.length > 0) {
-      console.error(
-        `--only names ${unlisted.join(', ')}, which modkit.targets does not list (it lists ${listed.join(', ')})`,
-      )
-      return undefined
-    }
-    const row = await rowOf({ log, names })
-    const harnesses = row.map(
-      ({ pane, name }, index) => new HarnessPane({ pane, name, number: index + 1, cwd, env }),
-    )
-    await Promise.all(harnesses.map(async (harness) => harness.label('waiting for a build')))
-    return harnesses
-  }
-
-  #listen(): void {
-    emitKeypressEvents(process.stdin)
-    process.stdin.setRawMode(true)
-    process.stdin.on('keypress', this.#onKey)
-    for (const signal of ['SIGHUP', 'SIGINT', 'SIGTERM'] as const) {
-      process.on(signal, () => {
-        void this.close()
-      })
-    }
-  }
-
-  readonly #onKey = (text: string | undefined, key: Key | undefined): void => {
-    if (text === 'q' || (key?.ctrl === true && key.name === 'c')) {
-      void this.close()
-      return
-    }
-    if (text === 'p') {
-      void this.#prompt()
-      return
-    }
-    const panes = this.#panes ?? []
-    const restarted = text === 'r' ? panes : panes.filter((one) => String(one.number) === text)
-    if (restarted.length === 0) return
-    void this.#serial(async () => Promise.all(restarted.map(async (one) => one.restart())))
-  }
-
-  // Reads a line in the log pane and types it into every harness.
-  async #prompt(): Promise<void> {
-    process.stdin.off('keypress', this.#onKey)
-    const lines = createInterface({ input: process.stdin, output: process.stdout })
-    // Closing the interface leaves a question it asked waiting; aborting it ends it.
-    const cancelled = new AbortController()
-    lines.on('SIGINT', () => {
-      cancelled.abort()
-    })
-    const question = lines.question('prompt every harness> ', { signal: cancelled.signal })
-    const line = await question.catch(() => {
-      console.log()
-      return ''
-    })
-    lines.close()
-    process.stdin.setRawMode(true)
-    process.stdin.resume()
-    process.stdin.on('keypress', this.#onKey)
-    if (line.trim() === '') return
-    const panes = this.#panes ?? []
-    await this.#serial(async () => Promise.all(panes.map(async (one) => one.sendLine(line))))
   }
 }

@@ -284,6 +284,9 @@ importers:
       '@atuin/modkit-compiler':
         specifier: workspace:*
         version: link:../modkit-compiler
+      '@dekit/cli':
+        specifier: ^0.10.3
+        version: 0.10.3
       chokidar:
         specifier: ^6.0.0
         version: 6.0.0
@@ -293,6 +296,9 @@ importers:
       es-toolkit:
         specifier: 'catalog:'
         version: 1.53.2
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@atuin/modkit-target':
         specifier: workspace:*
@@ -730,6 +736,36 @@ packages:
   '@babel/types@7.29.15':
     resolution: {integrity: sha512-/XKpKDakL//LZ66bq1XsZOswuqeI5MZqPLDu18o3XdkU1fNJ7bdPtzgnc4ZNS+bBGHV0FJG8jjb8SwcC3nNVQQ==}
     engines: {node: '>=6.9.0'}
+
+  '@dekit/cli@0.10.3':
+    resolution: {integrity: sha512-0iF5B/FkfmPhHKDuOrK6FuUEatGMEFSLlTFTIFbAWZpCP1Md9PPuz9Op7rod0u7Y2jK0Gutxvdx9mz/DG5f/7g==}
+    engines: {node: '>=16'}
+    hasBin: true
+
+  '@dekit/dekit-darwin-arm64@0.10.3':
+    resolution: {integrity: sha512-s/U6EigQGKpYmktZkOBn7kS5n8NqSpGma99XA0GiXiHiWbRWPRCc1U5SsarmKt/3f+N/wWOMOizXX/LXTqB/HA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@dekit/dekit-darwin-x64@0.10.3':
+    resolution: {integrity: sha512-r4PsSKTLjXjjtkPJN+tZgBZOr29/e0R3yzJ8PZ70E7O6HNM4EDzMU3eWhDC6rfWnvzyPmSzHwhMr29zA5WqkcQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@dekit/dekit-linux-arm64@0.10.3':
+    resolution: {integrity: sha512-mxggQB24mZ7xOiJlGz1fQ0Av9VKUhwRd3z2/iVRQcICBccxt9KVAqImEf3uxm/QN+bmLTVJqk13BUKoVEyWbVg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@dekit/dekit-linux-x64@0.10.3':
+    resolution: {integrity: sha512-CIfA2LbsLWHBqsc9tnUpyzQVpdHVHsG7v1hBCtvtIuQFkXxazowpYS33MbhJw/Gg4NazKTxoyko4xueu4w2O9A==}
+    cpu: [x64]
+    os: [linux]
+
+  '@dekit/dekit-win32-x64@0.10.3':
+    resolution: {integrity: sha512-J0HzC8mMN34dYVV+GU/PKal811Y7WU+XIQlOtuDNrQuAoRla/to8eE7ss4MAiGOBjJ9s/OZy1DLWB3kutabvvw==}
+    cpu: [x64]
+    os: [win32]
 
   '@earendil-works/pi-agent-core@1.6.0':
     resolution: {integrity: sha512-IU/x+2XtE4KIdIkEndZssdLPbIUR38Btj+Q7vjIIXIK7GSamLtDH5jOw/dzBWAvWFAgZ2dslF5sPc6GcGOnS+w==}
@@ -3870,6 +3906,29 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.15
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@dekit/cli@0.10.3':
+    optionalDependencies:
+      '@dekit/dekit-darwin-arm64': 0.10.3
+      '@dekit/dekit-darwin-x64': 0.10.3
+      '@dekit/dekit-linux-arm64': 0.10.3
+      '@dekit/dekit-linux-x64': 0.10.3
+      '@dekit/dekit-win32-x64': 0.10.3
+
+  '@dekit/dekit-darwin-arm64@0.10.3':
+    optional: true
+
+  '@dekit/dekit-darwin-x64@0.10.3':
+    optional: true
+
+  '@dekit/dekit-linux-arm64@0.10.3':
+    optional: true
+
+  '@dekit/dekit-linux-x64@0.10.3':
+    optional: true
+
+  '@dekit/dekit-win32-x64@0.10.3':
+    optional: true
 
   '@earendil-works/pi-agent-core@1.6.0(@aws-sdk/credential-provider-node@3.972.98)(@smithy/signature-v4@5.7.5)(google-auth-library@10.9.1)(undici@8.12.4)(ws@8.23.0)':
     dependencies:
