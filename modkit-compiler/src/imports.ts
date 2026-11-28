@@ -1,5 +1,5 @@
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
-import { syntax, type Node, type Project } from './program.ts'
+import { DiagnosticError } from './diagnostics.ts'
+import { syntax, type Node, type TsProject } from './program.ts'
 
 // The engine and the toolchain a target runs a mod with; a mod's own code reaches them only through
 // `@atuin/modkit`.
@@ -51,15 +51,15 @@ function importedIn(node: Node): (syntax.StringLiteral | syntax.NoSubstitutionTe
  * a target may import.
  */
 export function hostImportsIn(
-  project: Project,
+  project: TsProject,
   targetPackages: readonly string[] = [],
-): Diagnostic[] {
+): DiagnosticError[] {
   const blocked = new Set(targetPackages)
   return project.files.flatMap((file) =>
     importedIn(file).flatMap((specifier) => {
       if (!isTargetsOnly({ specifier: specifier.text, targetPackages: blocked })) return []
       const message = `a mod imports @atuin/modkit, not ${specifier.text}, which is what a target runs it with`
-      return [diagnosticAt({ code: 'host-import', message, node: specifier })]
+      return [DiagnosticError.at({ code: 'host-import', message, node: specifier })]
     }),
   )
 }

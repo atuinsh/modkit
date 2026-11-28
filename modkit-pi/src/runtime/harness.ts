@@ -7,12 +7,12 @@ import {
 } from '@earendil-works/pi-coding-agent'
 
 import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
-import { modelFor } from '@atuin/modkit-target-node/runtime/models'
+import { ModelCatalog } from '@atuin/modkit-target-node/runtime/models'
 import { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import { FileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
   errorMessage,
-  failureReporter,
+  FailureReporter,
   type Completion,
   type CompletionRequest,
   type Copied,
@@ -21,7 +21,7 @@ import {
   type Store,
 } from '@atuin/modkit-target/host'
 
-import { configuredServer } from './mcp.ts'
+import { PiMcpConfig } from './mcp.ts'
 
 type Reply = Awaited<
   ReturnType<ReturnType<ExtensionContext['modelRegistry']['streamSimple']>['result']>
@@ -84,9 +84,7 @@ async function completeWith({
   request: CompletionRequest
   sessionSignal: AbortSignal
 }): Promise<Completion> {
-  const model = modelFor({
-    wanted: request.model,
-    models: ctx.modelRegistry.getAvailable(),
+  const model = ModelCatalog.from(ctx.modelRegistry.getAvailable()).resolve(request.model, {
     current: ctx.model,
   })
   if (model === undefined) {
@@ -187,15 +185,15 @@ export function createSessionResources({
   state: Tags
   signal: AbortSignal
 }): PiSessionResources {
-  const report = failureReporter({
+  const { report } = FailureReporter.for({
     plugin,
     notify: (line) => {
       if (ctx.hasUI) ctx.ui.notify(line, 'error')
     },
   })
+  const mcp = new PiMcpConfig({ cwd: ctx.cwd, isTrusted: ctx.isProjectTrusted() })
   const servers = new Servers({
-    find: async (name) =>
-      configuredServer({ name, cwd: ctx.cwd, isTrusted: ctx.isProjectTrusted() }),
+    find: async (name) => mcp.resolve(name),
   })
   const store = FileStore.open({
     dir: join(dir, 'sessions'),

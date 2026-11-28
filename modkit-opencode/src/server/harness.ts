@@ -1,7 +1,7 @@
 import type { Plugin } from '@opencode/plugin'
 
 import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
-import { modelFor } from '@atuin/modkit-target-node/runtime/models'
+import { ModelCatalog } from '@atuin/modkit-target-node/runtime/models'
 import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import {
   errorMessage,
@@ -23,7 +23,7 @@ async function completeWith({
   try {
     const listed = await ctx.model.list()
     const models = listed.data.map((model) => ({ provider: model.providerID, id: model.modelID }))
-    const model = modelFor({ wanted: request.model, models, current: undefined })
+    const model = ModelCatalog.from(models).resolve(request.model)
     if (model === undefined) {
       const detail = `opencode has no model ${request.model}`
       return { isAnswered: false, reason: 'refused', detail }

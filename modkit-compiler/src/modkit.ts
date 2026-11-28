@@ -4,38 +4,47 @@
  * @module
  */
 
-import { SymbolFlags, syntax, type Node, type Project, type TsSymbol } from './program.ts'
+import { SymbolFlags, syntax, type Node, type TsProject, type TsSymbol } from './program.ts'
 
 const MODKIT: ReadonlySet<string> = new Set(['@atuin/modkit', '@atuin/modkit/ui/hooks'])
 
-/** Return all unique resolved symbols exported by `@atuin/modkit` as imported in `project`. */
-export function modkitExports(project: Project): TsSymbol[] {
-  const { checker } = project
-  const specifiers = project.files.flatMap((file) =>
-    file.statements.flatMap((statement) =>
-      syntax.isImportDeclaration(statement) &&
-      syntax.isStringLiteral(statement.moduleSpecifier) &&
-      MODKIT.has(statement.moduleSpecifier.text)
-        ? [statement.moduleSpecifier]
-        : [],
-    ),
-  )
-  const exported = specifiers.flatMap(
-    (specifier) => checker.getSymbolAtLocation(specifier)?.getExports().values().toArray() ?? [],
-  )
-  const resolved = exported.map((symbol) =>
-    (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol),
-  )
-  return new Map(resolved.map((symbol) => [symbol.id, symbol])).values().toArray()
-}
+/** AST symbol and call-expression queries bound to a {@link TsProject}. */
+export class ModkitSymbols {
+  readonly #project: TsProject
 
-/** Collect every call expression within `node`, including nested calls. */
-export function callsIn(node: Node): syntax.CallExpression[] {
-  const found: syntax.CallExpression[] = []
-  const visit = (child: Node): void => {
-    if (syntax.isCallExpression(child)) found.push(child)
-    child.forEachChild(visit)
+  constructor(project: TsProject) {
+    this.#project = project
   }
-  visit(node)
-  return found
+
+  /** Collect every call expression within `node`, including nested calls. */
+  static callsIn(node: Node): syntax.CallExpression[] {
+    const found: syntax.CallExpression[] = []
+    const visit = (child: Node): void => {
+      if (syntax.isCallExpression(child)) found.push(child)
+      child.forEachChild(visit)
+    }
+    visit(node)
+    return found
+  }
+
+  /** Return all unique resolved symbols exported by `@atuin/modkit` as imported in this project. */
+  exports(): TsSymbol[] {
+    const { checker, files } = this.#project
+    const specifiers = files.flatMap((file) =>
+      file.statements.flatMap((statement) =>
+        syntax.isImportDeclaration(statement) &&
+        syntax.isStringLiteral(statement.moduleSpecifier) &&
+        MODKIT.has(statement.moduleSpecifier.text)
+          ? [statement.moduleSpecifier]
+          : [],
+      ),
+    )
+    const exported = specifiers.flatMap(
+      (specifier) => checker.getSymbolAtLocation(specifier)?.getExports().values().toArray() ?? [],
+    )
+    const resolved = exported.map((symbol) =>
+      (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol),
+    )
+    return new Map(resolved.map((symbol) => [symbol.id, symbol])).values().toArray()
+  }
 }

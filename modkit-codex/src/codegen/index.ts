@@ -1,5 +1,5 @@
 import { Target, type ModkitTarget } from '@atuin/modkit-target'
-import { emitRuntimeEntry, settingDecl, stateTags } from '@atuin/modkit-target-node/codegen'
+import { NodeBundler } from '@atuin/modkit-target-node/codegen'
 
 import { CODEX_CAPABILITIES, CODEX_TOOLS } from '../protocol.ts'
 import type { serve } from '../runtime/index.ts'
@@ -14,9 +14,8 @@ export const target: ModkitTarget<undefined> = Target.define('codex')
     const { mod, entry, state, options, env, images, hooks } = compiled
     const { hasStatus } = hooks
     const pluginName = plugin.toString()
-    emitRuntimeEntry<typeof serve>(emit, {
+    NodeBundler.for({ dir, emit }).emitEntry<typeof serve>({
       file: 'server.mjs',
-      dir,
       runtimeUrl: RUNTIME_URL,
       exportName: 'serve',
       mode: 'top-level-await',
@@ -25,8 +24,8 @@ export const target: ModkitTarget<undefined> = Target.define('codex')
       payload: {
         plugin: pluginName,
         version: mod.version,
-        settings: options.map((option) => settingDecl(option)),
-        state: stateTags(state),
+        settings: options.map((option) => NodeBundler.settingDecl(option)),
+        state: NodeBundler.stateTags(state),
         hasStatus,
       },
     })

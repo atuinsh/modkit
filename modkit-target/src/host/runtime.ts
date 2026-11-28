@@ -11,16 +11,13 @@ import type {
   Verdict,
 } from '@atuin/modkit'
 import {
-  dismissed,
   mount,
-  nextShown,
-  NOTHING_SHOWN,
   PaneId,
+  PaneReconciler,
   type ButtonNode,
   type HarnessAdapter,
   type Images,
   type Mounted,
-  type Shown,
   type UiNode,
 } from '@atuin/modkit/host'
 
@@ -92,7 +89,7 @@ export abstract class ModkitTargetRuntime<
   #opening: Promise<void> | undefined = undefined
   #isDisposed = false
   #report: HarnessAdapter['report'] = REPORT_NOTHING
-  #shown: Shown = NOTHING_SHOWN
+  readonly #reconciler = new PaneReconciler()
   // True while a command or a button press runs its synchronous part, up to its first `await`.
   // Background pane syncs wait it out, so a pane it opens opens on the interaction's own engine,
   // with keyboard focus and the relaxed placement rules an interaction gets.
@@ -231,8 +228,7 @@ export abstract class ModkitTargetRuntime<
   /** The person closed pane `id`: keep it closed while the mod shows it, and tell the mod. */
   protected async dismiss(id: string | PaneId): Promise<void> {
     const key = paneKey(id)
-    if (!this.#shown.open.has(key)) return
-    this.#shown = dismissed({ shown: this.#shown, id: key })
+    if (!this.#reconciler.dismiss(key)) return
     await this.#mounted?.closed(key)
   }
 
@@ -249,7 +245,7 @@ export abstract class ModkitTargetRuntime<
     this.#report = (failure) => {
       adapter.report(failure)
     }
-    this.#shown = NOTHING_SHOWN
+    this.#reconciler.reset()
     const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
     this.#mounted = mounted
     mounted.subscribe(() => {
@@ -315,9 +311,7 @@ export abstract class ModkitTargetRuntime<
   #syncPanes(engine: Engine, isAnswer: boolean): void {
     const mounted = this.#mounted
     if (mounted === undefined || this.#isDisposed) return
-    const { shown, changes } = nextShown({ shown: this.#shown, rendered: mounted.view().panes })
-    // Kept before any call goes out, so a render while they're under way sees them made.
-    this.#shown = shown
+    const changes = this.#reconciler.reconcile(mounted.view().panes)
     const fail = (error: unknown): void => {
       this.#report({ phase: 'render', error })
     }

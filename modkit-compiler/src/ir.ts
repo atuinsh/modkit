@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { Diagnostic } from './diagnostics.ts'
+import type { DiagnosticError } from './diagnostics.ts'
 import type { Modparts } from './modparts.ts'
 import type { Shape } from './shape.ts'
 
@@ -95,4 +95,4 @@ export type Compiled =
       modparts: Modparts
       hooks: HookNeeds
     }
-  | { isOk: false; diagnostics: Diagnostic[] }
+  | { isOk: false; diagnostics: DiagnosticError[] }

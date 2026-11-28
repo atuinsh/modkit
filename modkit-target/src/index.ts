@@ -27,16 +27,17 @@ export {
 export { Result } from './host/result.ts'
 export { HarnessTools } from './host/tools.ts'
 export { errorMessage } from './host/values.ts'
-export { imagesSource } from './images.ts'
-export { gapText, type Checked, type Gap, type ListedTarget } from './listed-target.ts'
+export { Gap } from './gap.ts'
+export { ImageBundle } from './images.ts'
+export { ListedTarget, type Checked } from './listed-target.ts'
 export { ModPackage } from './package.ts'
 export { PluginName } from './plugin-name.ts'
+export type { ArtifactEmitter, SourceEmitter, VirtualModule } from './source.ts'
 export { TargetRef } from './target-ref.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
 export {
-  pluginNameOf,
+  DiagnosticError,
   type Author,
-  type Diagnostic,
   type Field,
   type HookNeeds,
   type ImageDecl,

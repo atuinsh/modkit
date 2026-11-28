@@ -4,8 +4,8 @@ import type { Component } from '@earendil-works/pi-tui'
 import { asRecord, type ToolRow, type UiNode } from '@atuin/modkit-target/host'
 
 import { PI_TOOLS } from '../spec.ts'
-import { linesOf } from './lines.ts'
-import { paintOf } from './paint.ts'
+import { PiLineRenderer } from './lines.ts'
+import { PiThemePaint } from './paint.ts'
 
 const ROWS_REDRAWN = 200
 
@@ -64,11 +64,12 @@ export class Cards {
         return {
           render: (width) => {
             const cards = this.#cards(row)
-            const under = linesOf({
-              nodes: cards,
-              width,
-              paint: paintOf({ theme, hasKeys: false, isLine: false, drawsImages: true }),
+            const paint = new PiThemePaint(theme).paint({
+              hasKeys: false,
+              isLine: false,
+              drawsImages: true,
             })
+            const under = new PiLineRenderer(paint).render(cards, width)
             return [...(drawn?.render(width) ?? []), ...under]
           },
           invalidate: () => {

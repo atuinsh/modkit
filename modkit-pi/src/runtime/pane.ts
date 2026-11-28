@@ -6,9 +6,9 @@ import {
   type KeyId,
 } from '@earendil-works/pi-tui'
 
-import { collectButtons, type ButtonNode, type UiNode } from '@atuin/modkit-target/host'
+import { UiTree, type ButtonNode, type UiNode } from '@atuin/modkit-target/host'
 
-import { linesOf, PICK_MARK, type Paint } from './lines.ts'
+import { PICK_MARK, PiLineRenderer, type Paint } from './lines.ts'
 
 export const FOCUS_KEY = 'alt+m'
 
@@ -142,13 +142,13 @@ function paneLines({
   if (width < FRAME_COLUMNS) return { lines: [], scroll: 0, room: 0 }
   const inner = width - FRAME_COLUMNS
   const look = paint(isFocused)
-  const body = linesOf({ nodes: pane.body, width: inner, paint: look })
+  const body = new PiLineRenderer(look).render(pane.body, inner)
   const room = height === undefined ? body.length : Math.max(1, height - FRAME_ROWS)
   const from = Math.max(
     0,
     Math.min(isRevealing ? revealing({ scroll, body, room }) : scroll, body.length - room),
   )
-  const hasButtons = collectButtons(pane.body).length > 0
+  const hasButtons = UiTree.of(pane.body).buttons().length > 0
   const hint = hintOf({ isFocused, canScroll: body.length > room, hasButtons })
   const top = `╭─${edged({ text: ` ${pane.title} `, width, end: '…', isAfter: true })}╮`
   const bottom = `╰${edged({ text: hint, width, end: '', isAfter: false })}─╯`
@@ -246,13 +246,15 @@ export class PaneComponent implements Component {
   }
 
   #pickedButton(): ButtonNode | undefined {
-    return this.#picked === undefined ? undefined : collectButtons(this.#pane.body)[this.#picked]
+    return this.#picked === undefined
+      ? undefined
+      : UiTree.of(this.#pane.body).buttons()[this.#picked]
   }
 
   #hotkeyed(data: string): ButtonNode | undefined {
-    return collectButtons(this.#pane.body).find(
-      ({ hotkey }) => hotkey !== undefined && isKeyId(hotkey) && matchesKey(data, hotkey),
-    )
+    return UiTree.of(this.#pane.body)
+      .buttons()
+      .find(({ hotkey }) => hotkey !== undefined && isKeyId(hotkey) && matchesKey(data, hotkey))
   }
 
   #scrolled(data: string): boolean {
@@ -266,7 +268,7 @@ export class PaneComponent implements Component {
   // Tab moves the keyboard to the next of the pane's buttons, and shift+tab to the one before.
   #moved(data: string): boolean {
     const step = PICKS.find(({ key }) => matchesKey(data, key))?.by
-    const count = collectButtons(this.#pane.body).length
+    const count = UiTree.of(this.#pane.body).buttons().length
     if (step === undefined || count === 0) return false
     const from = this.#picked ?? (step > 0 ? -1 : 0)
     this.#picked = (from + step + count) % count

@@ -1,7 +1,4 @@
 import type { Verdict } from '@atuin/modkit'
-import type { Failure } from '@atuin/modkit/host'
-
-import { errorMessage } from './values.ts'
 
 /** Resolved outcome of a mod's {@link Verdict} after applying confirmation or fallback policy. */
 export type VerdictOutcome =
@@ -47,25 +44,5 @@ export class ModVerdict {
     const accepted = await confirm(verdict.ask)
     if (accepted === undefined) return fallback(verdict)
     return accepted ? { allow: true } : { allow: false, reason: refusedReason(verdict.ask) }
-  }
-}
-
-/** Format and deduplicate mod failures for a plugin's error reporter. */
-export function failureReporter({
-  plugin,
-  notify,
-  log,
-}: {
-  plugin: string
-  notify: (line: string) => void
-  log?: (line: string) => void
-}): (failure: Failure) => void {
-  const reported = new Set<string>()
-  return ({ phase, error }) => {
-    const line = `${plugin}: ${phase} failed: ${errorMessage(error)}`
-    log?.(line)
-    if (reported.has(line)) return
-    reported.add(line)
-    notify(line)
   }
 }

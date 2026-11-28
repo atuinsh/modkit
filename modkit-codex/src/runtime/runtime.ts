@@ -11,7 +11,7 @@ import type {
 } from '@atuin/modkit-target/host'
 
 import { CODEX_CAPABILITIES, type CodexCapabilities, type CodexHookEvent } from '../protocol.ts'
-import { exitFromTranscript, UNKNOWN_EXIT } from './transcript.ts'
+import { CodexTranscript, UNKNOWN_EXIT } from './transcript.ts'
 
 export interface CodexSession {
   readonly buildHarness: (signal: AbortSignal) => {
@@ -47,7 +47,7 @@ export class CodexRuntime extends NodeTargetRuntime<CodexSession, CodexCapabilit
     const { transcriptPath: transcript, toolUseId } = event
     const exit =
       event.isShellTool && transcript !== null && toolUseId !== undefined
-        ? await exitFromTranscript({ path: transcript, id: toolUseId })
+        ? await new CodexTranscript(transcript).readExit(toolUseId)
         : UNKNOWN_EXIT
     const result = event.toResult(exit)
     return result === undefined ? {} : this.followupFor(result)

@@ -1,6 +1,5 @@
 /**
- * Code generators for Claude Code's virtual state module, bundle entry, and `types/index.d.ts`
- * state contract.
+ * Code generator for Claude Code's virtual `modkit-claude:state` module.
  *
  * `claude plugin validate` tracks persistent state only through `atom()` calls with literal
  * `{ plugin, key }` descriptors inside the bundled hooks file. Each state atom stores
@@ -9,95 +8,21 @@
  * @module
  */
 
-import { genAugmentation, genImport, genObjectFromValues, genString } from 'knitwork'
-import { pascalCase } from 'scule'
+import { genImport, genObjectFromValues, genString } from 'knitwork'
 
-import { imagesSource, type ImageDecl, type Shape, type StateDecl } from '@atuin/modkit-target'
+import type { StateDecl, VirtualModule } from '@atuin/modkit-target'
 
-// Atom bumped on every render so Claude Code's `ui.render` hooks re-evaluate.
-const VIEW_KEY = 'modkit.view'
-
-const toolHook = ({ event, tool, hook }: { event: string; tool: string; hook: string }): string =>
-  `  on(${genString(event)}, ${genObjectFromValues({ tool })}, ($, e, next) => runtime.${hook}(engineOf($), e, next)).catch(($, e, next) => next(e))`
-
-const rowHook = (tool: string): string =>
-  `  on("ui.render", ${genObjectFromValues({ component: 'ToolUse', props: { tool } })}, ($, e, next) => runtime.renderCards(engineOf($), e, next))`
-
-export const entrySource = ({
-  mod,
-  runtime,
-  tools,
-  images,
-}: {
-  mod: string
-  runtime: string
-  tools: { before: readonly string[]; after: readonly string[]; cards: readonly string[] }
-  images: readonly ImageDecl[]
-}): string =>
-  [
-    genImport(runtime, ['ClaudeCodeRuntime', 'engineOf', 'registerHooks']),
-    genImport(mod, 'mod'),
-    '',
-    `const images = ${imagesSource(images)}`,
-    '',
-    'export const register = (on, options) => {',
-    '  const runtime = new ClaudeCodeRuntime({ mod, options, images })',
-    '  registerHooks(on, runtime)',
-    ...tools.before.map((tool) => toolHook({ event: 'tool.check', tool, hook: 'checkTool' })),
-    ...tools.after.map((tool) => toolHook({ event: 'tool.call', tool, hook: 'callTool' })),
-    ...tools.cards.map((tool) => rowHook(tool)),
-    '}',
-    '',
-  ].join('\n')
-
-function typeOf(shape: Shape): string {
-  switch (shape.kind) {
-    case 'string':
-    case 'number':
-    case 'boolean':
-    case 'null':
-      return shape.kind
-    case 'literal':
-      return typeof shape.value === 'string' ? genString(shape.value) : String(shape.value)
-    case 'array':
-      return `readonly (${typeOf(shape.of)})[]`
-    case 'tuple':
-      return `readonly [${shape.items
-        .map((item) => {
-          const type = typeOf(item.shape)
-          if (item.element === 'rest') return `...(${type})[]`
-          return item.element === 'optional' ? `(${type})?` : type
-        })
-        .join(', ')}]`
-    case 'object': {
-      const fields = shape.fields.map(
-        (field) =>
-          `readonly ${genString(field.name)}${field.optional ? '?' : ''}: ${typeOf(field.shape)}`,
-      )
-      const index =
-        shape.index === undefined ? [] : [`readonly [key: string]: ${typeOf(shape.index)}`]
-      return `{ ${[...fields, ...index].join('; ')} }`
-    }
-    case 'union':
-      return shape.of.map((member) => `(${typeOf(member)})`).join(' | ')
-    case 'self':
-      break
-  }
-  return 'unknown'
-}
-
-function heldType(one: StateDecl): string {
-  const value = typeOf(one.shape)
-  return one.kind === 'query'
-    ? `{ readonly input: string; readonly at: number; readonly value?: ${value} }`
-    : value
-}
+/** Atom key bumped on every render so Claude Code's `ui.render` hooks re-evaluate. */
+export const VIEW_KEY = 'modkit.view'
 
 /**
- * The state a mod keeps, as the modules its Claude Code plugin is built with: the atoms that hold
- * it, and the contract `claude plugin validate` checks their keys against.
+ * Virtual `modkit-claude:state` module imported by the runtime adapter.
+ *
+ * Declares one `atom()` per state entry plus the view counter atom, and exports `plugin`, `load`,
+ * `save`, `readView`, and `bumpView`.
  */
-export class StateModule {
+export class StateModule implements VirtualModule {
+  readonly id = 'modkit-claude:state'
   readonly #plugin: string
   readonly #state: readonly StateDecl[]
 
@@ -106,13 +31,7 @@ export class StateModule {
     this.#state = state
   }
 
-  /**
-   * The virtual `modkit-claude:state` module imported by the runtime adapter.
-   *
-   * Declares one `atom()` per state entry plus the view counter atom, and exports `plugin`, `load`,
-   * `save`, `readView`, and `bumpView`.
-   */
-  source(): string {
+  emitSource(): string {
     return [
       genImport('claude-code', ['atom', 'read', 'update']),
       '',
@@ -142,31 +61,6 @@ export class StateModule {
       'export function bumpView($) {',
       '  return update($, view, (n) => n + 1)',
       '}',
-      '',
-    ].join('\n')
-  }
-
-  /**
-   * `types/index.d.ts`, declaring the plugin's `PluginState` module augmentation.
-   *
-   * Exports one type alias per state slot (required so TypeScript treats the file as a module for
-   * `declare module 'claude-code'`) and declares every atom key checked by `claude plugin validate`.
-   * Recursive `self` references in a shape emit `unknown` because inline type literals cannot name
-   * themselves.
-   */
-  contract(): string {
-    const types = this.#state.map((one) => `export type ${pascalCase(one.id)} = ${heldType(one)}`)
-    const entries = Object.fromEntries([
-      [VIEW_KEY, 'number'],
-      ...this.#state.map(
-        (one) => [one.id, `Shaped<{ readonly value: ${pascalCase(one.id)} } | null>`] as const,
-      ),
-    ])
-    return [
-      '// The state contract modkit wrote for this mod: build it again rather than edit it.',
-      ...types,
-      '',
-      genAugmentation('claude-code', { PluginState: { [this.#plugin]: entries } }),
       '',
     ].join('\n')
   }

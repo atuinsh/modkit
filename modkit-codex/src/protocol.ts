@@ -127,22 +127,6 @@ const HookSchema = v.variant('event', [
 
 type WireHookEvent = v.InferOutput<typeof HookSchema>
 
-export const hookTimeout = (event: HookEventName): Temporal.Duration | undefined => {
-  const spec: HookSpec = HOOKS[event]
-  return spec.timeout
-}
-
-/** Build the `${field}` input map for a Codex hook from its wire schema. */
-export const hookInputTemplate = (event: HookEventName): Readonly<Record<string, string>> => ({
-  event,
-  ...Object.fromEntries(
-    Object.keys(HOOKS[event].fields).map((name): readonly [string, string] => [
-      name,
-      `\${${name}}`,
-    ]),
-  ),
-})
-
 function extractCommand(input: unknown): string | undefined {
   const { command } = asRecord(input)
   return typeof command === 'string' ? command : undefined
@@ -169,6 +153,25 @@ export class CodexHookEvent {
       throw new TypeError(`a hook's ${v.getDotPath(issue) ?? 'arguments'}: ${issue.message}`)
     }
     return new CodexHookEvent(parsed.output)
+  }
+
+  /** Optional timeout configured for Codex hook `event`. */
+  static timeoutFor(event: HookEventName): Temporal.Duration | undefined {
+    const spec: HookSpec = HOOKS[event]
+    return spec.timeout
+  }
+
+  /** Build the `${field}` input map for a Codex hook from its wire schema. */
+  static inputTemplateFor(event: HookEventName): Readonly<Record<string, string>> {
+    return {
+      event,
+      ...Object.fromEntries(
+        Object.keys(HOOKS[event].fields).map((name): readonly [string, string] => [
+          name,
+          `\${${name}}`,
+        ]),
+      ),
+    }
   }
 
   get kind(): HookEventName {

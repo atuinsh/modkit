@@ -1,18 +1,12 @@
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
-import { keysOf, partsNamed, type ModCall } from './entry.ts'
+import { DiagnosticError } from './diagnostics.ts'
+import { ModAst } from './entry.ts'
 import { imagesIn } from './images.ts'
 import type { ImageDecl } from './ir.ts'
-import { callsIn, modkitExports } from './modkit.ts'
-import {
-  isStringLiteralType,
-  resolvedSymbol,
-  type Node,
-  type Project,
-  type TsSymbol,
-} from './program.ts'
+import { ModkitSymbols } from './modkit.ts'
+import { isStringLiteralType, type Node, type TsProject, type TsSymbol } from './program.ts'
 
-function envMethod(project: Project): TsSymbol | undefined {
-  const harness = modkitExports(project).find((symbol) => symbol.name === 'Harness')
+function envMethod(project: TsProject): TsSymbol | undefined {
+  const harness = new ModkitSymbols(project).exports().find((symbol) => symbol.name === 'Harness')
   return [...(harness?.getMembers().values() ?? [])].find((member) => member.name === 'env')
 }
 
@@ -20,7 +14,7 @@ function textOf({
   project,
   node,
 }: {
-  project: Project
+  project: TsProject
   node: Node | undefined
 }): string | undefined {
   if (node === undefined) return undefined
@@ -41,7 +35,7 @@ export interface Literals {
   tools: ToolNames
   /** The PNGs the mod's `<Img>`s name, sorted by path. */
   images: ImageDecl[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 const TOOL_PARTS = [
@@ -52,35 +46,38 @@ const TOOL_PARTS = [
 
 interface ToolsRead {
   names: string[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 function toolsOf({
   mod,
   part,
 }: {
-  mod: ModCall
+  mod: ModAst
   part: (typeof TOOL_PARTS)[number][0]
 }): ToolsRead[] {
-  return partsNamed({ mod, name: part }).map((written) => {
-    const names = keysOf(written)
+  return mod.parts(part).map((written) => {
+    const names = ModAst.keysOf(written)
     if (names === undefined) {
       const message = `${part}'s tools are an object literal's written-out keys: a harness hooks a tool by its name`
       return {
         names: [],
-        diagnostics: [diagnosticAt({ code: 'tool-name', message, node: written })],
+        diagnostics: [DiagnosticError.at({ code: 'tool-name', message, node: written })],
       }
     }
     // A card only draws, so it goes under Bash's rows too; the shell parts decide on Bash.
     if (part === 'toolCards' || !names.includes('Bash')) return { names, diagnostics: [] }
     const message = `${part}.Bash is ${part.replace('Tool', 'Shell')}, which hands it the command`
-    return { names: [], diagnostics: [diagnosticAt({ code: 'tool-name', message, node: written })] }
+    return {
+      names: [],
+      diagnostics: [DiagnosticError.at({ code: 'tool-name', message, node: written })],
+    }
   })
 }
 
 const sorted = (names: readonly string[]): string[] => [...new Set(names)].toSorted()
 
-function toolsIn(mod: ModCall): { tools: ToolNames; diagnostics: Diagnostic[] } {
+function toolsIn(mod: ModAst): { tools: ToolNames; diagnostics: DiagnosticError[] } {
   const found = TOOL_PARTS.map(([part, side]) => ({ side, read: toolsOf({ mod, part }) }))
   const namesFor = (side: keyof ToolNames): string[] =>
     sorted(
@@ -92,12 +89,12 @@ function toolsIn(mod: ModCall): { tools: ToolNames; diagnostics: Diagnostic[] } 
   }
 }
 
-function envIn(project: Project): { env: string[]; diagnostics: Diagnostic[] } {
+function envIn(project: TsProject): { env: string[]; diagnostics: DiagnosticError[] } {
   const env = envMethod(project)
   if (env === undefined) return { env: [], diagnostics: [] }
   const reads = project.files.flatMap((file) =>
-    callsIn(file).filter(
-      (call) => resolvedSymbol({ checker: project.checker, node: call.expression })?.id === env.id,
+    ModkitSymbols.callsIn(file).filter(
+      (call) => project.resolveSymbol(call.expression)?.id === env.id,
     ),
   )
   const names = reads.map((call) => ({ call, name: textOf({ project, node: call.arguments[0] }) }))
@@ -106,7 +103,7 @@ function envIn(project: Project): { env: string[]; diagnostics: Diagnostic[] } {
   return {
     env: sorted(names.flatMap(({ name }) => (name === undefined ? [] : [name]))),
     diagnostics: names.flatMap(({ call, name }) =>
-      name === undefined ? [diagnosticAt({ code: 'env-name', message, node: call })] : [],
+      name === undefined ? [DiagnosticError.at({ code: 'env-name', message, node: call })] : [],
     ),
   }
 }
@@ -116,8 +113,8 @@ export function literalsIn({
   mod,
   dir,
 }: {
-  project: Project
-  mod: ModCall
+  project: TsProject
+  mod: ModAst
   /** The mod's directory, which its `<Img>`s name their PNGs in. */
   dir: string
 }): Literals {

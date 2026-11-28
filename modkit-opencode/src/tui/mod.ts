@@ -1,4 +1,4 @@
-import { contractOf } from '../contract.ts'
+import { OpencodeContract } from '../contract.ts'
 
 export const PLUGIN = 'mod'
-export const CONTRACT = contractOf(PLUGIN)
+export const CONTRACT = OpencodeContract.for(PLUGIN)

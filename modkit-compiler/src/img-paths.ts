@@ -12,16 +12,15 @@
  * @module
  */
 
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import {
-  hasAnyFlag,
   isStringLiteralType,
   isUnionType,
   SymbolFlags,
   syntax,
+  TsProject,
   TypeFlags,
   type Node,
-  type Project,
   type TsSymbol,
   type Type,
 } from './program.ts'
@@ -38,9 +37,7 @@ interface Named {
 const UNSET: Named = { paths: new Map(), isSet: false }
 
 // The paths so far, or the diagnostic naming the attribute that left them unknown.
-type Read = Named | Diagnostic
-
-const isUnknown = (read: Read): read is Diagnostic => 'code' in read
+type Read = Named | DiagnosticError
 
 // What a spread sets `image` to: the paths it can set, and whether it always sets one.
 interface SpreadImage {
@@ -71,7 +68,7 @@ function writtenPathsOf({
   project,
   attribute,
 }: {
-  project: Project
+  project: TsProject
   attribute: syntax.JsxAttribute
 }): string[] | undefined {
   const value = attribute.initializer
@@ -100,12 +97,12 @@ function memberImageOf({
   project,
   type,
 }: {
-  project: Project
+  project: TsProject
   type: Type
 }): SpreadImage | undefined {
   const { checker } = project
   const isOpaque =
-    hasAnyFlag({ type, flags: TypeFlags.Any | TypeFlags.Unknown }) ||
+    TsProject.hasAnyFlag({ type, flags: TypeFlags.Any | TypeFlags.Unknown }) ||
     checker.getIndexInfosOfType(type).length > 0
   if (isOpaque) return undefined
   const image = checker.getPropertyOfType(type, 'image')
@@ -113,7 +110,7 @@ function memberImageOf({
   const declared = checker.getTypeOfSymbol(image)
   const present = declared === undefined ? undefined : checker.getNonNullableType(declared)
   // An `image?: undefined`, as a normalized `cond ? { image } : {}` has, sets nothing.
-  if (present !== undefined && hasAnyFlag({ type: present, flags: TypeFlags.Never })) {
+  if (present !== undefined && TsProject.hasAnyFlag({ type: present, flags: TypeFlags.Never })) {
     return SETS_NOTHING
   }
   const paths = present === undefined ? undefined : literalsOf(present)
@@ -126,7 +123,7 @@ function spreadImageOf({
   project,
   spread,
 }: {
-  project: Project
+  project: TsProject
   spread: syntax.JsxSpreadAttribute
 }): SpreadImage | undefined {
   const type = project.checker.getTypeAtLocation(spread.expression)
@@ -148,18 +145,18 @@ function spreadOver({
   spread,
   read,
 }: {
-  project: Project
+  project: TsProject
   spread: syntax.JsxSpreadAttribute
   read: Read
 }): Read {
   const image = spreadImageOf({ project, spread })
   if (image === undefined) {
-    return diagnosticAt({ code: 'image', message: SPREAD_MESSAGE, node: spread })
+    return DiagnosticError.at({ code: 'image', message: SPREAD_MESSAGE, node: spread })
   }
   const set = image.paths.map((path): [string, Node] => [path, spread])
   if (image.isSet) return { paths: new Map(set), isSet: true }
   // A spread that only may set `image` leaves one the build can't know as unknown as it was.
-  if (isUnknown(read)) return read
+  if (read instanceof DiagnosticError) return read
   return { paths: new Map([...read.paths, ...set]), isSet: read.isSet }
 }
 
@@ -169,7 +166,7 @@ function appliedOf({
   property,
   read,
 }: {
-  project: Project
+  project: TsProject
   property: Node
   read: Read
 }): Read {
@@ -177,25 +174,25 @@ function appliedOf({
   if (!isImageAttribute(property)) return read
   const paths = writtenPathsOf({ project, attribute: property })
   if (paths === undefined) {
-    return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: property })
+    return DiagnosticError.at({ code: 'image', message: LITERAL_MESSAGE, node: property })
   }
   const at = property.initializer ?? property
   return { paths: new Map(paths.map((path) => [path, at])), isSet: true }
 }
 
-/** The paths `element`'s `image` can be, by what names each, or why the build can't know them. */
+/** The paths `element`'s `image` can be, by what names each; throws {@link DiagnosticError} if unknown. */
 export function pathsOf({
   project,
   element,
 }: {
-  project: Project
+  project: TsProject
   element: syntax.JsxSelfClosingElement | syntax.JsxOpeningElement
-}): NamedPaths | Diagnostic {
+}): NamedPaths {
   let read: Read = UNSET
   for (const property of element.attributes.properties) {
     read = appliedOf({ project, property, read })
   }
-  if (isUnknown(read)) return read
+  if (read instanceof DiagnosticError) throw read
   if (read.isSet) return read.paths
-  return diagnosticAt({ code: 'image', message: LITERAL_MESSAGE, node: element })
+  throw DiagnosticError.at({ code: 'image', message: LITERAL_MESSAGE, node: element })
 }

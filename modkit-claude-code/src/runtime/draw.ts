@@ -16,9 +16,8 @@
 import type { Elements, RenderNode } from 'claude-code'
 
 import {
-  buttonKey,
   textOf,
-  visitUiNode,
+  UiTree,
   type ButtonNode,
   type ImgNode,
   type LinkNode,
@@ -86,7 +85,7 @@ export class Drawing {
     const elements = this.#elements
     return nodes.map((node, index): RenderNode => {
       const key = `${at}.${index}`
-      return visitUiNode(node, {
+      return UiTree.visit(node, {
         string: (text) => h(elements.Text, { key }, text),
         text: (textNode) => this.#text(textNode, key),
         link: (linkNode) => h(elements.Text, { key }, this.#link(linkNode, `${key}.0`)),
@@ -150,7 +149,7 @@ export class Drawing {
 
   #button(node: ButtonNode, key: string): RenderNode {
     return h(this.#elements.Button, {
-      key: buttonKey(node, key),
+      key: UiTree.buttonKey(node, key),
       label: textOf(node.children),
       plain: true,
       ...(node.hotkey !== undefined && { hotkey: node.hotkey }),

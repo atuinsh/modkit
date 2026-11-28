@@ -5,7 +5,7 @@ import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
 import type { SettingsSchema } from '@atuin/modkit-target-node/runtime/settings'
 import { FileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
-  failureReporter,
+  FailureReporter,
   type HarnessAdapter,
   type Images,
   type Mod,
@@ -93,7 +93,7 @@ export class LiveSession implements Disposable {
     servers: Servers
     signal: AbortSignal
   }): { harness: HarnessAdapter; store: FileStore } {
-    const report = failureReporter({
+    const { report } = FailureReporter.for({
       plugin,
       notify: (line) => {
         state.notes.push(line)

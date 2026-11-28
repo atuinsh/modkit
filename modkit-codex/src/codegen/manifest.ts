@@ -1,6 +1,12 @@
-import type { ArtifactWriter, HookNeeds, ModInfo, PluginName } from '@atuin/modkit-target'
+import type {
+  ArtifactEmitter,
+  ArtifactWriter,
+  HookNeeds,
+  ModInfo,
+  PluginName,
+} from '@atuin/modkit-target'
 
-import { HOOK_TOOL, hookInputTemplate, hookTimeout, type HookEventName } from '../protocol.ts'
+import { CodexHookEvent, HOOK_TOOL, type HookEventName } from '../protocol.ts'
 
 const PASSED_ALWAYS = new Set(['CODEX_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR'])
 
@@ -52,12 +58,12 @@ function escapeMatcher(tool: string): string {
 }
 
 function buildHook({ server, event }: { server: string; event: HookEventName }): CodexHook {
-  const timeout = hookTimeout(event)
+  const timeout = CodexHookEvent.timeoutFor(event)
   return {
     type: 'mcp_tool',
     server,
     tool: HOOK_TOOL,
-    input: hookInputTemplate(event),
+    input: CodexHookEvent.inputTemplateFor(event),
     ...(timeout !== undefined && { timeout: timeout.total('second') }),
   }
 }
@@ -96,7 +102,7 @@ function buildHooksJson({
 }
 
 /** Typed Codex plugin manifests (`.codex-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`). */
-export class CodexPluginManifest {
+export class CodexPluginManifest implements ArtifactEmitter {
   readonly #plugin: PluginJson
   readonly #mcp: McpJson
   readonly #hooks: HooksJson

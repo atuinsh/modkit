@@ -17,17 +17,17 @@ import { decode } from 'fast-png'
 import isPathInside from 'is-path-inside'
 import prettyBytes from 'pretty-bytes'
 
-import { diagnosticAt, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import { pathsOf } from './img-paths.ts'
 import type { ImageDecl } from './ir.ts'
-import { modkitExports } from './modkit.ts'
-import { resolvedSymbol, syntax, type Node, type Project, type TsSymbol } from './program.ts'
+import { ModkitSymbols } from './modkit.ts'
+import { syntax, type Node, type TsProject, type TsSymbol } from './program.ts'
 
 /** What reading a mod's `<Img>`s found: the PNGs to embed, and why any can't be. */
 export interface ImagesRead {
   /** Sorted by path. */
   images: ImageDecl[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 type ImgElement = syntax.JsxSelfClosingElement | syntax.JsxOpeningElement
@@ -39,7 +39,7 @@ function nodesIn<T extends Node>({
   project,
   is,
 }: {
-  project: Project
+  project: TsProject
   is: (node: Node) => node is T
 }): T[] {
   const found: T[] = []
@@ -54,16 +54,23 @@ function nodesIn<T extends Node>({
 const isElement = (node: Node): node is ImgElement =>
   syntax.isJsxSelfClosingElement(node) || syntax.isJsxOpeningElement(node)
 
-const isImg = ({ project, img, node }: { project: Project; img: TsSymbol; node: Node }): boolean =>
-  resolvedSymbol({ checker: project.checker, node })?.id === img.id
+const isImg = ({
+  project,
+  img,
+  node,
+}: {
+  project: TsProject
+  img: TsSymbol
+  node: Node
+}): boolean => project.resolveSymbol(node)?.id === img.id
 
-const imgsIn = ({ project, img }: { project: Project; img: TsSymbol }): ImgElement[] =>
+const imgsIn = ({ project, img }: { project: TsProject; img: TsSymbol }): ImgElement[] =>
   nodesIn({ project, is: isElement }).filter((element) =>
     isImg({ project, img, node: element.tagName }),
   )
 
 // The names the mod's files bind Img to: its own, and each import or export that renames it.
-function namesOf({ project, img }: { project: Project; img: TsSymbol }): Set<string> {
+function namesOf({ project, img }: { project: TsProject; img: TsSymbol }): Set<string> {
   const specifiers = nodesIn({
     project,
     is: (node) => syntax.isImportSpecifier(node) || syntax.isExportSpecifier(node),
@@ -98,13 +105,13 @@ const isReadable = (reference: syntax.Identifier): boolean =>
 
 // Each use of Img as a value, such as `const Picture = Img`, which would draw PNGs the build can't
 // see the names of.
-function valueUsesIn({ project, img }: { project: Project; img: TsSymbol }): Diagnostic[] {
+function valueUsesIn({ project, img }: { project: TsProject; img: TsSymbol }): DiagnosticError[] {
   const names = namesOf({ project, img })
   const message =
     '<Img> is written as a JSX tag, never passed around as a value: the build embeds the PNG each <Img> tag names'
   return nodesIn({ project, is: syntax.isIdentifier })
     .filter((one) => names.has(one.text) && !isReadable(one) && isImg({ project, img, node: one }))
-    .map((node) => diagnosticAt({ code: 'image', message, node }))
+    .map((node) => DiagnosticError.at({ code: 'image', message, node }))
 }
 
 const sizeText = (bytes: number): string => prettyBytes(bytes, { binary: true })
@@ -172,22 +179,40 @@ function imageAt({ dir, path }: { dir: string; path: string }): ImageDecl | stri
   return { path, base64: bytes.toBase64(), ...size }
 }
 
-/** Read each PNG the `<Img>`s of the mod in `dir` name, for its targets to embed. */
-export function imagesIn({ project, dir }: { project: Project; dir: string }): ImagesRead {
-  const img = modkitExports(project).find((symbol) => symbol.name === 'Img')
-  if (img === undefined) return { images: [], diagnostics: [] }
-  const named = imgsIn({ project, img }).map((element) => pathsOf({ project, element }))
-  const read = new Map<string, ImageDecl | string>()
-  const unread = named.flatMap((one): Diagnostic[] => {
-    if ('code' in one) return [one]
-    return [...one].flatMap(([path, at]) => {
+function readElementImages({
+  project,
+  dir,
+  element,
+  read,
+}: {
+  project: TsProject
+  dir: string
+  element: ImgElement
+  read: Map<string, ImageDecl | string>
+}): DiagnosticError[] {
+  try {
+    return [...pathsOf({ project, element })].flatMap(([path, at]) => {
       const image = read.get(path) ?? imageAt({ dir, path })
       read.set(path, image)
       if (typeof image !== 'string') return []
-      const message = `<Img image="${path}">: ${image}`
-      return [diagnosticAt({ code: 'image', message, node: at })]
+      return [
+        DiagnosticError.at({ code: 'image', message: `<Img image="${path}">: ${image}`, node: at }),
+      ]
     })
-  })
+  } catch (error) {
+    if (error instanceof DiagnosticError) return [error]
+    throw error
+  }
+}
+
+/** Read each PNG the `<Img>`s of the mod in `dir` name, for its targets to embed. */
+export function imagesIn({ project, dir }: { project: TsProject; dir: string }): ImagesRead {
+  const img = new ModkitSymbols(project).exports().find((symbol) => symbol.name === 'Img')
+  if (img === undefined) return { images: [], diagnostics: [] }
+  const read = new Map<string, ImageDecl | string>()
+  const unread = imgsIn({ project, img }).flatMap((element) =>
+    readElementImages({ project, dir, element, read }),
+  )
   const images = [...read.values()].flatMap((image) => (typeof image === 'string' ? [] : [image]))
   return {
     images: images.toSorted((one, other) => one.path.localeCompare(other.path)),

@@ -72,19 +72,6 @@ function collectSpans({
   return [...spans, ...spelledUrl({ node, around })]
 }
 
-/** Flatten a {@link TextNode} or {@link LinkNode} into leaf {@link StyledSpan}s with cascaded styles. */
-export function flattenTextSpans(
-  node: TextNode | LinkNode,
-  { spellsUrls = false }: { readonly spellsUrls?: boolean } = {},
-): readonly StyledSpan[] {
-  return collectSpans({ node, around: PLAIN_STYLE, spellsUrls })
-}
-
-/** Stable identity key for a {@link ButtonNode}, preferring explicit key, then hotkey, then path. */
-export function buttonKey(node: ButtonNode, fallbackPath: string): string {
-  return node.key ?? (node.hotkey === undefined ? fallbackPath : `hotkey:${node.hotkey}`)
-}
-
 /** Exhaustive visitor over every {@link UiNode} variant. */
 export interface UiVisitor<Out> {
   readonly string: (text: string) => Out
@@ -96,38 +83,70 @@ export interface UiVisitor<Out> {
   readonly markdown: (node: MarkdownNode) => Out
 }
 
-/** Dispatch `node` exhaustively to `visitor`, forcing compile errors when a new node kind lands. */
-export function visitUiNode<Out>(node: UiNode, visitor: UiVisitor<Out>): Out {
-  if (typeof node === 'string') return visitor.string(node)
-  switch (node.kind) {
-    case 'Text':
-      return visitor.text(node)
-    case 'Link':
-      return visitor.link(node)
-    case 'Column':
-    case 'Row':
-      return visitor.stack(node)
-    case 'Button':
-      return visitor.button(node)
-    case 'Img':
-      return visitor.img(node)
-    case 'Markdown':
-      break
-  }
-  return visitor.markdown(node)
-}
+/** Bound traversal, text flattening, and identity operations over {@link UiNode} trees. */
+export class UiTree {
+  readonly #nodes: readonly UiNode[]
 
-/** Collect every {@link ButtonNode} in `nodes` in document order using {@link visitUiNode}. */
-export function collectButtons(nodes: readonly UiNode[]): readonly ButtonNode[] {
-  return nodes.flatMap((node): readonly ButtonNode[] =>
-    visitUiNode<readonly ButtonNode[]>(node, {
-      string: () => [],
-      text: (textNode) => collectButtons(textNode.children),
-      link: (linkNode) => collectButtons(linkNode.children),
-      stack: (stack) => collectButtons(stack.children),
-      button: (button) => [button],
-      img: () => [],
-      markdown: () => [],
-    }),
-  )
+  private constructor(nodes: readonly UiNode[]) {
+    this.#nodes = nodes
+  }
+
+  /** Wrap a slice of {@link UiNode}s for bound traversal operations. */
+  static of(nodes: readonly UiNode[]): UiTree {
+    return new UiTree(nodes)
+  }
+
+  /** Dispatch `node` exhaustively to `visitor`, forcing compile errors when a new node kind lands. */
+  static visit<Out>(node: UiNode, visitor: UiVisitor<Out>): Out {
+    if (typeof node === 'string') return visitor.string(node)
+    switch (node.kind) {
+      case 'Text':
+        return visitor.text(node)
+      case 'Link':
+        return visitor.link(node)
+      case 'Column':
+      case 'Row':
+        return visitor.stack(node)
+      case 'Button':
+        return visitor.button(node)
+      case 'Img':
+        return visitor.img(node)
+      case 'Markdown':
+        break
+    }
+    return visitor.markdown(node)
+  }
+
+  /** Flatten a {@link TextNode} or {@link LinkNode} into leaf {@link StyledSpan}s with cascaded styles. */
+  static flattenSpans(
+    node: TextNode | LinkNode,
+    { spellsUrls = false }: { readonly spellsUrls?: boolean } = {},
+  ): readonly StyledSpan[] {
+    return collectSpans({ node, around: PLAIN_STYLE, spellsUrls })
+  }
+
+  /** Stable identity key for a {@link ButtonNode}, preferring explicit key, then hotkey, then path. */
+  static buttonKey(node: ButtonNode, fallbackPath: string): string {
+    return node.key ?? (node.hotkey === undefined ? fallbackPath : `hotkey:${node.hotkey}`)
+  }
+
+  /** Flatten all nodes in this tree into plain text. */
+  text(): string {
+    return textOf(this.#nodes)
+  }
+
+  /** Collect every {@link ButtonNode} in this tree in document order via {@link UiTree.visit}. */
+  buttons(): readonly ButtonNode[] {
+    return this.#nodes.flatMap((node): readonly ButtonNode[] =>
+      UiTree.visit<readonly ButtonNode[]>(node, {
+        string: () => [],
+        text: (textNode) => UiTree.of(textNode.children).buttons(),
+        link: (linkNode) => UiTree.of(linkNode.children).buttons(),
+        stack: (stack) => UiTree.of(stack.children).buttons(),
+        button: (button) => [button],
+        img: () => [],
+        markdown: () => [],
+      }),
+    )
+  }
 }

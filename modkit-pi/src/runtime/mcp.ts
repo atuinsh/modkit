@@ -66,28 +66,6 @@ function resolveStdio({
   })
 }
 
-function parsePiServer({
-  name,
-  user,
-  project,
-  cwd,
-  home,
-}: {
-  name: string
-  user: unknown
-  project: unknown
-  cwd: string
-  home: string
-}): Result<StdioServer, string> {
-  const own = findEntry({ config: user, name })
-  const local = findEntry({ config: project, name })
-  const entry = local !== undefined && isWhole(local) ? local : own
-  if (entry === undefined) return Result.err(`pi's MCP config names no ${name} server`)
-  const enabled = local?.enabled ?? entry.enabled
-  if (enabled === false) return Result.err(`${name} is turned off in pi's MCP config`)
-  return resolveStdio({ name, entry, cwd, home })
-}
-
 function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
@@ -96,23 +74,29 @@ function readJson(path: string): unknown {
   }
 }
 
-export const agentDir = (): string =>
-  process.env['PI_CODING_AGENT_DIR'] ?? join(homedir(), '.pi', 'agent')
+/** Resolver for pi's agent directory and stdio MCP server configuration. */
+export class PiMcpConfig {
+  readonly #cwd: string
+  readonly #isTrusted: boolean
 
-export function configuredServer({
-  name,
-  cwd,
-  isTrusted,
-}: {
-  name: string
-  cwd: string
-  isTrusted: boolean
-}): Result<StdioServer, string> {
-  return parsePiServer({
-    name,
-    user: readJson(join(agentDir(), 'mcp.json')),
-    project: isTrusted ? readJson(join(cwd, '.pi', 'mcp.json')) : undefined,
-    cwd,
-    home: homedir(),
-  })
+  constructor({ cwd, isTrusted }: { cwd: string; isTrusted: boolean }) {
+    this.#cwd = cwd
+    this.#isTrusted = isTrusted
+  }
+
+  static agentDir(): string {
+    return process.env['PI_CODING_AGENT_DIR'] ?? join(homedir(), '.pi', 'agent')
+  }
+
+  resolve(name: string): Result<StdioServer, string> {
+    const user = readJson(join(PiMcpConfig.agentDir(), 'mcp.json'))
+    const project = this.#isTrusted ? readJson(join(this.#cwd, '.pi', 'mcp.json')) : undefined
+    const own = findEntry({ config: user, name })
+    const local = findEntry({ config: project, name })
+    const entry = local !== undefined && isWhole(local) ? local : own
+    if (entry === undefined) return Result.err(`pi's MCP config names no ${name} server`)
+    const enabled = local?.enabled ?? entry.enabled
+    if (enabled === false) return Result.err(`${name} is turned off in pi's MCP config`)
+    return resolveStdio({ name, entry, cwd: this.#cwd, home: homedir() })
+  }
 }

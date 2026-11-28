@@ -21,10 +21,10 @@ import {
 
 import { PI_CAPABILITIES, type PiCapabilities } from '../spec.ts'
 import { createSessionResources, type PiSessionResources } from './harness.ts'
-import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks.ts'
-import { linesOf } from './lines.ts'
+import { PiEvent, type Block, type PiCall } from './hooks.ts'
+import { PiLineRenderer } from './lines.ts'
 import { Overlays } from './overlays.ts'
-import { paintOf } from './paint.ts'
+import { PiThemePaint } from './paint.ts'
 
 const STATUS_COLUMNS = 400
 
@@ -98,7 +98,9 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
 
   async beforeCall(event: PiCall, ctx: ExtensionContext): Promise<Block | undefined> {
     try {
-      const verdict = ModVerdict.from(await this.verdictFor(callOf({ event, cwd: ctx.cwd })))
+      const verdict = ModVerdict.from(
+        await this.verdictFor(PiEvent.from({ event, cwd: ctx.cwd }).toCall()),
+      )
       const outcome = await verdict.resolve({
         canAsk: ctx.hasUI,
         confirm: async (ask) => ctx.ui.confirm(`${this.#plugin} asks`, ask),
@@ -116,11 +118,11 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
     ctx: ExtensionContext,
   ): Promise<ToolResultEventResult | undefined> {
     try {
-      const result = resultOf({ event, cwd: ctx.cwd })
+      const result = PiEvent.from({ event, cwd: ctx.cwd }).toResult(event)
       if (result === undefined) return undefined
       const followup = await this.followupFor(result)
       if (followup.note !== undefined && ctx.hasUI) ctx.ui.notify(followup.note, 'info')
-      return followedBy({ event, followup })
+      return PiEvent.appendFollowup({ event, followup })
     } catch {
       return undefined
     }
@@ -189,14 +191,14 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext, PiCapabilitie
   #drawStatuses(ctx: ExtensionContext, statuses: readonly (readonly UiNode[])[]): void {
     if (!ctx.hasUI) return
     // The footer pi draws takes a line of text, so a status draws each fallback.
-    const paint = paintOf({
-      theme: ctx.ui.theme,
+    const paint = new PiThemePaint(ctx.ui.theme).paint({
       hasKeys: false,
       isLine: true,
       drawsImages: false,
     })
+    const renderer = new PiLineRenderer(paint)
     for (const [index, status] of statuses.entries()) {
-      const line = linesOf({ nodes: status, width: STATUS_COLUMNS, paint }).join(' ')
+      const line = renderer.render(status, STATUS_COLUMNS).join(' ')
       ctx.ui.setStatus(this.#statusKey(index), line === '' ? undefined : line)
     }
     for (let index = statuses.length; index < this.#statuses; index += 1) {

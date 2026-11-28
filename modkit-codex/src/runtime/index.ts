@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
 import { INVALID_PARAMS, RpcError } from '@atuin/modkit-target-node/runtime/errors'
-import { peerOn, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
+import { RpcPeer, type Peer } from '@atuin/modkit-target-node/runtime/rpc'
 import { RpcMethod } from '@atuin/modkit-target-node/runtime/rpc-method'
 import { RpcRouter } from '@atuin/modkit-target-node/runtime/rpc-router'
 import { errorMessage, ModVerdict, type Followup } from '@atuin/modkit-target/host'
@@ -301,10 +301,6 @@ class Server implements Disposable {
 
 export async function serve(served: Served): Promise<void> {
   using server = new Server(served)
-  using peer = peerOn({
-    input: process.stdin,
-    output: process.stdout,
-    onRequest: async (call) => server.answer(call),
-  })
+  using peer = RpcPeer.stdio({ onRequest: async (call) => server.answer(call) })
   await server.run(peer)
 }

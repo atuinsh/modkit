@@ -21,10 +21,9 @@ import { defineCommand, runMain } from 'citty'
 import { uniqBy } from 'es-toolkit/array'
 import { debounce } from 'es-toolkit/function'
 
-import { formatDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
+import type { DiagnosticError } from '@atuin/modkit-compiler'
 import {
   errorMessage,
-  gapText,
   ModPackage,
   type CompiledMod,
   type Gap,
@@ -38,13 +37,13 @@ function shown(path: string): string {
   return near === '' ? '.' : near
 }
 
-function failed(diagnostics: readonly Diagnostic[]): false {
-  const lines = diagnostics.map((one) => formatDiagnostic({ ...one, file: shown(one.file) }))
+function failed(diagnostics: readonly DiagnosticError[]): false {
+  const lines = diagnostics.map((one) => one.withFile(shown(one.file)).format())
   console.error(lines.join('\n'))
   return false
 }
 
-const gapNote = (gap: Gap): string => `  ${gapText(gap)} (accepted in package.json)`
+const gapNote = (gap: Gap): string => `  ${gap.toString()} (accepted in package.json)`
 
 /** A compiled mod and the gaps its package.json accepts on one target, ready to build for it. */
 interface Checked {
@@ -82,7 +81,7 @@ class Build {
         ...(compiled.isOk ? [] : compiled.diagnostics),
         ...(targets.isOk ? [] : targets.diagnostics),
       ]
-      return failed(uniqBy(all, (one) => formatDiagnostic(one)))
+      return failed(uniqBy(all, (one) => one.format()))
     }
     const checks = targets.value.map((target) => ({ target, checked: target.check(compiled) }))
     const diagnostics = checks.flatMap(({ checked }) => checked.diagnostics)

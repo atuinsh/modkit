@@ -7,10 +7,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import slugify from '@sindresorhus/slugify'
 import * as v from 'valibot'
 
-import type { Diagnostic, DiagnosticCode } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import type { Author, ModInfo } from './ir.ts'
+
+// Maximum plugin name length enforced by Claude Code and kept consistent across targets.
+const NAME_LENGTH = 64
 
 const NonEmptyString = v.pipe(v.string(), v.nonEmpty())
 
@@ -27,72 +31,88 @@ const ManifestSchema = v.object({
   author: v.optional(v.unknown()),
 })
 
-const fileError = ({
-  code,
-  message,
-  path,
-}: {
-  code: DiagnosticCode
-  message: string
-  path: string
-}): Diagnostic => ({ code, message, file: path, line: 1, column: 1 })
-
-/** Read `path` as a `package.json`, or return the `'manifest'` diagnostic that says why it isn't one. */
-export function manifestAt(
-  path: string,
-): { isOk: true; manifest: unknown } | { isOk: false; diagnostic: Diagnostic } {
-  if (!existsSync(path)) {
-    const message = 'a mod is a package, and its folder has no package.json'
-    return { isOk: false, diagnostic: fileError({ code: 'manifest', message, path }) }
-  }
-  try {
-    return { isOk: true, manifest: JSON.parse(readFileSync(path, 'utf8')) }
-  } catch (error) {
-    const message = `package.json isn't JSON: ${error instanceof Error ? error.message : String(error)}`
-    return { isOk: false, diagnostic: fileError({ code: 'manifest', message, path }) }
-  }
-}
-
 const AUTHOR_LINE = /^(?<name>[^<(]+?)\s*(?:<(?<email>[^>]+)>)?\s*(?:\((?<url>[^)]+)\))?$/u
 
-/**
- * Parse an npm `package.json` `author` field into an {@link Author}.
- *
- * Accepts either a one-line string (`Name <email> (url)`, with email and url optional) or an
- * object with a non-empty `name` string. Returns `undefined` if `author` is missing or malformed.
- */
-export function authorOf(author: unknown): Author | undefined {
-  if (typeof author === 'string') {
-    const { name, email, url } = AUTHOR_LINE.exec(author.trim())?.groups ?? {}
-    if (name === undefined) return undefined
+/** Reader and validator bound to a mod directory's `package.json` and `tsconfig.json`. */
+export class ModManifest {
+  readonly #dir: string
+
+  constructor(dir: string) {
+    this.#dir = dir
+  }
+
+  /**
+   * Parse an npm `package.json` `author` field into an {@link Author}.
+   *
+   * Accepts either a one-line string (`Name <email> (url)`, with email and url optional) or an
+   * object with a non-empty `name` string. Returns `undefined` if `author` is missing or malformed.
+   */
+  static parseAuthor(author: unknown): Author | undefined {
+    if (typeof author === 'string') {
+      const { name, email, url } = AUTHOR_LINE.exec(author.trim())?.groups ?? {}
+      if (name === undefined) return undefined
+      return { name, ...(email !== undefined && { email }), ...(url !== undefined && { url }) }
+    }
+    const parsed = v.safeParse(AuthorObjectSchema, author)
+    if (!parsed.success) return undefined
+    const { name, email, url } = parsed.output
     return { name, ...(email !== undefined && { email }), ...(url !== undefined && { url }) }
   }
-  const parsed = v.safeParse(AuthorObjectSchema, author)
-  if (!parsed.success) return undefined
-  const { name, email, url } = parsed.output
-  return { name, ...(email !== undefined && { email }), ...(url !== undefined && { url }) }
-}
 
-/** Read and validate `package.json` in `dir`, returning {@link ModInfo} or a `'manifest'` diagnostic. */
-export function modInfo(dir: string): ModInfo | Diagnostic {
-  const path = join(dir, 'package.json')
-  const read = manifestAt(path)
-  if (!read.isOk) return read.diagnostic
-  const parsed = v.safeParse(ManifestSchema, read.manifest)
-  if (!parsed.success) {
-    const message =
-      "a mod's package.json gives its name, version and description, which every harness shows"
-    return fileError({ code: 'manifest', message, path })
+  /**
+   * Convert a package `name` into a normalized harness plugin identifier.
+   *
+   * Strips any `@scope/` prefix, slugifies to lowercase ASCII with `-` separators, and truncates to
+   * 64 characters (for example, `@me/Branch Status` -> `branch-status`).
+   */
+  static pluginName(name: string): string {
+    const bare = name.replace(/^@[^/]+\//u, '')
+    return slugify(bare, { decamelize: false }).slice(0, NAME_LENGTH)
   }
-  const { name, version, description, author } = parsed.output
-  const by = authorOf(author)
-  return { name, version, description, ...(by !== undefined && { author: by }) }
-}
 
-/** Resolve `tsconfig.json` in `dir`, or return a `'project'` diagnostic if it does not exist. */
-export function tsconfigAt(dir: string): string | Diagnostic {
-  const path = resolve(dir, 'tsconfig.json')
-  if (existsSync(path)) return path
-  const message = "a mod's project is configured by tsconfig.json, beside its package.json"
-  return fileError({ code: 'project', message, path })
+  /** Read this directory's `package.json`, throwing a `'manifest'` {@link DiagnosticError} if missing or invalid JSON. */
+  readJson(): unknown {
+    const file = join(this.#dir, 'package.json')
+    if (!existsSync(file)) {
+      throw DiagnosticError.atFile({
+        code: 'manifest',
+        message: 'a mod is a package, and its folder has no package.json',
+        file,
+      })
+    }
+    try {
+      return JSON.parse(readFileSync(file, 'utf8'))
+    } catch (error) {
+      const message = `package.json isn't JSON: ${Error.isError(error) ? error.message : String(error)}`
+      throw DiagnosticError.atFile({ code: 'manifest', message, file, cause: error })
+    }
+  }
+
+  /** Read and validate `package.json`, throwing a `'manifest'` {@link DiagnosticError} on invalid metadata. */
+  readInfo(): ModInfo {
+    const file = join(this.#dir, 'package.json')
+    const parsed = v.safeParse(ManifestSchema, this.readJson())
+    if (!parsed.success) {
+      throw DiagnosticError.atFile({
+        code: 'manifest',
+        message:
+          "a mod's package.json gives its name, version and description, which every harness shows",
+        file,
+      })
+    }
+    const { name, version, description, author } = parsed.output
+    const by = ModManifest.parseAuthor(author)
+    return { name, version, description, ...(by !== undefined && { author: by }) }
+  }
+
+  /** Resolve `tsconfig.json` in this directory, throwing a `'project'` {@link DiagnosticError} if absent. */
+  resolveTsconfig(): string {
+    const file = resolve(this.#dir, 'tsconfig.json')
+    if (existsSync(file)) return file
+    throw DiagnosticError.atFile({
+      code: 'project',
+      message: "a mod's project is configured by tsconfig.json, beside its package.json",
+      file,
+    })
+  }
 }

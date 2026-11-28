@@ -1,4 +1,4 @@
-import { visitUiNode, type TextNode, type Tone, type UiNode } from '@atuin/modkit-target/host'
+import { UiTree, type TextNode, type Tone, type UiNode } from '@atuin/modkit-target/host'
 
 type LineColor = 'red' | 'green' | 'yellow' | 'status-metadata' | `#${string}`
 
@@ -86,7 +86,7 @@ export class CodexStatusLine {
   }
 
   #renderNode(node: UiNode): LineElement | undefined {
-    return visitUiNode<LineElement | undefined>(node, {
+    return UiTree.visit<LineElement | undefined>(node, {
       string: (text) => preserveSpaces(text),
       text: (textNode) => this.#renderText(textNode),
       // Nothing in Codex's status line can be pressed or opened, so buttons and links draw as text.

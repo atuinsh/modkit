@@ -13,12 +13,22 @@ const NO_TEXT = {
   aborted: 'the call ran out of time or was cut short',
 } as const
 
-/** Convert a Claude Code {@link ModelCompleteResult} into a modkit {@link Completion}. */
-export function completionOf(result: ModelCompleteResult): Completion {
-  if (result.isAnswered) return { isAnswered: true, text: result.text }
-  if (result.reason !== 'api-error') {
-    return { isAnswered: false, reason: result.reason, detail: NO_TEXT[result.reason] }
+/** Bound wrapper around a Claude Code {@link ModelCompleteResult} response. */
+export class ClaudeCompletion {
+  readonly #result: ModelCompleteResult
+
+  constructor(result: ModelCompleteResult) {
+    this.#result = result
   }
-  const status = result.status === null ? 'no response' : `status ${result.status}`
-  return { isAnswered: false, reason: 'api-error', detail: `${result.error}, ${status}` }
+
+  /** Convert this Claude Code response into a modkit {@link Completion}. */
+  toCompletion(): Completion {
+    const result = this.#result
+    if (result.isAnswered) return { isAnswered: true, text: result.text }
+    if (result.reason !== 'api-error') {
+      return { isAnswered: false, reason: result.reason, detail: NO_TEXT[result.reason] }
+    }
+    const status = result.status === null ? 'no response' : `status ${result.status}`
+    return { isAnswered: false, reason: 'api-error', detail: `${result.error}, ${status}` }
+  }
 }

@@ -11,19 +11,8 @@
 
 import type { PaneView } from './render.ts'
 
-/** Current top-level pane state tracked by a harness target. */
-export interface Shown {
-  /** Currently open panes, mapping pane ID to its last rendered title. */
-  open: ReadonlyMap<string, string>
-  /** Pane IDs closed by the user that are still present in the mod's rendered output. */
-  dismissed: ReadonlySet<string>
-}
-
-/** Empty initial {@link Shown} state with no open or dismissed panes. */
-export const NOTHING_SHOWN: Shown = { open: new Map(), dismissed: new Set() }
-
 /**
- * Harness UI operation produced by {@link nextShown}.
+ * Harness UI operation produced by {@link PaneReconciler.reconcile}.
  *
  * Emitting `open` for an already-open pane ID updates its title.
  */
@@ -31,42 +20,47 @@ export type PaneChange = { kind: 'open'; id: string; title: string } | { kind: '
 
 type Rendered = readonly Pick<PaneView, 'id' | 'title'>[]
 
-/**
- * Reconcile the currently `shown` panes against the latest `rendered` top-level panes.
- *
- * Returns the next {@link Shown} state and ordered {@link PaneChange} operations (closes before
- * opens). Emits an `open` change for newly rendered panes and for open panes whose title changed.
- */
-export function nextShown({ shown, rendered }: { shown: Shown; rendered: Rendered }): {
-  shown: Shown
-  changes: PaneChange[]
-} {
-  const held = rendered.filter((pane) => !shown.dismissed.has(pane.id))
-  const opens = held.flatMap((pane): PaneChange[] =>
-    shown.open.get(pane.id) === pane.title ? [] : [{ kind: 'open', ...pane }],
-  )
-  const ids = new Set(rendered.map((pane) => pane.id))
-  const closes = shown.open
-    .keys()
-    .filter((id) => !ids.has(id))
-    .map((id): PaneChange => ({ kind: 'close', id }))
-    .toArray()
-  return {
-    shown: {
-      open: new Map(held.map((pane) => [pane.id, pane.title])),
-      dismissed: shown.dismissed.intersection(ids),
-    },
-    changes: [...closes, ...opens],
-  }
-}
+/** Stateful reconciler tracking open and user-dismissed top-level panes across renders. */
+export class PaneReconciler {
+  #open = new Map<string, string>()
+  #dismissed = new Set<string>()
 
-/**
- * Record that the user closed pane `id`, removing it from `open` and suppressing reopens while
- * rendered.
- */
-export function dismissed({ shown, id }: { shown: Shown; id: string }): Shown {
-  if (!shown.open.has(id)) return shown
-  const open = new Map(shown.open)
-  open.delete(id)
-  return { open, dismissed: shown.dismissed.union(new Set([id])) }
+  /**
+   * Reconcile the current pane state against the latest `rendered` top-level panes.
+   *
+   * Returns ordered {@link PaneChange} operations (closes before opens), emitting `open` for newly
+   * rendered panes and open panes whose title changed.
+   */
+  reconcile(rendered: Rendered): PaneChange[] {
+    const held = rendered.filter((pane) => !this.#dismissed.has(pane.id))
+    const opens = held.flatMap((pane): PaneChange[] =>
+      this.#open.get(pane.id) === pane.title ? [] : [{ kind: 'open', ...pane }],
+    )
+    const ids = new Set(rendered.map((pane) => pane.id))
+    const closes = this.#open
+      .keys()
+      .filter((id) => !ids.has(id))
+      .map((id): PaneChange => ({ kind: 'close', id }))
+      .toArray()
+    this.#open = new Map(held.map((pane) => [pane.id, pane.title]))
+    this.#dismissed = this.#dismissed.intersection(ids)
+    return [...closes, ...opens]
+  }
+
+  /**
+   * Record that the user closed pane `id`, suppressing reopens while rendered.
+   * Returns `true` if `id` was currently open.
+   */
+  dismiss(id: string): boolean {
+    if (!this.#open.has(id)) return false
+    this.#open.delete(id)
+    this.#dismissed.add(id)
+    return true
+  }
+
+  /** Clear all tracked open and dismissed pane state. */
+  reset(): void {
+    this.#open.clear()
+    this.#dismissed.clear()
+  }
 }
