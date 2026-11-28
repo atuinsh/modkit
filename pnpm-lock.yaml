@@ -213,6 +213,34 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  examples/branch-status:
+    dependencies:
+      '@atuin/modkit':
+        specifier: workspace:*
+        version: link:../../modkit
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@atuin/modkit-claude-code':
+        specifier: workspace:*
+        version: link:../../modkit-claude-code
+      '@atuin/modkit-cli':
+        specifier: workspace:*
+        version: link:../../modkit-cli
+      '@atuin/modkit-codex':
+        specifier: workspace:*
+        version: link:../../modkit-codex
+      '@atuin/modkit-opencode':
+        specifier: workspace:*
+        version: link:../../modkit-opencode
+      '@atuin/modkit-pi':
+        specifier: workspace:*
+        version: link:../../modkit-pi
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   modkit:
     dependencies:
       canonicalize:
