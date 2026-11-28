@@ -34,6 +34,10 @@ export interface DevArgs {
 
 const WITHOUT_HARNESSES = 'run modkit build --watch to rebuild on save without them'
 
+// The path of the `modkit-logs` task, which no target's task can take: a bare target's name holds
+// no `.`, and a scoped one's {@link slugOf} starts with `_40`.
+const LOGS_PATH = 'modkit.logs'
+
 // The targets `--only` names, or every one the mod lists; why not, when it names one it doesn't.
 function pickedOf({
   only,
@@ -69,7 +73,7 @@ function tasksOf({
   const args = ['dev', build.dir, '--out', build.out, '--cwd', cwd, '--only', names.join(',')]
   const cmd = [...self, ...args]
   const watch: DekitTask = {
-    path: 'modkit-logs',
+    path: LOGS_PATH,
     label: 'modkit-logs',
     cmd,
     cwd: process.cwd(),
@@ -128,7 +132,7 @@ async function namesOf({
 const RunningConfig = v.pipe(
   v.string(),
   v.parseJson(),
-  v.object({ tasks: v.object({ 'modkit-logs': v.object({ cmd: v.array(v.string()) }) }) }),
+  v.object({ tasks: v.object({ [LOGS_PATH]: v.object({ cmd: v.array(v.string()) }) }) }),
 )
 
 // The flags the `modkit-logs` task of the `dekit.yaml` `config` runs with, after the mod's
@@ -136,7 +140,7 @@ const RunningConfig = v.pipe(
 function flagsOf(config: string): string | undefined {
   const parsed = v.safeParse(RunningConfig, config)
   if (!parsed.success) return undefined
-  const { cmd } = parsed.output.tasks['modkit-logs']
+  const { cmd } = parsed.output.tasks[LOGS_PATH]
   const [, ...flags] = cmd.slice(cmd.indexOf('dev') + 1)
   return flags.join(' ')
 }
