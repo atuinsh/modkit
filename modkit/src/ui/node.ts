@@ -1,9 +1,9 @@
-import type { ButtonNode } from './button'
-import type { ImgNode } from './img'
-import type { LinkNode } from './link'
-import type { MarkdownNode } from './markdown'
-import type { StackNode } from './stack'
-import type { TextNode } from './text'
+import type { ButtonNode } from './button.ts'
+import type { ImgNode } from './img.ts'
+import type { LinkNode } from './link.ts'
+import type { MarkdownNode } from './markdown.ts'
+import type { StackNode } from './stack.ts'
+import type { TextNode } from './text.ts'
 
 /** Resolved UI tree node produced by the renderer and consumed by harness targets. */
 export type UiNode = string | TextNode | LinkNode | StackNode | ButtonNode | MarkdownNode | ImgNode

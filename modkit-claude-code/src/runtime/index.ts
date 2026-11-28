@@ -53,10 +53,10 @@ import {
   type Verdict,
 } from '@atuin/modkit-target/host'
 
-import { CLAUDE_CODE_CAPABILITIES, type ClaudeCodeCapabilities } from '../spec'
-import { completionOf } from './answers'
-import { decide, exitCodeOf } from './decide'
-import { Drawing } from './draw'
+import { CLAUDE_CODE_CAPABILITIES, type ClaudeCodeCapabilities } from '../spec.ts'
+import { completionOf } from './answers.ts'
+import { decide, exitCodeOf } from './decide.ts'
+import { Drawing } from './draw.ts'
 
 function callsFor($: EngineInterface): Pick<Harness, 'mcp' | 'complete' | 'copy'> {
   return {

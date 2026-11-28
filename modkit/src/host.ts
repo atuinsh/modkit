@@ -9,11 +9,17 @@
  * @module
  */
 
-export type { Failure, HarnessAdapter, Phase, Store, Stored } from './harness/index'
-export { textOf } from './runtime/element'
-export { mount, type Mounted, type View } from './runtime/mount'
-export { dismissed, nextShown, NOTHING_SHOWN, type PaneChange, type Shown } from './runtime/panes'
-export type { CommandView, PaneView } from './runtime/render'
+export type { Failure, HarnessAdapter, Phase, Store, Stored } from './harness/index.ts'
+export { textOf } from './runtime/element.ts'
+export { mount, type Mounted, type View } from './runtime/mount.ts'
+export {
+  dismissed,
+  nextShown,
+  NOTHING_SHOWN,
+  type PaneChange,
+  type Shown,
+} from './runtime/panes.ts'
+export type { CommandView, PaneView } from './runtime/render.ts'
 export type {
   ButtonNode,
   Images,
@@ -24,4 +30,4 @@ export type {
   StackNode,
   TextNode,
   UiNode,
-} from './ui/index'
+} from './ui/index.ts'

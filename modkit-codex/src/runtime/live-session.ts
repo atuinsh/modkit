@@ -12,8 +12,8 @@ import {
   type Options,
 } from '@atuin/modkit-target/host'
 
-import type { Delivered } from '../protocol'
-import { CodexRuntime } from './runtime'
+import type { Delivered } from '../protocol.ts'
+import { CodexRuntime } from './runtime.ts'
 
 const NO_MODEL = "Codex gives a plugin's MCP server no model to call"
 

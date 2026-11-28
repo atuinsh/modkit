@@ -11,9 +11,9 @@ import {
   type Verdict,
 } from '@atuin/modkit-target/host'
 
-import { OPENCODE_CAPABILITIES, type OpencodeCapabilities } from '../contract'
-import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './hooks'
-import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view'
+import { OPENCODE_CAPABILITIES, type OpencodeCapabilities } from '../contract.ts'
+import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './hooks.ts'
+import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view.ts'
 
 export interface OpencodeSession {
   readonly harness: HarnessAdapter

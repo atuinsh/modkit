@@ -4,7 +4,7 @@
  * @module
  */
 
-import { marker, type Component, type ModNode } from '../runtime/element'
+import { marker, type Component, type ModNode } from '../runtime/element.ts'
 
 export interface StatusProps {
   children?: ModNode

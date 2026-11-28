@@ -1,8 +1,8 @@
 import * as v from 'valibot'
 
-import { primitive, textOf, type Component, type ModNode } from '../runtime/element'
-import { nodesIn, type UiNode } from './node'
-import type { TextNode } from './text'
+import { primitive, textOf, type Component, type ModNode } from '../runtime/element.ts'
+import { nodesIn, type UiNode } from './node.ts'
+import type { TextNode } from './text.ts'
 
 /** Resolved `Link` element. */
 export interface LinkNode {

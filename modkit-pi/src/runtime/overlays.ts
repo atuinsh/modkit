@@ -3,8 +3,8 @@ import type { OverlayHandle, OverlayOptions, TUI } from '@earendil-works/pi-tui'
 
 import type { ButtonNode, Failure, UiNode } from '@atuin/modkit-target/host'
 
-import { paintOf } from './paint'
-import { PaneComponent, type PaneState } from './pane'
+import { paintOf } from './paint.ts'
+import { PaneComponent, type PaneState } from './pane.ts'
 
 const PANE_WIDTH = '42%'
 const PANE_MIN_COLUMNS = 40

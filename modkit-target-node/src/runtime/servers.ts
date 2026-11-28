@@ -11,7 +11,7 @@ import {
   type Result,
 } from '@atuin/modkit-target/host'
 
-import { peerOn, type Peer } from './rpc'
+import { peerOn, type Peer } from './rpc.ts'
 
 const PROTOCOL_VERSION = '2025-06-18'
 const START_MS = 30_000

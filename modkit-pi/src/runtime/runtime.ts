@@ -19,12 +19,12 @@ import {
   type UiNode,
 } from '@atuin/modkit-target/host'
 
-import { PI_CAPABILITIES, type PiCapabilities } from '../spec'
-import { createSessionResources, type PiSessionResources } from './harness'
-import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks'
-import { linesOf } from './lines'
-import { Overlays } from './overlays'
-import { paintOf } from './paint'
+import { PI_CAPABILITIES, type PiCapabilities } from '../spec.ts'
+import { createSessionResources, type PiSessionResources } from './harness.ts'
+import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks.ts'
+import { linesOf } from './lines.ts'
+import { Overlays } from './overlays.ts'
+import { paintOf } from './paint.ts'
 
 const STATUS_COLUMNS = 400
 

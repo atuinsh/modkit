@@ -8,15 +8,15 @@ import type {
   ToolResult,
   ToolRow,
   Verdict,
-} from '../harness/index'
-import { followupOf, verdictOf, type Mod, type Options, type Parts } from '../modparts/mod'
-import type { HarnessEvent } from '../ui/hooks/query'
-import type { Images } from '../ui/img'
-import type { UiNode } from '../ui/node'
-import { isRendering, type QueryRegistration, type RenderScope } from './frame'
-import { Queries } from './queries'
-import { Render, type CommandView, type PaneView, type Rendered } from './render'
-import { JsonSchema, checked, type Callback } from './schema'
+} from '../harness/index.ts'
+import { followupOf, verdictOf, type Mod, type Options, type Parts } from '../modparts/mod.ts'
+import type { HarnessEvent } from '../ui/hooks/query.ts'
+import type { Images } from '../ui/img.ts'
+import type { UiNode } from '../ui/node.ts'
+import { isRendering, type QueryRegistration, type RenderScope } from './frame.ts'
+import { Queries } from './queries.ts'
+import { Render, type CommandView, type PaneView, type Rendered } from './render.ts'
+import { JsonSchema, checked, type Callback } from './schema.ts'
 
 /** Snapshot of the UI modparts produced by the mod's latest successful render. */
 export interface View {

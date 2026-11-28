@@ -7,7 +7,7 @@ import {
   type UiNode,
 } from '@atuin/modkit-target/host'
 
-import type { NodeJson, PaneJson, ViewJson } from '../contract'
+import type { NodeJson, PaneJson, ViewJson } from '../contract.ts'
 
 interface Walk {
   at: string

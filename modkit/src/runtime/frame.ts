@@ -1,8 +1,8 @@
-import type { Harness, Store, Stored } from '../harness/types'
-import type { Press } from '../ui/button'
-import type { Query } from '../ui/hooks/query'
-import type { Images } from '../ui/img'
-import type { Callback } from './schema'
+import type { Harness, Store, Stored } from '../harness/types.ts'
+import type { Press } from '../ui/button.ts'
+import type { Query } from '../ui/hooks/query.ts'
+import type { Images } from '../ui/img.ts'
+import type { Callback } from './schema.ts'
 
 export interface QueryRegistration {
   query: Query<unknown, unknown>

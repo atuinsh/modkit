@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "noEmit": true,
-    // What runs in Node as written (the compiler, the CLI) imports its files by their `.ts` names.
+    // Relative imports name their `.ts` files, so Node runs as written any file it reaches.
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
 

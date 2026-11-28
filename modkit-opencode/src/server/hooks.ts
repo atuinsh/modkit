@@ -1,6 +1,6 @@
 import { asRecord, type HookedCall, type HookedResult } from '@atuin/modkit-target/host'
 
-import { OPENCODE_TOOLS } from '../contract'
+import { OPENCODE_TOOLS } from '../contract.ts'
 
 export interface OcCall {
   tool: string

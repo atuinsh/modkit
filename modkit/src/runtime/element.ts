@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
-import type { UiNode } from '../ui/node'
-import type { RenderScope } from './frame'
+import type { UiNode } from '../ui/node.ts'
+import type { RenderScope } from './frame.ts'
 
 /** Any value a mod component can return: an element, primitive, ignored value, or nested array. */
 export type ModNode = ModElement | string | number | boolean | null | undefined | readonly ModNode[]

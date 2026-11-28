@@ -1,8 +1,8 @@
 import type { Plugin } from '@opencode/plugin'
 import { isPlainObject } from 'es-toolkit/predicate'
 
-import { withContext } from './hooks'
-import type { Sessions } from './sessions'
+import { withContext } from './hooks.ts'
+import type { Sessions } from './sessions.ts'
 
 function callIdOf(source: unknown): string | undefined {
   const id: unknown = isPlainObject(source) ? source['id'] : undefined

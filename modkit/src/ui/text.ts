@@ -1,8 +1,8 @@
 import * as v from 'valibot'
 
-import { primitive, type Component, type ModNode } from '../runtime/element'
-import type { UiNode } from './node'
-import { HexSchema, ToneSchema, type Hex, type Tone } from './style'
+import { primitive, type Component, type ModNode } from '../runtime/element.ts'
+import type { UiNode } from './node.ts'
+import { HexSchema, ToneSchema, type Hex, type Tone } from './style.ts'
 
 /** Resolved `Text` element. */
 export interface TextNode {

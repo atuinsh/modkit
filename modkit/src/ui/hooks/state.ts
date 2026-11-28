@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
-import { activeFrame } from '../../runtime/frame'
-import { checked, type Json } from '../../runtime/schema'
+import { activeFrame } from '../../runtime/frame.ts'
+import { checked, type Json } from '../../runtime/schema.ts'
 
 export interface State<T> {
   readonly id: string

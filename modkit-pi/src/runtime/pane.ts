@@ -8,7 +8,7 @@ import {
 
 import type { ButtonNode, UiNode } from '@atuin/modkit-target/host'
 
-import { linesOf, PICK_MARK, type Paint } from './lines'
+import { linesOf, PICK_MARK, type Paint } from './lines.ts'
 
 export const FOCUS_KEY = 'alt+m'
 

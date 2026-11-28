@@ -1,13 +1,13 @@
 import * as v from 'valibot'
 
-import type { ToolRow } from '../harness/types'
-import type { Parts } from '../modparts/mod'
-import { CommandPanePropsSchema, Pane, PanePropsSchema } from '../modparts/pane'
-import { Status } from '../modparts/status'
-import type { UiNode } from '../ui/node'
-import { Fragment, isElement, isTag, nameOf, primitiveOf, type ModElement } from './element'
-import { withFrame, type RenderScope } from './frame'
-import { CallbackSchema, checked, describe, type Callback } from './schema'
+import type { ToolRow } from '../harness/types.ts'
+import type { Parts } from '../modparts/mod.ts'
+import { CommandPanePropsSchema, Pane, PanePropsSchema } from '../modparts/pane.ts'
+import { Status } from '../modparts/status.ts'
+import type { UiNode } from '../ui/node.ts'
+import { Fragment, isElement, isTag, nameOf, primitiveOf, type ModElement } from './element.ts'
+import { withFrame, type RenderScope } from './frame.ts'
+import { CallbackSchema, checked, describe, type Callback } from './schema.ts'
 
 /** Resolved slash command ready for a harness target to register. */
 export interface CommandView {

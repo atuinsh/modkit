@@ -10,8 +10,8 @@ import {
   type Options,
 } from '@atuin/modkit-target/host'
 
-import { buildHarness, type Reached } from './harness'
-import { OpencodeRuntime, type OpencodeSession } from './runtime'
+import { buildHarness, type Reached } from './harness.ts'
+import { OpencodeRuntime, type OpencodeSession } from './runtime.ts'
 
 export interface Live extends Disposable {
   readonly runtime: OpencodeRuntime

@@ -1,8 +1,8 @@
 import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
 
-import { parseViewJson, type NodeJson, type ViewJson } from '../contract'
+import { parseViewJson, type NodeJson, type ViewJson } from '../contract.ts'
 
-export { EMPTY_VIEW } from '../contract'
+export { EMPTY_VIEW } from '../contract.ts'
 
 export type Paint = { tone: Tone | 'accent' | 'border' } | { hex: Hex }
 

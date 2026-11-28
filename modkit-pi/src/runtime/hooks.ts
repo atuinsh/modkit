@@ -2,7 +2,7 @@ import { isPlainObject } from 'es-toolkit/predicate'
 
 import type { Followup, HookedCall, HookedResult } from '@atuin/modkit-target/host'
 
-import { PI_TOOLS } from '../spec'
+import { PI_TOOLS } from '../spec.ts'
 
 export interface PiCall {
   toolName: string

@@ -21,7 +21,7 @@ import {
   type Store,
 } from '@atuin/modkit-target/host'
 
-import { configuredServer } from './mcp'
+import { configuredServer } from './mcp.ts'
 
 type Reply = Awaited<
   ReturnType<ReturnType<ExtensionContext['modelRegistry']['streamSimple']>['result']>

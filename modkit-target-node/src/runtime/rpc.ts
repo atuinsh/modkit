@@ -5,8 +5,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import { asRecord, errorMessage } from '@atuin/modkit-target/host'
 
-import { INTERNAL_ERROR, METHOD_NOT_FOUND, RpcError } from './errors'
-import type { RpcMethod } from './rpc-method'
+import { INTERNAL_ERROR, METHOD_NOT_FOUND, RpcError } from './errors.ts'
+import type { RpcMethod } from './rpc-method.ts'
 
 interface Call {
   method: string
