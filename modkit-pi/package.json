@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@atuin/modkit-target-node": "workspace:*",
-    "es-toolkit": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

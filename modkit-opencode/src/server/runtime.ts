@@ -16,8 +16,10 @@ import { callOf, failedResultOf, resultOf, type OcCall, type OcResult } from './
 import { NOTHING_DRAWN, viewJsonOf, type Drawn, type OpenPane } from './view.ts'
 
 export interface OpencodeSession {
-  readonly harness: HarnessAdapter
-  readonly store: Disposable
+  readonly buildHarness: (signal: AbortSignal) => {
+    readonly harness: HarnessAdapter
+    readonly store: Disposable
+  }
   readonly changed: () => void
 }
 
@@ -79,8 +81,9 @@ export class OpencodeRuntime extends NodeTargetRuntime<OpencodeSession, Opencode
   }
 
   protected override adapter(session: OpencodeSession): HarnessAdapter {
-    this.own(session.store)
-    return session.harness
+    const { harness, store } = session.buildHarness(this.signal)
+    this.own(store)
+    return harness
   }
 
   protected override hosts(): RuntimeHosts<OpencodeSession, OpencodeCapabilities> {

@@ -73,13 +73,19 @@ export class Queries implements Disposable {
 
   async refreshDue(event?: HarnessEvent): Promise<void> {
     if (this.#isDisposed) return
-    const listening = [...this.#registered.values()].flatMap((one) =>
-      event !== undefined && isAsked(one) && one.query.on?.includes(event) === true
-        ? [one.query.id]
-        : [],
-    )
+    const listening = this.#registered
+      .values()
+      .flatMap((one) =>
+        event !== undefined && isAsked(one) && one.query.on?.includes(event) === true
+          ? [one.query.id]
+          : [],
+      )
+      .toArray()
     await Promise.all(
-      [...new Set([...this.#due(), ...listening])].map(async (id) => this.refresh(id)),
+      new Set(this.#due())
+        .union(new Set(listening))
+        .values()
+        .map(async (id) => this.refresh(id)),
     )
   }
 
@@ -99,19 +105,22 @@ export class Queries implements Disposable {
   async settle(): Promise<void> {
     while (this.#fetching.size > 0) {
       // oxlint-disable-next-line no-await-in-loop -- each round waits for fetches the last one started
-      await Promise.all([...this.#fetching.values()].map(async (one) => one.done))
+      await Promise.all(this.#fetching.values().map(async (one) => one.done))
     }
   }
 
   #due(): string[] {
     const now = this.#adapter.now()
-    return [...this.#registered.values()].flatMap((one) =>
-      isAsked(one) &&
-      !this.#fetching.has(one.query.id) &&
-      isDue({ record: recordOf(this.#adapter.store.get(one.query.id)), asked: one, now })
-        ? [one.query.id]
-        : [],
-    )
+    return this.#registered
+      .values()
+      .flatMap((one) =>
+        isAsked(one) &&
+        !this.#fetching.has(one.query.id) &&
+        isDue({ record: recordOf(this.#adapter.store.get(one.query.id)), asked: one, now })
+          ? [one.query.id]
+          : [],
+      )
+      .toArray()
   }
 
   async #fetchWhileAsked({ id, fetching }: { id: string; fetching: Fetching }): Promise<void> {

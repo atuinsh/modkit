@@ -1,7 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es2023",
-    "lib": ["es2023", "esnext.disposable", "esnext.temporal"],
+    "target": "es2025",
+    "lib": [
+      "es2025",
+      "esnext.disposable",
+      "esnext.temporal",
+      "esnext.error",
+      "esnext.collection",
+      "esnext.typedarrays"
+    ],
     "module": "esnext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",

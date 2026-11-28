@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs'
 
-import { isPlainObject } from 'es-toolkit/predicate'
 import * as v from 'valibot'
 
-import type { Options } from '@atuin/modkit-target/host'
+import { isPlainRecord, type Options } from '@atuin/modkit-target/host'
 
 type OptionValue = Options[string]
 
@@ -23,29 +22,6 @@ export type Settings =
   | { isOk: true; options: Options; problems: readonly string[] }
   | { isOk: false; problems: readonly string[] }
 
-const StringsSchema = v.array(v.string())
-
-function parseValue({
-  decl,
-  value,
-}: {
-  decl: SettingDecl
-  value: unknown
-}): OptionValue | undefined {
-  switch (decl.kind) {
-    case 'string':
-      if (typeof value !== 'string') return undefined
-      return decl.choices === undefined || decl.choices.includes(value) ? value : undefined
-    case 'strings':
-      return v.is(StringsSchema, value) ? value : undefined
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value) ? value : undefined
-    case 'boolean':
-      break
-  }
-  return typeof value === 'boolean' ? value : undefined
-}
-
 const KIND_WORDS: Readonly<Record<SettingDecl['kind'], string>> = {
   string: 'a string',
   strings: 'a list of strings',
@@ -58,13 +34,32 @@ const expectedTypeText = (decl: SettingDecl): string =>
     ? `one of ${decl.choices.map((choice) => JSON.stringify(choice)).join(', ')}`
     : KIND_WORDS[decl.kind]
 
+function schemaForDecl(decl: SettingDecl): v.GenericSchema<unknown, OptionValue> {
+  switch (decl.kind) {
+    case 'string':
+      return decl.choices === undefined ? v.string() : v.picklist(decl.choices)
+    case 'strings':
+      return v.array(v.string())
+    case 'number':
+      return v.pipe(v.number(), v.finite())
+    case 'boolean':
+      break
+  }
+  return v.boolean()
+}
+
 function readJsonFile(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return {}
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT') return {}
     return undefined
   }
+}
+
+interface CompiledDecl {
+  readonly decl: SettingDecl
+  readonly schema: v.GenericSchema<unknown, OptionValue>
 }
 
 interface ParsedEntry {
@@ -74,15 +69,16 @@ interface ParsedEntry {
 }
 
 function parseEntry({
-  decl,
+  compiled: { decl, schema },
   given,
   where,
 }: {
-  decl: SettingDecl
+  compiled: CompiledDecl
   given: unknown
   where: string
 }): ParsedEntry {
-  const value = given === undefined ? undefined : parseValue({ decl, value: given })
+  const parsed = given === undefined ? undefined : v.safeParse(schema, given)
+  const value = parsed?.success === true ? parsed.output : undefined
   const problem =
     given !== undefined && value === undefined
       ? [
@@ -92,12 +88,14 @@ function parseEntry({
   return { decl, value: value ?? decl.default, problem }
 }
 
-/** Validating schema for a mod's user settings, loaded from a JSON file or an inline object. */
+/** Validating schema for a mod's user settings, compiled to Valibot once from {@link SettingDecl}s. */
 export class SettingsSchema {
-  readonly #decls: readonly SettingDecl[]
+  readonly #compiled: readonly CompiledDecl[]
+  readonly #known: ReadonlySet<string>
 
   private constructor(decls: readonly SettingDecl[]) {
-    this.#decls = decls
+    this.#compiled = decls.map((decl) => ({ decl, schema: schemaForDecl(decl) }))
+    this.#known = new Set(decls.map((decl) => decl.name))
   }
 
   /** Construct a schema from compiler-emitted {@link SettingDecl} entries. */
@@ -107,17 +105,19 @@ export class SettingsSchema {
 
   /** Parse and validate `given` against this schema, anchoring problems to `where`. */
   parse(given: unknown, where: string): Settings {
-    if (!isPlainObject(given)) {
+    if (!isPlainRecord(given)) {
       const defaults = this.parse({}, where)
       const problem = `${where} isn't a JSON object of settings, so it was ignored`
       return { ...defaults, problems: [problem, ...defaults.problems] }
     }
-    const json: Readonly<Record<string, unknown>> = given
-    const known = new Set(this.#decls.map((decl) => decl.name))
-    const unknown = Object.keys(json)
-      .filter((name) => !known.has(name))
+    const unknown = new Set(Object.keys(given))
+      .difference(this.#known)
+      .values()
       .map((name) => `${where} sets ${name}, which this mod has no setting for`)
-    const entries = this.#decls.map((decl) => parseEntry({ decl, given: json[decl.name], where }))
+      .toArray()
+    const entries = this.#compiled.map((compiled) =>
+      parseEntry({ compiled, given: given[compiled.decl.name], where }),
+    )
     const problems = [...unknown, ...entries.flatMap((one) => one.problem)]
     const missing = entries
       .filter((one) => one.value === undefined && one.decl.isRequired)

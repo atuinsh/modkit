@@ -1,9 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { isPlainObject } from 'es-toolkit/predicate'
-
-import type { Failure, Store, Stored } from '@atuin/modkit-target/host'
+import { isPlainRecord, type Failure, type Store, type Stored } from '@atuin/modkit-target/host'
 
 const fileNameOf = (id: string): string => `${id.replaceAll(/[^A-Za-z0-9_-]/gu, '_')}.json`
 
@@ -15,9 +13,9 @@ function readStored({ path, tags }: { path: string; tags: Tags }): Map<string, S
   const stored = new Map<string, Stored>()
   try {
     const json: unknown = JSON.parse(readFileSync(path, 'utf8'))
-    if (!isPlainObject(json)) return stored
+    if (!isPlainRecord(json)) return stored
     for (const [key, held] of Object.entries(json)) {
-      const isCurrent = isPlainObject(held) && 'value' in held && held['tag'] === tags[key]
+      const isCurrent = isPlainRecord(held) && 'value' in held && held['tag'] === tags[key]
       if (isCurrent && tags[key] !== undefined) stored.set(key, { value: held['value'] })
     }
   } catch {
@@ -29,8 +27,8 @@ function readStored({ path, tags }: { path: string; tags: Tags }): Map<string, S
 /**
  * Schema-tagged JSON file store for one session.
  *
- * Disposing freezes writes so an in-flight async query that finishes after session teardown cannot
- * overwrite state saved by a subsequent runtime.
+ * Disposing freezes disk writes so an in-flight async query that finishes after session teardown
+ * cannot overwrite state saved by a subsequent runtime.
  */
 export class FileStore implements Store, Disposable {
   readonly #dir: string
@@ -88,10 +86,9 @@ export class FileStore implements Store, Disposable {
     try {
       mkdirSync(this.#dir, { recursive: true })
       const tagged = Object.fromEntries(
-        [...this.#stored].map(([name, held]) => [
-          name,
-          { tag: this.#tags[name], value: held.value },
-        ]),
+        this.#stored
+          .entries()
+          .map(([name, held]) => [name, { tag: this.#tags[name], value: held.value }]),
       )
       // Written beside and renamed over, so a crash mid-write leaves the last whole file.
       writeFileSync(`${this.#path}.tmp`, JSON.stringify(tagged))

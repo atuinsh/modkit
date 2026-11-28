@@ -154,7 +154,7 @@ function pngSizeOf(bytes: Buffer): { widthPx: number; heightPx: number } | strin
     const { width, height } = decode(bytes, { checkCrc: true })
     return { widthPx: width, heightPx: height }
   } catch (error) {
-    return error instanceof Error ? error.message : String(error)
+    return Error.isError(error) ? error.message : String(error)
   }
 }
 
@@ -169,7 +169,7 @@ function imageAt({ dir, path }: { dir: string; path: string }): ImageDecl | stri
   if (typeof size === 'string') {
     return `${path} is not a whole PNG, the one format every harness draws (fast-png: ${size})`
   }
-  return { path, base64: bytes.toString('base64'), ...size }
+  return { path, base64: bytes.toBase64(), ...size }
 }
 
 /** Read each PNG the `<Img>`s of the mod in `dir` name, for its targets to embed. */

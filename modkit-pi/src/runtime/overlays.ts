@@ -75,9 +75,10 @@ export class Overlays implements Disposable {
   }
 
   toggleFocus(): void {
-    const open = [...this.#panes.values()].flatMap((pane) =>
-      pane.handle === undefined ? [] : [pane.handle],
-    )
+    const open = this.#panes
+      .values()
+      .flatMap((pane) => (pane.handle === undefined ? [] : [pane.handle]))
+      .toArray()
     const focused = open.find((handle) => handle.isFocused())
     if (focused === undefined) open.at(-1)?.focus()
     else focused.unfocus()

@@ -100,19 +100,22 @@ export class Sessions implements Disposable {
           this.notify({ id, text })
         },
       })
-      const store = FileStore.open({ dir, session: id, tags, report })
       const runtime = new OpencodeRuntime({ mod: this.#mod, options, images: this.#images })
       const session: OpencodeSession = {
-        harness: buildHarness({
-          reached,
-          id,
-          store,
-          notify: (text) => {
-            this.notify({ id, text })
-          },
-          report,
-        }),
-        store,
+        buildHarness: (signal) => {
+          const store = FileStore.open({ dir, session: id, tags, report })
+          const harness = buildHarness({
+            reached,
+            id,
+            store,
+            notify: (text) => {
+              this.notify({ id, text })
+            },
+            report,
+            signal,
+          })
+          return { harness, store }
+        },
         changed: () => {
           this.#ports.changed(id)
         },

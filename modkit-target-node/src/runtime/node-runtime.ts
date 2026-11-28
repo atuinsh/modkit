@@ -3,19 +3,26 @@ import { ModkitTargetRuntime, type Capabilities, type Repeat } from '@atuin/modk
 import { Timers } from './timers.ts'
 
 /**
- * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning interval timers and registered
- * {@link Disposable} resources via a native {@link DisposableStack}.
+ * {@link ModkitTargetRuntime} for Node and Bun harnesses, owning a session {@link AbortSignal},
+ * interval timers, and registered {@link Disposable} resources via a native {@link DisposableStack}.
  */
 export abstract class NodeTargetRuntime<
   Engine,
   Caps extends Capabilities = Capabilities,
 > extends ModkitTargetRuntime<Engine, Caps> {
-  readonly #timers = new Timers()
+  readonly #abort = new AbortController()
+  readonly #timers: Timers
   readonly #stack = new DisposableStack()
 
   constructor(init: ConstructorParameters<typeof ModkitTargetRuntime<Engine, Caps>>[0]) {
     super(init)
+    this.#timers = new Timers(this.#abort.signal)
     this.#stack.use(this.#timers)
+  }
+
+  /** Session-scoped signal aborted when this runtime disposes. */
+  protected get signal(): AbortSignal {
+    return this.#abort.signal
   }
 
   /** Register a {@link Disposable} resource to be torn down in LIFO order when this runtime disposes. */
@@ -32,6 +39,7 @@ export abstract class NodeTargetRuntime<
   }
 
   override [Symbol.dispose](): void {
+    this.#abort.abort()
     try {
       super[Symbol.dispose]()
     } finally {

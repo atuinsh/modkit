@@ -1,7 +1,6 @@
 import { once } from 'node:events'
 import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 import { asRecord, errorMessage } from '@atuin/modkit-target/host'
 
@@ -21,13 +20,14 @@ interface Timeout {
 interface Request extends Call {
   // How long to wait for the answer, and what to call the wait when it runs out.
   timeout?: Timeout
+  signal?: AbortSignal
 }
 
-export interface Peer {
+export interface Peer extends Disposable {
   request: (call: Request) => Promise<unknown>
   call: <Params, Result>(
     method: RpcMethod<Params, Result>,
-    options: { readonly params: Params; readonly timeout?: Timeout },
+    options: { readonly params: Params; readonly timeout?: Timeout; readonly signal?: AbortSignal },
   ) => Promise<Result>
   notify: (call: Call) => void
   readonly closed: Promise<void>
@@ -59,6 +59,38 @@ function parseWireError(error: unknown): RpcError {
     code: typeof code === 'number' ? code : INTERNAL_ERROR,
     message: typeof message === 'string' ? message : 'the peer answered an error',
   })
+}
+
+function abortReason({
+  signal,
+  timed,
+  timeout,
+}: {
+  signal: AbortSignal | undefined
+  timed: AbortSignal | undefined
+  timeout: Timeout | undefined
+}): Error {
+  if (timed?.aborted === true && timeout !== undefined) {
+    return new Error(`${timeout.what} took longer than ${timeout.duration.total('second')}s`)
+  }
+  const reason: unknown = signal?.reason
+  return Error.isError(reason) ? reason : new Error('the request was aborted')
+}
+
+function combineAbort({
+  signal,
+  timeout,
+}: {
+  signal: AbortSignal | undefined
+  timeout: Timeout | undefined
+}): { combined: AbortSignal | undefined; reason: () => Error } {
+  const timed =
+    timeout === undefined ? undefined : AbortSignal.timeout(timeout.duration.total('millisecond'))
+  const combined =
+    signal !== undefined && timed !== undefined
+      ? AbortSignal.any([signal, timed])
+      : (signal ?? timed)
+  return { combined, reason: () => abortReason({ signal, timed, timeout }) }
 }
 
 export interface Handlers {
@@ -99,42 +131,60 @@ class LinePeer implements Peer {
 
   async call<Params, Result>(
     method: RpcMethod<Params, Result>,
-    { params, timeout }: { readonly params: Params; readonly timeout?: Timeout },
+    {
+      params,
+      timeout,
+      signal,
+    }: { readonly params: Params; readonly timeout?: Timeout; readonly signal?: AbortSignal },
   ): Promise<Result> {
     const raw = await this.request({
       method: method.name,
       params,
       ...(timeout !== undefined && { timeout }),
+      ...(signal !== undefined && { signal }),
     })
     return method.parseResult(raw)
   }
 
-  async request({ method, params, timeout }: Request): Promise<unknown> {
-    if (this.#isClosed) throw new Error('the peer closed')
+  #allocateId(): number {
     const id = this.#nextId
     this.#nextId += 1
-    // oxlint-disable-next-line promise/avoid-new -- settled when the answer's line arrives, which nothing awaitable carries
-    const answered = new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject })
-      this.#send({ id, method, ...(params !== undefined && { params }) })
-    })
-    if (timeout === undefined) return answered
-    const timer = new AbortController()
-    const late = async (): Promise<never> => {
-      await sleep(timeout.duration.total('millisecond'), undefined, { signal: timer.signal })
-      throw new Error(`${timeout.what} took longer than ${timeout.duration.total('second')}s`)
+    return id
+  }
+
+  async request({ method, params, timeout, signal }: Request): Promise<unknown> {
+    if (this.#isClosed) throw new Error('the peer closed')
+    const id = this.#allocateId()
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+    const { combined, reason } = combineAbort({ signal, timeout })
+    const onAbort = (): void => {
+      this.#pending.delete(id)
+      reject(reason())
     }
+    if (combined?.aborted === true) {
+      onAbort()
+      return promise
+    }
+    combined?.addEventListener('abort', onAbort, { once: true })
+    this.#pending.set(id, { resolve, reject })
     try {
-      return await Promise.race([answered, late()])
+      this.#send({ id, method, ...(params !== undefined && { params }) })
+      return await promise
     } finally {
-      timer.abort()
-      // An answer that comes after the wait ran out finds no one waiting.
+      combined?.removeEventListener('abort', onAbort)
       this.#pending.delete(id)
     }
   }
 
   notify({ method, params }: Call): void {
     this.#send({ method, ...(params !== undefined && { params }) })
+  }
+
+  [Symbol.dispose](): void {
+    this.#isClosed = true
+    this.#lines.close()
+    for (const waiting of this.#pending.values()) waiting.reject(new Error('the peer closed'))
+    this.#pending.clear()
   }
 
   async #untilClosed(): Promise<void> {

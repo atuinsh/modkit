@@ -7,15 +7,11 @@ export class SessionPool<Entry extends Disposable> implements Disposable {
   }
 
   getOrCreate(id: string, create: () => Entry): Entry {
-    const existing = this.#entries.get(id)
-    if (existing !== undefined) return existing
-    const created = create()
-    this.#entries.set(id, created)
-    return created
+    return this.#entries.getOrInsertComputed(id, create)
   }
 
   values(): Entry[] {
-    return [...this.#entries.values()]
+    return this.#entries.values().toArray()
   }
 
   [Symbol.dispose](): void {

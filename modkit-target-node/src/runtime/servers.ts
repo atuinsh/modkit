@@ -47,27 +47,50 @@ export interface StdioServer {
   cwd: string | undefined
 }
 
-interface Connection {
+interface Connection extends Disposable {
   peer: Peer
   child: ChildProcess
 }
 
-async function connect({
+async function spawnServer({
   name,
   server,
+  signal,
 }: {
   name: string
   server: StdioServer
-}): Promise<Connection> {
+  signal: AbortSignal
+}): Promise<ChildProcess> {
+  if (signal.aborted) throw new Error('the session ended')
   const child = spawn(server.command, [...server.args], {
     cwd: server.cwd,
     env: { ...process.env, ...server.env },
     stdio: ['pipe', 'pipe', 'ignore'],
   })
+  // Absorb any late `error` event if `once` detaches its listener on abort before spawn settles.
+  child.on('error', () => undefined)
   try {
-    await once(child, 'spawn')
+    await once(child, 'spawn', { signal })
+    return child
   } catch (error) {
+    child.kill()
     throw new Error(`couldn't start ${name}: ${errorMessage(error)}`, { cause: error })
+  }
+}
+
+async function connect({
+  name,
+  server,
+  signal,
+}: {
+  name: string
+  server: StdioServer
+  signal: AbortSignal
+}): Promise<Connection> {
+  const child = await spawnServer({ name, server, signal })
+  if (child.stdout === null || child.stdin === null) {
+    child.kill()
+    throw new Error(`couldn't pipe stdio for ${name}`)
   }
   const peer = peerOn({ input: child.stdout, output: child.stdin })
   const initialized = peer.request({
@@ -78,23 +101,32 @@ async function connect({
       clientInfo: { name: 'modkit', version: '0' },
     },
     timeout: { duration: START_TIMEOUT, what: `starting ${name}` },
+    signal,
   })
   try {
     await initialized
   } catch (error) {
     // A server that started and never answered is still running, and nothing else holds it.
+    peer[Symbol.dispose]()
     child.kill()
     throw error
   }
   peer.notify({ method: 'notifications/initialized' })
-  return { peer, child }
+  return {
+    peer,
+    child,
+    [Symbol.dispose]: () => {
+      peer[Symbol.dispose]()
+      child.kill()
+    },
+  }
 }
 
 export class Servers implements Disposable {
   readonly #connections = new Map<string, Promise<Connection>>()
+  readonly #abort = new AbortController()
   readonly #find: (name: string) => Promise<Result<StdioServer, string>>
   readonly #own: string | undefined
-  #isClosed = false
 
   constructor({
     find,
@@ -109,13 +141,14 @@ export class Servers implements Disposable {
 
   async call({ server, tool, input }: McpCall): Promise<McpResult> {
     if (server === this.#own) return { isOk: false, reason: `${server} is this mod's own server` }
-    if (this.#isClosed) return { isOk: false, reason: 'the session ended' }
+    if (this.#abort.signal.aborted) return { isOk: false, reason: 'the session ended' }
     try {
       const { peer } = await this.#connection(server)
       const result = await peer.request({
         method: 'tools/call',
         params: { name: tool, arguments: input ?? {} },
         timeout: { duration: CALL_TIMEOUT, what: `${server}'s ${tool}` },
+        signal: this.#abort.signal,
       })
       return McpResponse.parse(result).toResult()
     } catch (error) {
@@ -124,24 +157,24 @@ export class Servers implements Disposable {
   }
 
   [Symbol.dispose](): void {
-    // Set first, so a call still under way starts no server after this pass.
-    this.#isClosed = true
-    for (const connecting of this.#connections.values()) void Servers.#killed(connecting)
+    // Abort first so in-flight calls reject immediately and no new server starts after this pass.
+    this.#abort.abort()
+    for (const connecting of this.#connections.values()) void Servers.#disposeConnection(connecting)
     this.#connections.clear()
   }
 
-  static async #killed(connecting: Promise<Connection>): Promise<void> {
+  static async #disposeConnection(connecting: Promise<Connection>): Promise<void> {
     try {
-      const { child } = await connecting
-      child.kill()
+      const connection = await connecting
+      connection[Symbol.dispose]()
     } catch {
-      // A server that never started has nothing to kill.
+      // A server that never started has nothing to dispose.
     }
   }
 
   async #connection(name: string): Promise<Connection> {
-    const known = this.#connections.get(name)
-    if (known !== undefined) return known
+    const existing = this.#connections.get(name)
+    if (existing !== undefined) return existing
     const connecting = this.#connected(name)
     this.#connections.set(name, connecting)
     void this.#forgotten({ name, connecting })
@@ -152,7 +185,12 @@ export class Servers implements Disposable {
     const found = await this.#find(name)
     const { outcome } = found
     if (!outcome.isOk) throw new Error(outcome.error)
-    return connect({ name, server: outcome.value })
+    const connection = await connect({ name, server: outcome.value, signal: this.#abort.signal })
+    if (this.#abort.signal.aborted) {
+      connection[Symbol.dispose]()
+      throw new Error('the session ended')
+    }
+    return connection
   }
 
   // A server that couldn't be started, or has since gone, is started again on the next call.

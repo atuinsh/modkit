@@ -1,6 +1,15 @@
-/** Collection of interval timers torn down together via {@link Symbol.dispose}. */
+import { setInterval as every } from 'node:timers/promises'
+
+/** Interval scheduler driven by an {@link AbortSignal}, stopping automatically when aborted. */
 export class Timers implements Disposable {
-  readonly #handles: NodeJS.Timeout[] = []
+  readonly #abort: AbortController
+  readonly #signal: AbortSignal
+
+  constructor(signal?: AbortSignal) {
+    this.#abort = new AbortController()
+    this.#signal =
+      signal === undefined ? this.#abort.signal : AbortSignal.any([signal, this.#abort.signal])
+  }
 
   /** Schedule `tick` every `everyMs`, unreferenced by default so timers do not pin Node exit. */
   schedule({
@@ -12,12 +21,29 @@ export class Timers implements Disposable {
     tick: () => void
     unref?: boolean
   }): void {
-    const handle = setInterval(tick, everyMs)
-    if (unref) handle.unref()
-    this.#handles.push(handle)
+    if (this.#signal.aborted) return
+    void this.#loop({ everyMs, tick, ref: !unref })
   }
 
   [Symbol.dispose](): void {
-    for (const handle of this.#handles.splice(0)) clearInterval(handle)
+    this.#abort.abort()
+  }
+
+  async #loop({
+    everyMs,
+    tick,
+    ref,
+  }: {
+    everyMs: number
+    tick: () => void
+    ref: boolean
+  }): Promise<void> {
+    try {
+      for await (const runTick of every(everyMs, tick, { signal: this.#signal, ref })) {
+        runTick()
+      }
+    } catch {
+      // Aborted when the runtime disposes.
+    }
   }
 }
