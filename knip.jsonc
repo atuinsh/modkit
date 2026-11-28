@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
+    "examples/*": {
+      // `modkit build` reads each example's mod.tsx, and loads the targets its package.json lists
+      // by name.
+      "entry": ["mod.tsx!"],
+      "ignoreDependencies": ["@atuin/modkit-(claude-code|codex|opencode|pi)"],
+    },
     "modkit-claude-code": {
       // Claude Code provides `claude-code` to a mod, and the codegen writes `modkit-claude:state`.
       "ignoreDependencies": ["claude-code", "modkit-claude"],
