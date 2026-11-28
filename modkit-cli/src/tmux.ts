@@ -9,7 +9,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-import type { DevCommand } from '@atuin/modkit-target'
+import type { DevCommand, Env } from '@atuin/modkit-target'
 
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
@@ -18,6 +18,41 @@ const execFileAsync = promisify(execFile)
 async function tmux(args: readonly string[]): Promise<string> {
   const { stdout } = await execFileAsync('tmux', args, { encoding: 'utf8' })
   return stdout.trimEnd()
+}
+
+// What tmux sets in each pane itself, which `-e` would override with the value from outside it:
+// the server and pane the pane is in, the terminal tmux emulates rather than the one it runs in,
+// and the directory the pane starts in.
+const PANE_OWN: ReadonlySet<string> = new Set([
+  'TMUX',
+  'TMUX_PANE',
+  'TERM',
+  'TERM_PROGRAM',
+  'TERM_PROGRAM_VERSION',
+  'PWD',
+])
+
+/**
+ * The `-e` flags that set `env` in a pane tmux starts, but for the variables tmux sets itself.
+ *
+ * The values land in tmux's argv, which other users may read for as long as its client runs, so
+ * they go only to a client that sends its one command and exits.
+ */
+export const envFlags = (env: Env): string[] =>
+  Object.entries(env).flatMap(([name, value]) =>
+    value === undefined || PANE_OWN.has(name) ? [] : ['-e', `${name}=${value}`],
+  )
+
+/** Whether the tmux server has a session named exactly `name`. */
+export async function hasSessionNamed(name: string): Promise<boolean> {
+  try {
+    await tmux(['has-session', '-t', `=${name}`])
+    return true
+  } catch (error) {
+    // An exit of 1 is tmux's no, which it also gives when no server runs at all.
+    if (error instanceof Error && 'code' in error && error.code === 1) return false
+    throw error
+  }
 }
 
 /** Where a pane split off another goes. */
@@ -50,7 +85,10 @@ export class Pane {
     return new Pane(await tmux(['split-window', ...flags, '--', ...argv]))
   }
 
-  /** Kill whatever the pane runs and run `command` in `cwd` in its place, with `env` set over. */
+  /**
+   * Kill whatever the pane runs and run `command` in `cwd` in its place, with `env` set over the
+   * tmux server's environment, but for the variables tmux sets in each pane itself.
+   */
   async respawn({
     command,
     cwd,
@@ -58,10 +96,9 @@ export class Pane {
   }: {
     command: DevCommand
     cwd: string
-    env: Readonly<Record<string, string>>
+    env: Env
   }): Promise<void> {
-    const vars = Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`])
-    const flags = ['-k', '-t', this.#id, '-c', cwd, ...vars]
+    const flags = ['-k', '-t', this.#id, '-c', cwd, ...envFlags(env)]
     await tmux(['respawn-pane', ...flags, '--', command.program, ...command.args])
   }
 

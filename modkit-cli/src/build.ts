@@ -48,6 +48,9 @@ export type TargetBuild = {
   | { isOk: false }
 )
 
+/** Runs `build`, one of {@link Build.watch}'s builds, when it suits the caller. */
+type Round = (build: () => Promise<TargetBuild[]>) => Promise<unknown>
+
 /** A build of the mod in `dir` into `out`, for each target the mod's package.json lists. */
 export class Build {
   readonly #package: ModPackage
@@ -98,19 +101,18 @@ export class Build {
   }
 
   /**
-   * Build, then build again after each quiet spell of changes under the mod's directory, handing
-   * each build's outcome to `onBuild` before the next build starts.
+   * Build, then build again after each quiet spell of changes under the mod's directory.
+   *
+   * Each build is handed to `round` to run, which may hold it back until other work is done; the
+   * next build waits for `round` to finish.
    */
-  async watch(onBuild?: (builds: readonly TargetBuild[]) => Promise<void>): Promise<void> {
-    const round = async (): Promise<void> => {
-      const builds = await this.once()
-      await onBuild?.(builds)
-    }
-    await round()
+  async watch(round: Round = async (build) => build()): Promise<void> {
+    const once = async (): Promise<TargetBuild[]> => this.once()
+    await round(once)
     console.log(`watching ${shown(this.#package.dir)}`)
     let last: Promise<unknown> = Promise.resolve()
     const rebuild = debounce(() => {
-      last = last.then(round)
+      last = last.then(async () => round(once))
     }, QUIET_MS)
     const watcher = watch(this.#package.dir, {
       ignoreInitial: true,

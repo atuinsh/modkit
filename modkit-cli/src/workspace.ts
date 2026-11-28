@@ -90,7 +90,9 @@ export class Workspace {
       )
     }
     this.#listen()
-    await this.#input.build.watch(async (builds) => this.#serial(async () => this.#landed(builds)))
+    await this.#input.build.watch(async (build) =>
+      this.#serial(async () => this.#landed(await build())),
+    )
   }
 
   /**
@@ -107,6 +109,9 @@ export class Workspace {
     // The window may be going already, and the terminal these would print to with it.
     process.stdout.on('error', () => undefined)
     process.stderr.on('error', () => undefined)
+    // A step under way may be registering what closing the panes undoes, so it finishes first;
+    // `#serial` starts none once closing has begun.
+    await this.#queue
     const panes = this.#panes ?? []
     const closed = await Promise.all(
       panes.map(async (pane) => {
@@ -127,9 +132,10 @@ export class Workspace {
     process.exit(0)
   }
 
-  // Runs `step` once every step before it has finished, so builds, restarts and prompts never
-  // overlap on one pane.
+  // Runs `step` once every step before it has finished, so no harness starts on a build still
+  // being written and restarts and prompts never overlap on one pane; drops it once closing.
   async #serial(step: () => Promise<unknown>): Promise<void> {
+    if (this.#closing !== undefined) return
     const next = this.#queue.then(step)
     this.#queue = next.catch((error: unknown) => {
       console.error(errorMessage(error))

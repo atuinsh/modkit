@@ -55,6 +55,8 @@ function isOnPath({ program, env }: { program: string; env: Env }): boolean {
 
 /** What a pane's harness last loaded, and when and how it came onto it. */
 interface Loaded {
+  /** The directory the build is in, which later builds write over. */
+  out: string
   digest: string
   at: Date
   how: 'started' | 'reloaded'
@@ -114,16 +116,27 @@ export class HarnessPane {
     const loaded = (await this.#pane.isDead()) ? undefined : this.#loaded
     if (digest === loaded?.digest) return this.label(loadedText(loaded))
     if (loaded !== undefined && this.#harness.reload === 'watched') {
-      this.#loaded = { digest, at: new Date(), how: 'reloaded' }
+      this.#loaded = { out, digest, at: new Date(), how: 'reloaded' }
       return this.label(loadedText(this.#loaded))
     }
-    return this.#start({ harness: this.#harness, digest })
+    return this.#start({ harness: this.#harness, out, digest })
   }
 
-  /** Start the harness again on the build it last loaded, if it has loaded one. */
+  /**
+   * Start the harness again on the build it last loaded, if it has loaded one and it is still whole.
+   *
+   * A build writes over the last one file by file, so this must not run while one does; one that
+   * failed partway leaves no whole build, which the pane's border then says.
+   */
   async restart(): Promise<void> {
-    if (this.#harness === undefined || this.#loaded === undefined) return
-    await this.#start({ harness: this.#harness, digest: this.#loaded.digest })
+    const harness = this.#harness
+    const loaded = this.#loaded
+    if (harness === undefined || loaded === undefined) return
+    const digest = await digestOf({ dir: loaded.out, skipped: harness.writes ?? [] })
+    if (digest !== loaded.digest) {
+      return this.label(`not restarted: a later build wrote over the ${clock(loaded.at)} one`)
+    }
+    await this.#start({ harness, out: loaded.out, digest })
   }
 
   async sendLine(text: string): Promise<void> {
@@ -139,28 +152,28 @@ export class HarnessPane {
     await this.#pane.label(`${this.#number} ${this.#name} · ${state}`)
   }
 
-  async #start({ harness, digest }: { harness: DevHarness; digest: string }): Promise<void> {
+  async #start({
+    harness,
+    out,
+    digest,
+  }: {
+    harness: DevHarness
+    out: string
+    digest: string
+  }): Promise<void> {
     const command = harness.command(this.#session)
+    // A pane starts in the tmux server's environment, which needn't be the one `modkit dev` was
+    // started in, so that one is set over it.
+    const at = { cwd: this.#cwd, env: { ...this.#env, ...command.env } }
     if (!isOnPath({ program: command.program, env: this.#env })) {
       const missing = `${command.program} is not on PATH, so ${this.#name} gets no harness`
-      await this.#pane.respawn({
-        command: { program: 'echo', args: [missing], env: {} },
-        ...this.#at,
-      })
+      await this.#pane.respawn({ command: { program: 'echo', args: [missing], env: {} }, ...at })
       return this.label(`${command.program} is not on PATH`)
     }
     await harness.built?.()
-    const env = { ...this.#at.env, ...command.env }
-    await this.#pane.respawn({ command, cwd: this.#cwd, env })
+    await this.#pane.respawn({ command, ...at })
     this.#session = { ...this.#session, hasStarted: true }
-    this.#loaded = { digest, at: new Date(), how: 'started' }
+    this.#loaded = { out, digest, at: new Date(), how: 'started' }
     return this.label(loadedText(this.#loaded))
-  }
-
-  // Where a harness runs. A pane starts with the tmux server's environment, which needn't be
-  // the one `modkit dev` was started in, so the programs it finds on PATH are passed on.
-  get #at(): { cwd: string; env: Readonly<Record<string, string>> } {
-    const path = this.#env['PATH']
-    return { cwd: this.#cwd, env: path === undefined ? {} : { PATH: path } }
   }
 }
