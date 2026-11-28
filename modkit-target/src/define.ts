@@ -2,7 +2,7 @@ import * as v from 'valibot'
 
 import {
   DefinedTarget,
-  type DevOf,
+  type DevDefinition,
   type TargetBuildContext,
   type TargetBuilt,
 } from './defined-target.ts'
@@ -23,7 +23,7 @@ export class TargetBuilder<Options> {
   readonly #capabilities: Capabilities
   readonly #options: v.GenericSchema<unknown, Options>
   readonly #tools: HarnessTools | undefined
-  readonly #dev: DevOf | undefined
+  readonly #dev: DevDefinition | undefined
 
   constructor({
     name,
@@ -36,7 +36,7 @@ export class TargetBuilder<Options> {
     capabilities: Capabilities
     options: v.GenericSchema<unknown, Options>
     tools: HarnessTools | undefined
-    dev: DevOf | undefined
+    dev: DevDefinition | undefined
   }) {
     this.#name = name
     this.#capabilities = capabilities
@@ -68,7 +68,7 @@ export class TargetBuilder<Options> {
   }
 
   /** Declare how `modkit dev` runs the harness on the target's build. */
-  dev(fn: DevOf): TargetBuilder<Options> {
+  dev(fn: DevDefinition): TargetBuilder<Options> {
     return new TargetBuilder({
       name: this.#name,
       capabilities: this.#capabilities,

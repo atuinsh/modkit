@@ -57,10 +57,11 @@ function installedCopies({ plugin, env }: { plugin: string; env: Env }): string[
 /**
  * Codex on a build. Codex loads a plugin only once it is installed from a marketplace, which
  * copies it into Codex's cache, so each build is copied into a marketplace of its own in
- * `scratch` and installed from there, and both are taken out of Codex's config on close.
+ * `scratch` and installed from there, and both are taken out of Codex's config on disposal.
  */
 class CodexDev implements DevHarness {
   readonly reload = 'restarted'
+  readonly writes: readonly string[] = []
   readonly #out: string
   readonly #plugin: string
   readonly #hasStatus: boolean
@@ -132,7 +133,7 @@ class CodexDev implements DevHarness {
     await codex({ args: ['plugin', 'add', this.#selector], env: this.#env })
   }
 
-  async close(): Promise<void> {
+  async [Symbol.asyncDispose](): Promise<void> {
     if (!this.#isListed) return
     const env = this.#env
     try {

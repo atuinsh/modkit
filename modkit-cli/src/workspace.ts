@@ -18,6 +18,12 @@ import type { Build, TargetBuild } from './build.ts'
 import type { Dekit } from './dekit.ts'
 import { HarnessTask } from './harness-task.ts'
 
+// The errors a disposal threw, which a stack chains into a `SuppressedError` when several do.
+const unchained = (error: unknown): unknown[] =>
+  error instanceof SuppressedError
+    ? [...unchained(error.error), ...unchained(error.suppressed)]
+    : [error]
+
 /** What a workspace runs on. */
 export interface WorkspaceInput {
   build: Build
@@ -32,13 +38,15 @@ export interface WorkspaceInput {
 export class Workspace {
   readonly #input: WorkspaceInput
   readonly #tasks: readonly HarnessTask[]
+  // Owns the harnesses' tasks, which it disposes last to first on close.
+  readonly #stack = new AsyncDisposableStack()
   #queue: Promise<unknown> = Promise.resolve()
   #closing: Promise<never> | undefined
 
   constructor(input: WorkspaceInput) {
     this.#input = input
     const { dekit, env } = input
-    this.#tasks = input.names.map((name) => new HarnessTask({ name, dekit, env }))
+    this.#tasks = input.names.map((name) => this.#stack.use(new HarnessTask({ name, dekit, env })))
   }
 
   /** Build the mod on every save, bringing the harnesses onto each build. */
@@ -72,23 +80,23 @@ export class Workspace {
     // A step under way may be registering what closing the harnesses undoes, so it finishes
     // first; `#serial` starts none once closing has begun.
     await this.#queue
-    const failures = await Promise.all(
-      this.#tasks.map(async (task): Promise<string[]> => {
-        try {
-          await task.close()
-          return []
-        } catch (error) {
-          return [`${task.name}: ${errorMessage(error)}`]
-        }
-      }),
-    )
-    const failed = failures.flat()
+    const failed = await this.#undone()
     if (failed.length === 0) process.exit(0)
     const report = [...failed, 'modkit dev quit, but the above is still to undo by hand'].join('\n')
     console.error(report)
     // This task's screen goes with dekit as it quits, so `modkit dev` prints the report after.
     await writeFile(Workspace.unclosedPathOf(this.#input.dekit.root), `${report}\n`)
     process.exit(1)
+  }
+
+  // What disposing the harnesses' tasks failed to undo, a line each.
+  async #undone(): Promise<string[]> {
+    try {
+      await this.#stack.disposeAsync()
+      return []
+    } catch (error) {
+      return unchained(error).map((one) => errorMessage(one))
+    }
   }
 
   // Runs `step` once every step before it has finished, so a harness is never brought onto a

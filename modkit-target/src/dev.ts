@@ -43,19 +43,25 @@ export interface DevInput {
   env: Env
 }
 
-/** The harness `modkit dev` runs a target's build in, for as long as `modkit dev` runs. */
-export interface DevHarness {
+/**
+ * The harness `modkit dev` runs a target's build in, for as long as `modkit dev` runs.
+ *
+ * Disposing it undoes what {@link DevHarness.built} changed outside the build.
+ */
+export interface DevHarness extends AsyncDisposable {
   /** How a rebuild reaches the harness once it runs. */
   readonly reload: Reload
-  /**
-   * The paths under the build the harness writes itself, relative to it, if any: a change to
-   * them is no new build.
-   */
-  readonly writes?: readonly string[]
+  /** The paths under the build the harness writes itself, relative to it: a change to them is no new build. */
+  readonly writes: readonly string[]
   /** The command that starts the harness on the build, in `session`. */
-  command: (session: DevSession) => DevCommand
-  /** Ready the harness for the build just written, before it starts or restarts on it, if needed. */
-  built?: () => Promise<void>
-  /** Undo what {@link DevHarness.built} changed outside the build. */
-  close?: () => Promise<void>
+  readonly command: (session: DevSession) => DevCommand
+  /** Ready the harness for the build just written, before it starts or restarts on it. */
+  readonly built: () => Promise<void>
 }
+
+/**
+ * What a target says of its harness: the {@link DevHarness} it runs as, but that a harness writing
+ * nothing into its build and readying nothing outside it leaves those parts out.
+ */
+export type DevSpec = Pick<DevHarness, 'reload' | 'command'> &
+  Partial<Pick<DevHarness, 'writes' | 'built' | typeof Symbol.asyncDispose>>

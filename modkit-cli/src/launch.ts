@@ -48,7 +48,7 @@ async function commandOf({
   const out = join(build.out, name)
   const { plugin, hasStatus } = landed
   const harness = target.dev({ out, plugin, hasStatus, scratch: join(dev, slugOf(name)), env })
-  const digest = await digestOf({ dir: out, skipped: harness.writes ?? [] })
+  const digest = await digestOf({ dir: out, skipped: harness.writes })
   if (digest !== landed.digest) {
     return `${name}: not started, since a build that never landed wrote over the ${clock(landed.at)} one; the next build that does starts it`
   }
