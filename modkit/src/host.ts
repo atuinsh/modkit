@@ -18,6 +18,7 @@ export type {
   ButtonNode,
   Images,
   ImgNode,
+  LinkNode,
   MarkdownNode,
   Png,
   StackNode,

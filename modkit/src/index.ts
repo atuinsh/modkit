@@ -34,10 +34,11 @@ export type {
   ButtonProps,
   Hex,
   ImgProps,
+  LinkProps,
   MarkdownProps,
   Press,
   StackProps,
   TextProps,
   Tone,
 } from './ui/index'
-export { Button, Column, Img, Markdown, Row, Text } from './ui/index'
+export { Button, Column, Img, Link, Markdown, Row, Text } from './ui/index'

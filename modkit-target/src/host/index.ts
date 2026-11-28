@@ -37,6 +37,7 @@ export {
   type HarnessAdapter,
   type Images,
   type ImgNode,
+  type LinkNode,
   type MarkdownNode,
   type PaneView,
   type Phase,

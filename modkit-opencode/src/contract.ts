@@ -3,6 +3,7 @@ import type { Border, Hex, Tone } from '@atuin/modkit-target/host'
 export type NodeJson =
   | string
   | { kind: 'Text'; tone: Tone; bold: boolean; color?: Hex; background?: Hex; children: NodeJson[] }
+  | { kind: 'Link'; href: string; children: NodeJson[] }
   | {
       kind: 'Column' | 'Row'
       gap: number

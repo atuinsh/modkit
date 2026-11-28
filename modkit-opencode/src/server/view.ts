@@ -45,6 +45,8 @@ function nodeJson({ node, here, walk }: { node: UiNode; here: string; walk: Walk
         ...(node.background !== undefined && { background: node.background }),
         children: children(),
       }
+    case 'Link':
+      return { kind: 'Link', href: node.href, children: children() }
     case 'Column':
     case 'Row':
       return {

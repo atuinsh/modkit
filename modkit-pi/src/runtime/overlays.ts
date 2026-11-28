@@ -182,7 +182,7 @@ export class Overlays {
       height: () => this.#layoutOf(id).room,
       // TODO(markovejnovic): draw pictures in panes once pi-tui composites image lines in an
       // overlay; it composites an overlay's lines as text, so a pane draws each fallback.
-      paint: (hasKeys) => paintOf({ theme, hasKeys, drawsImages: false }),
+      paint: (hasKeys) => paintOf({ theme, hasKeys, isLine: false, drawsImages: false }),
       press: (button) => {
         this.#press({ ctx, button })
       },

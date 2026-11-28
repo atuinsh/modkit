@@ -93,7 +93,9 @@ export class CodexStatusLine {
       case 'Row':
       case 'Column':
         return { type: 'row', props: { gap: node.gap }, children: this.#renderNodes(node.children) }
+      // Nothing in Codex's status line can be pressed or opened, so each draws as its text.
       case 'Button':
+      case 'Link':
         return { type: 'text', children: this.#renderNodes(node.children) }
       case 'Img':
         return preserveSpaces(node.fallback)

@@ -186,7 +186,12 @@ export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
   #drawStatuses(ctx: ExtensionContext, statuses: readonly (readonly UiNode[])[]): void {
     if (!ctx.hasUI) return
     // The footer pi draws takes a line of text, so a status draws each fallback.
-    const paint = paintOf({ theme: ctx.ui.theme, hasKeys: false, drawsImages: false })
+    const paint = paintOf({
+      theme: ctx.ui.theme,
+      hasKeys: false,
+      isLine: true,
+      drawsImages: false,
+    })
     for (const [index, status] of statuses.entries()) {
       const line = linesOf({ nodes: status, width: STATUS_COLUMNS, paint }).join(' ')
       ctx.ui.setStatus(this.#statusKey(index), line === '' ? undefined : line)

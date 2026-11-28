@@ -62,8 +62,22 @@ function spanned({ span, shared, flow }: { span: Span; shared: Shared; flow: Flo
     ...(span.bg !== undefined && { bg: shared.color(span.bg) }),
     ...(flow === 'line' && { flexShrink: 0, wrapMode: 'none' as const }),
   }
-  return <text {...props}>{span.bold ? <b>{span.text}</b> : span.text}</text>
+  const text = span.bold ? <b>{span.text}</b> : span.text
+  return (
+    <text {...props}>
+      {span.href === undefined ? (
+        text
+      ) : (
+        <a href={span.href}>
+          <u>{text}</u>
+        </a>
+      )}
+    </text>
+  )
 }
+
+// Whether the terminal is known to open no links, so a pane spells out each link's URL.
+const isLinkless = (ctx: Context): boolean => ctx.renderer.capabilities?.hyperlinks === false
 
 // OpenTUI draws a picture with kitty's protocol or sixel where its probe of the terminal found one,
 // and in half blocks otherwise; there the mod's fallback stands in for it.
@@ -187,7 +201,13 @@ function Pane(props: { panel: PanelInput; shared: Shared }) {
           paddingLeft={1}
           paddingRight={1}
         >
-          <For each={specsOf({ nodes: pane().body, hasKeys: true })}>
+          <For
+            each={specsOf({
+              nodes: pane().body,
+              hasKeys: true,
+              spellsUrls: isLinkless(props.shared.ctx),
+            })}
+          >
             {(spec) => drawn({ spec, shared: props.shared })}
           </For>
         </box>
@@ -202,7 +222,7 @@ function Statuses(props: { shared: Shared }) {
       <For each={props.shared.view().statuses}>
         {(status) => (
           <box flexDirection="row" flexShrink={0}>
-            <For each={specsOf({ nodes: status, hasKeys: false })}>
+            <For each={specsOf({ nodes: status, hasKeys: false, spellsUrls: false })}>
               {(spec) => drawn({ spec, shared: props.shared, flow: 'line' })}
             </For>
           </box>

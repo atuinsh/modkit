@@ -9,6 +9,8 @@ export interface Span {
   fg?: Paint
   bg?: Paint
   bold: boolean
+  /** The URL the span opens, drawn underlined as part of a link. */
+  href?: string
 }
 
 export type BorderStyle = 'single' | 'rounded' | 'double' | 'heavy'
@@ -39,13 +41,22 @@ interface Style {
   bold: boolean
   color: Hex | undefined
   background: Hex | undefined
+  href: string | undefined
 }
 
-const PLAIN: Style = { tone: 'plain', bold: false, color: undefined, background: undefined }
+const PLAIN: Style = {
+  tone: 'plain',
+  bold: false,
+  color: undefined,
+  background: undefined,
+  href: undefined,
+}
 
 function fgOf(style: Style): Paint | undefined {
   if (style.color !== undefined) return { hex: style.color }
-  return style.tone === 'plain' ? undefined : { tone: style.tone }
+  if (style.tone !== 'plain') return { tone: style.tone }
+  // A link draws in the accent buttons do, unless its text is colored.
+  return style.href === undefined ? undefined : { tone: 'accent' }
 }
 
 const spanOf = ({ text, style }: { text: string; style: Style }): Span => {
@@ -55,6 +66,7 @@ const spanOf = ({ text, style }: { text: string; style: Style }): Span => {
     bold: style.bold,
     ...(fg !== undefined && { fg }),
     ...(style.background !== undefined && { bg: { hex: style.background } }),
+    ...(style.href !== undefined && { href: style.href }),
   }
 }
 
@@ -62,6 +74,7 @@ function plainOf(node: NodeJson): string {
   if (typeof node === 'string') return node
   switch (node.kind) {
     case 'Text':
+    case 'Link':
     case 'Column':
     case 'Row':
       return node.children.map((child) => plainOf(child)).join('')
@@ -75,18 +88,43 @@ function plainOf(node: NodeJson): string {
   return node.text
 }
 
-function spansOf({ node, around }: { node: NodeJson; around: Style }): Span[] {
-  if (typeof node === 'string' || node.kind !== 'Text') {
-    const text = plainOf(node)
-    return text === '' ? [] : [spanOf({ text, style: around })]
-  }
-  const style: Style = {
+type Inline = Extract<NodeJson, { kind: 'Text' | 'Link' }>
+
+const isInline = (node: NodeJson): node is Inline =>
+  typeof node !== 'string' && (node.kind === 'Text' || node.kind === 'Link')
+
+// The style `node`'s children are drawn in, inside `around`.
+function styleIn({ node, around }: { node: Inline; around: Style }): Style {
+  if (node.kind === 'Link') return { ...around, href: node.href }
+  return {
     tone: node.tone === 'plain' ? around.tone : node.tone,
     bold: node.bold || around.bold,
     color: node.color ?? around.color,
     background: node.background ?? around.background,
+    href: around.href,
   }
-  return node.children.flatMap((child) => spansOf({ node: child, around: style }))
+}
+
+function spansOf({
+  node,
+  around,
+  spellsUrls,
+}: {
+  node: NodeJson
+  around: Style
+  spellsUrls: boolean
+}): Span[] {
+  if (!isInline(node)) {
+    const text = plainOf(node)
+    return text === '' ? [] : [spanOf({ text, style: around })]
+  }
+  const style = styleIn({ node, around })
+  const spans = node.children.flatMap((child) =>
+    spansOf({ node: child, around: style, spellsUrls }),
+  )
+  if (node.kind === 'Text' || !spellsUrls || plainOf(node) === node.href) return spans
+  const url = { ...around, tone: 'dim' as const, color: undefined }
+  return [...spans, spanOf({ text: ` (${node.href})`, style: url })]
 }
 
 const buttonSpans = ({
@@ -104,12 +142,46 @@ const buttonSpans = ({
   { text: label, fg: { tone: 'accent' }, bold: false },
 ]
 
+// The box a `Column` or `Row` draws `children` in.
+function boxSpec({
+  node,
+  children,
+}: {
+  node: Extract<NodeJson, { kind: 'Column' | 'Row' }>
+  children: Spec[]
+}): Spec {
+  const padX = node.paddingX ?? 0
+  const padY = node.paddingY ?? 0
+  return {
+    tag: 'box',
+    flexDirection: node.kind === 'Column' ? 'column' : 'row',
+    gap: node.gap,
+    ...(node.border !== undefined && {
+      border: {
+        style: BORDER_STYLES[node.border],
+        color:
+          node.borderTone === undefined || node.borderTone === 'plain'
+            ? { tone: 'border' }
+            : { tone: node.borderTone },
+      },
+    }),
+    padding: { left: padX, right: padX, top: padY, bottom: padY },
+    children,
+  }
+}
+
+/**
+ * Specs drawing `nodes`, with the hotkeys beside buttons when `hasKeys`, and each link's URL after
+ * its text when `spellsUrls`, for a terminal that opens no links.
+ */
 export function specsOf({
   nodes,
   hasKeys,
+  spellsUrls,
 }: {
   nodes: readonly NodeJson[]
   hasKeys: boolean
+  spellsUrls: boolean
 }): Spec[] {
   return nodes.map((node): Spec => {
     if (typeof node === 'string') {
@@ -117,28 +189,11 @@ export function specsOf({
     }
     switch (node.kind) {
       case 'Text':
-        return { tag: 'text', spans: spansOf({ node, around: PLAIN }) }
+      case 'Link':
+        return { tag: 'text', spans: spansOf({ node, around: PLAIN, spellsUrls }) }
       case 'Column':
-      case 'Row': {
-        const padX = node.paddingX ?? 0
-        const padY = node.paddingY ?? 0
-        return {
-          tag: 'box',
-          flexDirection: node.kind === 'Column' ? 'column' : 'row',
-          gap: node.gap,
-          ...(node.border !== undefined && {
-            border: {
-              style: BORDER_STYLES[node.border],
-              color:
-                node.borderTone === undefined || node.borderTone === 'plain'
-                  ? { tone: 'border' }
-                  : { tone: node.borderTone },
-            },
-          }),
-          padding: { left: padX, right: padX, top: padY, bottom: padY },
-          children: specsOf({ nodes: node.children, hasKeys }),
-        }
-      }
+      case 'Row':
+        return boxSpec({ node, children: specsOf({ nodes: node.children, hasKeys, spellsUrls }) })
       case 'Button':
         return {
           tag: 'text',

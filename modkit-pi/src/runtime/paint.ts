@@ -1,5 +1,5 @@
 import { getMarkdownTheme, type Theme, type ThemeColor } from '@earendil-works/pi-coding-agent'
-import { Markdown, parseColor } from '@earendil-works/pi-tui'
+import { getCapabilities, hyperlink, Markdown, parseColor } from '@earendil-works/pi-tui'
 
 import type { Hex, Tone } from '@atuin/modkit-target/host'
 
@@ -28,24 +28,37 @@ const textColor = ({
 const borderColor = (tone: Tone | undefined): ThemeColor =>
   tone === undefined || tone === 'plain' ? 'border' : TONE_COLORS[tone]
 
+/**
+ * Paint drawing with `theme`: hotkeys beside buttons when `hasKeys`, and pictures when
+ * `drawsImages`.
+ *
+ * A link is colored and underlined as pi's markdown draws one. Where the terminal opens no links it
+ * draws as its text, followed by its URL unless `isLine`, as the footer has no room for one.
+ */
 export function paintOf({
   theme,
   hasKeys,
+  isLine,
   drawsImages,
 }: {
   theme: Theme
   hasKeys: boolean
+  isLine: boolean
   drawsImages: boolean
 }): Paint {
+  const opensLinks = getCapabilities().hyperlinks
   return {
-    text: ({ text, tone, bold, color, background }) => {
-      const fg = textColor({ tone, color })
-      return theme.style(text, {
+    text: ({ text, tone, bold, color, background, href }) => {
+      const fg = textColor({ tone, color }) ?? (href === undefined ? undefined : 'mdLink')
+      const styled = theme.style(text, {
         ...(fg !== undefined && { fg }),
         ...(background !== undefined && { bg: parseColor(background) }),
         ...(bold && { bold: true }),
+        ...(href !== undefined && { underline: true }),
       })
+      return href === undefined || !opensLinks ? styled : hyperlink(styled, href)
     },
+    spellsUrls: !opensLinks && !isLine,
     border: ({ tone, text }) => theme.fg(borderColor(tone), text),
     button: ({ label, hotkey, isPicked }) => {
       const name = theme.fg('accent', isPicked ? theme.bold(`${PICK_MARK} ${label}`) : label)

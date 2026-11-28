@@ -33,6 +33,8 @@ declare module 'claude-code' {
     readonly Box: Element
     readonly Text: Element
     readonly Button: Element
+    /** Inline hyperlink, `{ href }`, drawn as its children's text; a `Text` may hold one. */
+    readonly Link: Element
     readonly Markdown: Element
     /** The terminal surface's alone: a tree holding it on another surface is refused. */
     readonly Image?: Element

@@ -1,5 +1,6 @@
 export { Button, type ButtonNode, type ButtonProps, type Press } from './button'
 export { Img, type Images, type ImgNode, type ImgProps, type Png } from './img'
+export { Link, type LinkNode, type LinkProps } from './link'
 export { Markdown, type MarkdownNode, type MarkdownProps } from './markdown'
 export type { UiNode } from './node'
 export { Column, Row, type StackNode, type StackProps } from './stack'
