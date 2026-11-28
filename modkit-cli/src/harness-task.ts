@@ -24,7 +24,7 @@ export class HarnessTask {
   readonly #dekit: Dekit
   readonly #env: Env
   readonly #session = randomUUID()
-  #harness: DevHarness | undefined
+  #harness: { dev: DevHarness; plugin: string } | undefined
   #loaded: Landed | undefined
 
   constructor({ name, dekit, env }: { name: string; dekit: Dekit; env: Env }) {
@@ -44,7 +44,7 @@ export class HarnessTask {
       return
     }
     const { out, plugin, hasStatus } = build
-    const harness = this.#harnessFor(build)
+    const harness = await this.#harnessFor(build)
     const digest = await digestOf({ dir: out, skipped: harness.writes ?? [] })
     const way = await this.#wayOnto({ harness, digest })
     if (way === 'kept') return
@@ -60,7 +60,7 @@ export class HarnessTask {
 
   /** Undo what readying the harness for its builds changed. */
   async close(): Promise<void> {
-    await this.#harness?.close?.()
+    await this.#harness?.dev.close?.()
   }
 
   #failed(): void {
@@ -69,14 +69,20 @@ export class HarnessTask {
     console.error(`${this.#name}: build failed; ${on}`)
   }
 
-  #harnessFor({
+  // The harness readied for the build's plugin. A mod renamed in its package.json builds under a
+  // new name, so the harness readied under the old one is closed, and the new one starts afresh.
+  async #harnessFor({
     target,
     out,
     plugin,
     hasStatus,
-  }: Extract<TargetBuild, { isOk: true }>): DevHarness {
-    this.#harness ??= target.dev({ out, plugin, hasStatus, scratch: this.#scratch, env: this.#env })
-    return this.#harness
+  }: Extract<TargetBuild, { isOk: true }>): Promise<DevHarness> {
+    if (this.#harness?.plugin === plugin) return this.#harness.dev
+    await this.#harness?.dev.close?.()
+    const dev = target.dev({ out, plugin, hasStatus, scratch: this.#scratch, env: this.#env })
+    this.#harness = { dev, plugin }
+    this.#loaded = undefined
+    return dev
   }
 
   async #wayOnto({ harness, digest }: { harness: DevHarness; digest: string }): Promise<Way> {
