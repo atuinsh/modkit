@@ -3,7 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import * as v from 'valibot'
 
-import type { Exit } from './hooks'
+import type { Exit } from '../protocol'
 
 const TAIL_BYTES = 1_048_576
 const LOOKS = 5

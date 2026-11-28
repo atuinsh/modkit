@@ -16,13 +16,23 @@ import {
   nextShown,
   NOTHING_SHOWN,
   type ButtonNode,
-  type CommandView,
   type HarnessAdapter,
   type Images,
   type Mounted,
   type Shown,
   type UiNode,
 } from '@atuin/modkit/host'
+
+import {
+  NOP_COMMAND_HOST,
+  NOP_VIEW_HOST,
+  NopPaneHost,
+  type Awaitable,
+  type CommandHost,
+  type PaneHost,
+  type ViewHost,
+} from './hosts.ts'
+import { PaneId } from './pane-id.ts'
 
 // How often a session refreshes the mod's resources.
 const TICK_MS = 1000
@@ -32,24 +42,6 @@ const REPORT_NOTHING: HarnessAdapter['report'] = () => undefined
 
 // What a tool call is followed by while no session started.
 const NO_FOLLOWUP: Followup = {}
-
-// A pane id's limit, as `<Pane id>` takes one: 1 to 64 letters, digits, `_` or `-`.
-const PANE_ID_LENGTH = 64
-
-// The id of the pane `command` toggles: its name, in the characters a pane id takes.
-const paneIdOf = (command: string): string =>
-  command.replaceAll(/[^A-Za-z0-9_-]/gu, '-').slice(0, PANE_ID_LENGTH)
-
-/** A pane of the mod's, as a target's harness opens it. */
-export interface PaneOpening {
-  id: string
-  title: string
-  /** Whether the pane takes the keyboard: true when an interaction of the person's opened it. */
-  focus: boolean
-}
-
-/** Whether a target's harness placed a pane it was asked to open, or why it waits. */
-export type PaneOpened = { isPlaced: true } | { isPlaced: false; reason: string }
 
 /** A callback a target's harness calls every `everyMs`. */
 export interface Repeat {
@@ -73,17 +65,15 @@ export type HookedResult =
   | ({ readonly kind: 'shell' } & ShellResult)
   | ({ readonly kind: 'tool' } & ToolResult)
 
+const paneKey = (id: string | PaneId): string => (typeof id === 'string' ? id : id.toString())
+
 /**
  * A mod's session, which every target runs the same way: it mounts the mod when the session starts,
  * keeps the panes the mod shows open, ticks it, and answers the harness's hooks and the person's
  * commands and button presses.
  *
- * A target extends it with how its harness does what a session needs: the {@link HarnessAdapter}
- * the mod's handlers call, a redraw, a pane opened, closed or looked up, a command registered, and
- * a tick. Its hooks call the session methods, which are the same for every target: a target
- * implements the abstract methods and overrides none of the rest. `Engine` is what the harness
- * hands each of the target's hooks to reach it with, and each method that reaches the harness
- * takes the engine of the hook it serves.
+ * A target implements `adapter` and `repeat`, and overrides `panes`, `commands`, or `view` only for
+ * the surfaces its harness provides (each defaults to a no-op host).
  */
 export abstract class ModkitTargetRuntime<Engine> {
   readonly #mod: Mod<Options>
@@ -97,6 +87,15 @@ export abstract class ModkitTargetRuntime<Engine> {
   // with keyboard focus and the relaxed placement rules an interaction gets.
   #isAnswering = false
 
+  /** Pane surface host; defaults to {@link NopPaneHost}. */
+  protected readonly panes: PaneHost<Engine> = new NopPaneHost()
+
+  /** Command registration host; defaults to {@link NOP_COMMAND_HOST}. */
+  protected readonly commands: CommandHost<Engine> = NOP_COMMAND_HOST
+
+  /** View redraw host; defaults to {@link NOP_VIEW_HOST}. */
+  protected readonly view: ViewHost<Engine> = NOP_VIEW_HOST
+
   constructor({ mod, options, images }: { mod: Mod<Options>; options: Options; images: Images }) {
     this.#mod = mod
     this.#options = options
@@ -109,22 +108,7 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   /** The adapter the mod's handlers reach the harness through for the session. */
-  protected abstract adapter(engine: Engine): Promise<HarnessAdapter>
-
-  /** Have the harness draw the mod's view again. */
-  protected abstract redraw(engine: Engine): Promise<unknown>
-
-  /** Show one of the mod's panes, or retitle it when it shows. */
-  protected abstract openPane(engine: Engine, pane: PaneOpening): Promise<PaneOpened>
-
-  /** Take down one of the mod's panes. */
-  protected abstract closePane(engine: Engine, id: string): Promise<unknown>
-
-  /** Whether the harness shows pane `id`. */
-  protected abstract isPaneShown(engine: Engine, id: string): Promise<boolean>
-
-  /** Make one of the mod's commands one the person can run. */
-  protected abstract registerCommand(engine: Engine, command: CommandView): Promise<unknown>
+  protected abstract adapter(engine: Engine): Awaitable<HarnessAdapter>
 
   /** Have the harness call `repeat.tick` every `repeat.everyMs` for the rest of the session. */
   protected abstract repeat(engine: Engine, repeat: Repeat): void
@@ -142,13 +126,13 @@ export abstract class ModkitTargetRuntime<Engine> {
     const mounted = mount({ mod: this.#mod, options: this.#options, adapter, images: this.#images })
     this.#mounted = mounted
     mounted.subscribe(() => {
-      void this.redraw(engine)
+      void this.view.redraw(engine)
       if (!this.#isAnswering) this.#syncPanes(engine, false)
     })
     this.#syncPanes(engine, false)
     for (const command of mounted.view().commands) {
       // oxlint-disable-next-line no-await-in-loop -- a harness takes registrations one at a time
-      await this.registerCommand(engine, command)
+      await this.commands.register(engine, command)
     }
     this.repeat(engine, {
       everyMs: TICK_MS,
@@ -157,7 +141,7 @@ export abstract class ModkitTargetRuntime<Engine> {
       },
     })
     await mounted.event('session.start')
-    await this.redraw(engine)
+    await this.view.redraw(engine)
   }
 
   /** A turn of the session's ended: refresh what the mod reads on one, without holding the turn. */
@@ -206,10 +190,11 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   /** The body of pane `id`, one a command toggles or one the mod shows. */
-  protected paneBody(id: string): readonly UiNode[] | undefined {
+  protected paneBody(id: string | PaneId): readonly UiNode[] | undefined {
+    const key = paneKey(id)
     const view = this.#mounted?.view()
-    const command = view?.commands.find((one) => paneIdOf(one.name) === id)
-    return command?.pane?.body ?? view?.panes.find((pane) => pane.id === id)?.body
+    const command = view?.commands.find((one) => PaneId.fromCommand(one.name).equals(key))
+    return command?.pane?.body ?? view?.panes.find((pane) => pane.id === key)?.body
   }
 
   /**
@@ -223,7 +208,7 @@ export abstract class ModkitTargetRuntime<Engine> {
     if (command.pane === undefined) {
       return (await this.#answering(engine, async () => mounted.ran(name))) ?? ''
     }
-    return this.#toggled(engine, { id: paneIdOf(name), title: command.pane.title })
+    return this.#toggled(engine, { id: PaneId.fromCommand(name), title: command.pane.title })
   }
 
   /** Answer the person pressing one of the mod's buttons, on the engine of the hook that drew it. */
@@ -232,10 +217,11 @@ export abstract class ModkitTargetRuntime<Engine> {
   }
 
   /** The person closed pane `id`: keep it closed while the mod shows it, and tell the mod. */
-  protected async dismiss(id: string): Promise<void> {
-    if (!this.#shown.open.has(id)) return
-    this.#shown = dismissed({ shown: this.#shown, id })
-    await this.#mounted?.closed(id)
+  protected async dismiss(id: string | PaneId): Promise<void> {
+    const key = paneKey(id)
+    if (!this.#shown.open.has(key)) return
+    this.#shown = dismissed({ shown: this.#shown, id: key })
+    await this.#mounted?.closed(key)
   }
 
   // Answer an interaction of the person's with `start`, the handler it runs: the panes its
@@ -254,12 +240,12 @@ export abstract class ModkitTargetRuntime<Engine> {
     return done
   }
 
-  async #toggled(engine: Engine, { id, title }: { id: string; title: string }): Promise<string> {
-    if (await this.isPaneShown(engine, id)) {
-      await this.closePane(engine, id)
+  async #toggled(engine: Engine, { id, title }: { id: PaneId; title: string }): Promise<string> {
+    if (await this.panes.isShown(engine, id)) {
+      await this.panes.close(engine, id)
       return `${title} closed.`
     }
-    const opened = await this.openPane(engine, { id, title, focus: true })
+    const opened = await this.panes.open(engine, { id, title, focus: true })
     return opened.isPlaced ? `${title} opened.` : `${title} waits: ${opened.reason}`
   }
 
@@ -273,10 +259,11 @@ export abstract class ModkitTargetRuntime<Engine> {
       this.#report({ phase: 'render', error })
     }
     for (const change of changes) {
+      const id = PaneId.parse(change.id)
       const changed =
         change.kind === 'close'
-          ? this.closePane(engine, change.id)
-          : this.openPane(engine, { id: change.id, title: change.title, focus: isAnswer })
+          ? Promise.resolve(this.panes.close(engine, id))
+          : Promise.resolve(this.panes.open(engine, { id, title: change.title, focus: isAnswer }))
       changed.catch(fail)
     }
   }

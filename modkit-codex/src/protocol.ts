@@ -1,10 +1,15 @@
 import * as v from 'valibot'
 
+import {
+  asRecord,
+  type Followup,
+  type HookedCall,
+  type HookedResult,
+} from '@atuin/modkit-target/host'
+
 export const HOOK_TOOL = 'hook'
 export const STATUSLINE_TOOL = 'statusline'
-export const SHELL_TOOL = 'Bash'
-
-export const serverNameOf = (plugin: string): string => `${plugin}-mod`
+const SHELL_TOOL = 'Bash'
 
 // Long enough for the user to read and answer an elicitation prompt before Codex aborts the hook.
 const ASKING_TIMEOUT_S = 600
@@ -16,28 +21,21 @@ export type HookEventName =
   | 'PostToolUse'
   | 'Stop'
 
-interface BaseHook {
-  session: string
-  cwd: string
+export interface Exit {
+  readonly exitCode: number | null
+  readonly failed: boolean
 }
 
-export type HookEvent =
-  | (BaseHook & { event: 'SessionStart' | 'UserPromptSubmit' | 'Stop' })
-  | (BaseHook & {
-      event: 'PreToolUse'
-      tool: string
-      input: unknown
-      toolUseId: string
-      canAsk: boolean
-    })
-  | (BaseHook & {
-      event: 'PostToolUse'
-      tool: string
-      input: unknown
-      response: unknown
-      toolUseId: string
-      transcript: string | null
-    })
+export type Decision =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'deny'; readonly reason: string }
+
+export interface Delivered {
+  readonly notes: readonly string[]
+  readonly context: readonly string[]
+}
+
+export type WireHookOutput = Readonly<Record<string, unknown>>
 
 const SESSION = { session_id: v.string(), cwd: v.string() }
 
@@ -81,15 +79,15 @@ const HookSchema = v.variant('event', [
   v.object({ event: v.literal('Stop'), ...HOOKS.Stop.fields }),
 ])
 
-export const carriesContext = (event: HookEventName): boolean => HOOKS[event].carriesContext
+type WireHookEvent = v.InferOutput<typeof HookSchema>
 
-export const hookTimeoutOf = (event: HookEventName): number | undefined => {
+export const hookTimeout = (event: HookEventName): number | undefined => {
   const spec: HookSpec = HOOKS[event]
   return spec.timeoutS
 }
 
 /** Build the `${field}` input map for a Codex hook from its wire schema. */
-export const hookInputOf = (event: HookEventName): Readonly<Record<string, string>> => ({
+export const hookInputTemplate = (event: HookEventName): Readonly<Record<string, string>> => ({
   event,
   ...Object.fromEntries(
     Object.keys(HOOKS[event].fields).map((name): readonly [string, string] => [
@@ -99,28 +97,123 @@ export const hookInputOf = (event: HookEventName): Readonly<Record<string, strin
   ),
 })
 
-/** Parse and normalize raw MCP hook tool arguments into a typed {@link HookEvent}. */
-export function parseHook(args: unknown): HookEvent {
-  const parsed = v.safeParse(HookSchema, args)
-  if (!parsed.success) {
-    const [issue] = parsed.issues
-    throw new TypeError(`a hook's ${v.getDotPath(issue) ?? 'arguments'}: ${issue.message}`)
+function extractCommand(input: unknown): string | undefined {
+  const { command } = asRecord(input)
+  return typeof command === 'string' ? command : undefined
+}
+
+function stringifyResponse(response: unknown): string {
+  if (typeof response === 'string') return response
+  return response === undefined ? '' : JSON.stringify(response)
+}
+
+/** Validated Codex hook event with bound domain conversion and wire-reply serialization. */
+export class CodexHookEvent {
+  readonly #wire: WireHookEvent
+
+  private constructor(wire: WireHookEvent) {
+    this.#wire = wire
   }
-  const { output } = parsed
-  const base = { session: output.session_id, cwd: output.cwd }
-  if (output.event !== 'PreToolUse' && output.event !== 'PostToolUse') {
-    return { ...base, event: output.event }
+
+  /** Parse raw MCP hook tool arguments into a typed {@link CodexHookEvent}. */
+  static parse(args: unknown): CodexHookEvent {
+    const parsed = v.safeParse(HookSchema, args)
+    if (!parsed.success) {
+      const [issue] = parsed.issues
+      throw new TypeError(`a hook's ${v.getDotPath(issue) ?? 'arguments'}: ${issue.message}`)
+    }
+    return new CodexHookEvent(parsed.output)
   }
-  const call = { tool: output.tool_name, input: output.tool_input, toolUseId: output.tool_use_id }
-  if (output.event === 'PreToolUse') {
+
+  get kind(): HookEventName {
+    return this.#wire.event
+  }
+
+  get sessionId(): string {
+    return this.#wire.session_id
+  }
+
+  get cwd(): string {
+    return this.#wire.cwd
+  }
+
+  get carriesContext(): boolean {
+    return HOOKS[this.#wire.event].carriesContext
+  }
+
+  get canAsk(): boolean {
+    return this.#wire.event === 'PreToolUse' && this.#wire.permission_mode !== 'bypassPermissions'
+  }
+
+  get isShellTool(): boolean {
+    return (
+      (this.#wire.event === 'PreToolUse' || this.#wire.event === 'PostToolUse') &&
+      this.#wire.tool_name === SHELL_TOOL
+    )
+  }
+
+  get toolUseId(): string | undefined {
+    return this.#wire.event === 'PreToolUse' || this.#wire.event === 'PostToolUse'
+      ? this.#wire.tool_use_id
+      : undefined
+  }
+
+  get transcriptPath(): string | null {
+    if (this.#wire.event !== 'PostToolUse') return null
+    const path = this.#wire.transcript_path
+    return typeof path === 'string' && path !== '' ? path : null
+  }
+
+  /** Convert a `PreToolUse` event into a modkit {@link HookedCall}. */
+  toCall(): HookedCall | undefined {
+    if (this.#wire.event !== 'PreToolUse') return undefined
+    const { tool_name: tool, tool_use_id: id, tool_input: input, cwd } = this.#wire
+    if (tool !== SHELL_TOOL) return { kind: 'tool', id, tool, input: asRecord(input), cwd }
+    const command = extractCommand(input)
+    return command === undefined ? undefined : { kind: 'shell', id, command, cwd }
+  }
+
+  /** Convert a `PostToolUse` event and resolved shell exit into a modkit {@link HookedResult}. */
+  toResult(exit: Exit): HookedResult | undefined {
+    if (this.#wire.event !== 'PostToolUse') return undefined
+    const { tool_name: tool, tool_use_id: id, tool_input: input, cwd, tool_response } = this.#wire
+    const output = stringifyResponse(tool_response)
+    if (tool !== SHELL_TOOL) {
+      return { kind: 'tool', id, tool, input: asRecord(input), cwd, output, failed: exit.failed }
+    }
+    const command = extractCommand(input)
+    return command === undefined ? undefined : { kind: 'shell', id, command, cwd, output, ...exit }
+  }
+
+  /** Format the Codex hook JSON response carrying buffered notes, context, followup, and decision. */
+  reply({
+    delivered,
+    followup,
+    decision,
+  }: {
+    delivered: Delivered
+    followup: Followup
+    decision: Decision
+  }): WireHookOutput {
+    const notes = [...delivered.notes, ...(followup.note === undefined ? [] : [followup.note])]
+    const contexts = [
+      ...delivered.context,
+      ...(followup.context === undefined ? [] : [followup.context]),
+    ]
+    const note = notes.join('\n\n')
+    const context = this.carriesContext ? contexts.join('\n\n') : ''
+    const specific = {
+      ...(context !== '' && { additionalContext: context }),
+      ...(decision.kind === 'deny' && {
+        permissionDecision: 'deny',
+        permissionDecisionReason: decision.reason,
+      }),
+    }
     return {
-      ...base,
-      ...call,
-      event: output.event,
-      canAsk: output.permission_mode !== 'bypassPermissions',
+      ...(note !== '' && { systemMessage: note }),
+      ...(Object.keys(specific).length > 0 && {
+        hookSpecificOutput: { hookEventName: this.#wire.event, ...specific },
+      }),
     }
   }
-  const { transcript_path: path, tool_response: response } = output
-  const transcript = typeof path === 'string' && path !== '' ? path : null
-  return { ...base, ...call, event: output.event, response, transcript }
 }

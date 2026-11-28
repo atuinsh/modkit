@@ -28,58 +28,15 @@ const TONE_COLORS: Readonly<Record<Tone, LineColor | undefined>> = {
   error: 'red',
 }
 
-const KEPT_SPACE = ' '
-
-const keptSpaces = (text: string): string =>
-  text.replaceAll(/^ +| +$| {2,}/gu, (spaces) => KEPT_SPACE.repeat(spaces.length))
-
-const leafOf = (text: string): string | undefined => (text === '' ? undefined : keptSpaces(text))
-
-function elementsOf(nodes: readonly UiNode[]): LineElement[] {
-  return nodes.flatMap((node) => {
-    const element = elementOf(node)
-    return element === undefined ? [] : [element]
-  })
-}
-
-function textOf(node: TextNode): LineElement {
-  const color = node.color ?? TONE_COLORS[node.tone]
-  const props = {
-    ...(color !== undefined && { color }),
-    ...(node.bold && { weight: 'bold' as const }),
-  }
-  const text: LineText = {
-    type: 'text',
-    ...(Object.keys(props).length > 0 && { props }),
-    children: elementsOf(node.children),
-  }
-  if (node.background === undefined) return text
-  return { type: 'row', props: { gap: 0, background: node.background }, children: [text] }
-}
-
-function elementOf(node: UiNode): LineElement | undefined {
-  if (typeof node === 'string') return leafOf(node)
-  switch (node.kind) {
-    case 'Text':
-      return textOf(node)
-    case 'Row':
-    case 'Column':
-      return { type: 'row', props: { gap: node.gap }, children: elementsOf(node.children) }
-    // Nothing in Codex's status line can be pressed or opened, so each draws as its text.
-    case 'Button':
-    case 'Link':
-      return { type: 'text', children: elementsOf(node.children) }
-    case 'Img':
-      return leafOf(node.fallback)
-    case 'Markdown':
-      break
-  }
-  return leafOf(node.text)
-}
-
+const KEPT_SPACE = '\u00A0'
 const encoder = new TextEncoder()
 
-function fitted({ text, bytes }: { text: string; bytes: number }): string {
+function preserveSpaces(text: string): string | undefined {
+  if (text === '') return undefined
+  return text.replaceAll(/^ +| +$| {2,}/gu, (spaces) => KEPT_SPACE.repeat(spaces.length))
+}
+
+function fitBytes({ text, bytes }: { text: string; bytes: number }): string {
   if (encoder.encode(text).length <= bytes) return text
   let kept = ''
   for (const character of text) {
@@ -89,15 +46,69 @@ function fitted({ text, bytes }: { text: string; bytes: number }): string {
   return kept
 }
 
-// What Codex takes of a status line: so many nodes, so deep, holding so many bytes of text.
-class Budget {
+/** Renders modkit status {@link UiNode} rows into Codex's bounded status line tree. */
+export class CodexStatusLine {
   #nodes = MAX_NODES
   #bytes = MAX_TEXT_BYTES
 
-  cut(element: LineElement, depth = 0): LineElement | undefined {
+  /** Render status rows into Codex's JSON status line tree, or `null` when empty. */
+  static render(statuses: readonly (readonly UiNode[])[]): LineRow | null {
+    const renderer = new CodexStatusLine()
+    const parts = statuses.flatMap((status) => {
+      const children = renderer.#renderNodes(status)
+      return children.length === 0 ? [] : [{ type: 'row' as const, props: { gap: 0 }, children }]
+    })
+    if (parts.length === 0) return null
+    const kept = renderer.#clip({ type: 'row', props: { gap: 1 }, children: parts })
+    return kept === undefined || typeof kept === 'string' || kept.type !== 'row' ? null : kept
+  }
+
+  #renderNodes(nodes: readonly UiNode[]): LineElement[] {
+    return nodes.flatMap((node) => {
+      const element = this.#renderNode(node)
+      return element === undefined ? [] : [element]
+    })
+  }
+
+  #renderText(node: TextNode): LineElement {
+    const color = node.color ?? TONE_COLORS[node.tone]
+    const props = {
+      ...(color !== undefined && { color }),
+      ...(node.bold && { weight: 'bold' as const }),
+    }
+    const text: LineText = {
+      type: 'text',
+      ...(Object.keys(props).length > 0 && { props }),
+      children: this.#renderNodes(node.children),
+    }
+    if (node.background === undefined) return text
+    return { type: 'row', props: { gap: 0, background: node.background }, children: [text] }
+  }
+
+  #renderNode(node: UiNode): LineElement | undefined {
+    if (typeof node === 'string') return preserveSpaces(node)
+    switch (node.kind) {
+      case 'Text':
+        return this.#renderText(node)
+      case 'Row':
+      case 'Column':
+        return { type: 'row', props: { gap: node.gap }, children: this.#renderNodes(node.children) }
+      // Nothing in Codex's status line can be pressed or opened, so each draws as its text.
+      case 'Button':
+      case 'Link':
+        return { type: 'text', children: this.#renderNodes(node.children) }
+      case 'Img':
+        return preserveSpaces(node.fallback)
+      case 'Markdown':
+        break
+    }
+    return preserveSpaces(node.text)
+  }
+
+  #clip(element: LineElement, depth = 0): LineElement | undefined {
     if (this.#nodes === 0 || depth > MAX_DEPTH) return undefined
     if (typeof element === 'string') {
-      const text = fitted({ text: element, bytes: this.#bytes })
+      const text = fitBytes({ text: element, bytes: this.#bytes })
       if (text === '') return undefined
       this.#nodes -= 1
       this.#bytes -= encoder.encode(text).length
@@ -105,21 +116,9 @@ class Budget {
     }
     this.#nodes -= 1
     const children = element.children.flatMap((child) => {
-      const kept = this.cut(child, depth + 1)
+      const kept = this.#clip(child, depth + 1)
       return kept === undefined ? [] : [kept]
     })
     return { ...element, children }
   }
-}
-
-export function statusLineOf(statuses: readonly (readonly UiNode[])[]): LineRow | null {
-  const parts = statuses.flatMap((status) => {
-    const children = elementsOf(status)
-    if (children.length === 0) return []
-    return [{ type: 'row' as const, props: { gap: 0 }, children }]
-  })
-  if (parts.length === 0) return null
-  const root: LineRow = { type: 'row', props: { gap: 1 }, children: parts }
-  const kept = new Budget().cut(root)
-  return kept === undefined || typeof kept === 'string' || kept.type !== 'row' ? null : kept
 }

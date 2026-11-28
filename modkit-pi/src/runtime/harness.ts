@@ -1,29 +1,33 @@
+import { join } from 'node:path'
+
 import {
   copyToClipboard,
   type ExtensionAPI,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent'
 
+import { NodeHarness } from '@atuin/modkit-target-node/runtime/harness'
 import { modelFor } from '@atuin/modkit-target-node/runtime/models'
-import { projectRootOf, run } from '@atuin/modkit-target-node/runtime/run'
-import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import type {
-  Completion,
-  CompletionRequest,
-  Copied,
-  Failure,
-  HarnessAdapter,
-  Store,
+import { Servers } from '@atuin/modkit-target-node/runtime/servers'
+import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
+import {
+  errorMessage,
+  failureReporter,
+  type Completion,
+  type CompletionRequest,
+  type Copied,
+  type Failure,
+  type HarnessAdapter,
+  type Store,
 } from '@atuin/modkit-target/host'
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
+import { configuredServer } from './mcp'
 
 type Reply = Awaited<
   ReturnType<ReturnType<ExtensionContext['modelRegistry']['streamSimple']>['result']>
 >
 
-function completionOf({
+function parseCompletion({
   reply,
   model,
 }: {
@@ -110,14 +114,20 @@ async function completeWith({
         },
       )
       .result()
-    return completionOf({ reply, model })
+    return parseCompletion({ reply, model })
   } catch (error) {
     const reason = signal?.aborted === true ? 'aborted' : 'api-error'
-    return { isAnswered: false, reason, detail: messageOf(error) }
+    return { isAnswered: false, reason, detail: errorMessage(error) }
   }
 }
 
-export function harnessFor({
+export interface PiSessionResources {
+  readonly harness: HarnessAdapter
+  readonly servers: Servers
+  readonly report: (failure: Failure) => void
+}
+
+function buildPiHarness({
   pi,
   ctx,
   plugin,
@@ -132,31 +142,69 @@ export function harnessFor({
   store: Store
   report: (failure: Failure) => void
 }): HarnessAdapter {
-  const { cwd } = ctx
-  return {
-    session: { id: ctx.sessionManager.getSessionId() },
-    cwd: async () => cwd,
-    // The session's directory is the same for its whole life: pi has no `/cd`.
-    root: async () => projectRootOf(cwd),
-    env: async (name) => process.env[name],
-    run: async (argv, options) => run({ argv, options, cwd }),
-    mcp: async (call) => servers.call(call),
-    complete: async (request) => completeWith({ ctx, request }),
-    copy: async (text) => copyWhereShown({ ctx, text }),
-    notify: (text) => {
+  return NodeHarness.builder({
+    sessionId: ctx.sessionManager.getSessionId(),
+    cwd: ctx.cwd,
+    servers,
+    store,
+    report,
+  })
+    .withComplete(async (request) => completeWith({ ctx, request }))
+    .withCopy(async (text) => copyWhereShown({ ctx, text }))
+    .withNotify((text) => {
       if (!ctx.hasUI) return 'dropped'
       ctx.ui.notify(text, 'info')
       return 'now'
-    },
-    inject: async (text) => {
+    })
+    .withInject(async (text) => {
       pi.sendMessage(
         { customType: plugin, content: text, display: false },
         { deliverAs: 'nextTurn' },
       )
       return 'queued'
+    })
+    .build()
+}
+
+export function createSessionResources({
+  pi,
+  ctx,
+  plugin,
+  dir,
+  state,
+  isStopped,
+}: {
+  pi: Pick<ExtensionAPI, 'sendMessage'>
+  ctx: ExtensionContext
+  plugin: string
+  dir: string
+  state: Tags
+  isStopped: () => boolean
+}): PiSessionResources {
+  const report = failureReporter({
+    plugin,
+    notify: (line) => {
+      if (ctx.hasUI) ctx.ui.notify(line, 'error')
     },
-    now: () => Date.now(),
-    store,
+  })
+  const servers = new Servers({
+    find: async (name) =>
+      configuredServer({ name, cwd: ctx.cwd, isTrusted: ctx.isProjectTrusted() }),
+  })
+  const rawStore = fileStore({
+    dir: join(dir, 'sessions'),
+    session: ctx.sessionManager.getSessionId(),
+    tags: state,
     report,
+  })
+  // A query still fetching when the session stopped would write its stale state over what the
+  // session's next runtime has saved since.
+  const store: Store = {
+    get: (key) => rawStore.get(key),
+    set: (key, stored) => {
+      if (!isStopped()) rawStore.set(key, stored)
+    },
   }
+  const harness = buildPiHarness({ pi, ctx, plugin, servers, store, report })
+  return { harness, servers, report }
 }

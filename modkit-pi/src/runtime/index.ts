@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 
-import { settingsFrom, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
+import { SettingsSchema, type SettingDecl } from '@atuin/modkit-target-node/runtime/settings'
 import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import type { CommandView, Images, Mod, Options } from '@atuin/modkit-target/host'
 
@@ -22,18 +21,11 @@ export interface Served {
   hasPanes: boolean
 }
 
-function readText(path: string): string | undefined {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
 class Extension {
   readonly #pi: ExtensionAPI
   readonly #served: Served
   readonly #dir: string
+  readonly #settings: SettingsSchema
   readonly #commands = new Set<string>()
   readonly #cards: Cards
   #runtime: PiRuntime | undefined = undefined
@@ -42,6 +34,7 @@ class Extension {
     this.#pi = pi
     this.#served = served
     this.#dir = join(agentDir(), 'modkit', served.plugin)
+    this.#settings = SettingsSchema.from(served.settings)
     this.#cards = new Cards({
       tools: served.cards,
       cards: (row) => this.#runtime?.cardsUnder(row) ?? [],
@@ -71,7 +64,7 @@ class Extension {
 
   async #start(ctx: ExtensionContext): Promise<void> {
     this.#stop(ctx)
-    const options = this.#settings(ctx)
+    const options = this.#loadSettings(ctx)
     if (options === undefined) return
     const { mod, images, plugin, state } = this.#served
     const runtime = new PiRuntime({
@@ -99,12 +92,12 @@ class Extension {
     this.#cards.forget()
   }
 
-  #settings(ctx: ExtensionContext): Options | undefined {
-    const { plugin, settings: decls } = this.#served
-    const path = join(this.#dir, 'settings.json')
-    const settings = settingsFrom({ decls, text: readText(path), path })
+  #loadSettings(ctx: ExtensionContext): Options | undefined {
+    const settings = this.#settings.loadFile(join(this.#dir, 'settings.json'))
     if (ctx.hasUI) {
-      for (const problem of settings.problems) ctx.ui.notify(`${plugin}: ${problem}`, 'warning')
+      for (const problem of settings.problems) {
+        ctx.ui.notify(`${this.#served.plugin}: ${problem}`, 'warning')
+      }
     }
     return settings.isOk ? settings.options : undefined
   }
@@ -124,7 +117,7 @@ class Extension {
   }
 }
 
-export function extensionOf(served: Served): (pi: ExtensionAPI) => void {
+export function createPiExtension(served: Served): (pi: ExtensionAPI) => void {
   return (pi) => {
     new Extension({ pi, served }).register()
   }

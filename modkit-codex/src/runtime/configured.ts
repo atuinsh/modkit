@@ -3,19 +3,22 @@ import { promisify } from 'node:util'
 
 import * as v from 'valibot'
 
-import type { StdioServer, Unreachable } from '@atuin/modkit-target-node/runtime/servers'
+import {
+  StringEnvSchema,
+  StringListSchema,
+  type StdioServer,
+  type Unreachable,
+} from '@atuin/modkit-target-node/runtime/servers'
+import { errorMessage } from '@atuin/modkit-target/host'
 
 // oxlint-disable-next-line typescript/strict-void-return -- promisify has its own overload for execFile
 const execFileAsync = promisify(execFile)
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 async function codexDescribes(name: string): Promise<unknown> {
   const described = await execFileAsync('codex', ['mcp', 'get', name, '--json'], {
     encoding: 'utf8',
   }).catch((error: unknown) => {
-    throw new Error(`codex mcp get ${name} failed: ${messageOf(error)}`, { cause: error })
+    throw new Error(`codex mcp get ${name} failed: ${errorMessage(error)}`, { cause: error })
   })
   try {
     const json: unknown = JSON.parse(described.stdout)
@@ -36,23 +39,13 @@ const DescribedSchema = v.object({
   }),
 })
 
-const StringsSchema = v.fallback(v.array(v.string()), [])
-
-const EnvSchema = v.fallback(
-  v.pipe(
-    v.record(v.string(), v.unknown()),
-    v.transform((env) =>
-      Object.fromEntries(
-        Object.entries(env).flatMap(([key, value]) =>
-          typeof value === 'string' ? [[key, value]] : [],
-        ),
-      ),
-    ),
-  ),
-  {},
-)
-
-function stdioServerOf({ name, json }: { name: string; json: unknown }): StdioServer | Unreachable {
+function parseStdioServer({
+  name,
+  json,
+}: {
+  name: string
+  json: unknown
+}): StdioServer | Unreachable {
   const described = v.safeParse(DescribedSchema, json)
   if (!described.success) {
     return { reason: `Codex described ${name} in a way this mod can't read` }
@@ -68,12 +61,12 @@ function stdioServerOf({ name, json }: { name: string; json: unknown }): StdioSe
   if (typeof command !== 'string') return { reason: `Codex described ${name} with no command` }
   return {
     command,
-    args: v.parse(StringsSchema, args),
-    env: v.parse(EnvSchema, env),
+    args: v.parse(StringListSchema, args),
+    env: v.parse(StringEnvSchema, env),
     cwd: typeof cwd === 'string' ? cwd : undefined,
   }
 }
 
 export async function configuredServer(name: string): Promise<StdioServer | Unreachable> {
-  return stdioServerOf({ name, json: await codexDescribes(name) })
+  return parseStdioServer({ name, json: await codexDescribes(name) })
 }

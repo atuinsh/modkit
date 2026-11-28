@@ -1,6 +1,4 @@
-import { isPlainObject } from 'es-toolkit/predicate'
-
-import type { HookedCall, HookedResult } from '@atuin/modkit-target/host'
+import { asRecord, type HookedCall, type HookedResult } from '@atuin/modkit-target/host'
 
 const OPENCODE_SHELL = 'shell'
 const MOD_SHELL = 'Bash'
@@ -24,12 +22,8 @@ export interface OcResult {
   metadata?: unknown
 }
 
-type Json = Readonly<Record<string, unknown>>
-
-const recordOf = (value: unknown): Json => (isPlainObject(value) ? value : {})
-
 export function callOf({ call, cwd }: { call: OcCall; cwd: string }): HookedCall {
-  const input = recordOf(call.input)
+  const input = asRecord(call.input)
   const { command, workdir } = input
   if (call.tool === OPENCODE_SHELL && typeof command === 'string') {
     return { kind: 'shell', id: call.id, command, cwd: typeof workdir === 'string' ? workdir : cwd }
@@ -57,9 +51,9 @@ export function resultOf({
   if (parsed.kind === 'tool') {
     return { ...parsed, output: textOf(result.content), failed: false }
   }
-  const { status, exit } = recordOf(result.metadata)
+  const { status, exit } = asRecord(result.metadata)
   if (status === 'running') return undefined
-  const { output: structured } = recordOf(result.output)
+  const { output: structured } = asRecord(result.output)
   const exitCode = typeof exit === 'number' ? exit : null
   return {
     ...parsed,

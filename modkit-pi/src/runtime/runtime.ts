@@ -1,5 +1,3 @@
-import { join } from 'node:path'
-
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -7,30 +5,27 @@ import type {
   ToolResultEventResult,
 } from '@earendil-works/pi-coding-agent'
 
-import { Servers } from '@atuin/modkit-target-node/runtime/servers'
-import { fileStore, type Tags } from '@atuin/modkit-target-node/runtime/store'
+import { NodeTargetRuntime } from '@atuin/modkit-target-node/runtime/node-runtime'
+import type { Servers } from '@atuin/modkit-target-node/runtime/servers'
+import type { Tags } from '@atuin/modkit-target-node/runtime/store'
 import {
-  failureReporter,
-  ModkitTargetRuntime,
-  resolveVerdict,
+  ModVerdict,
+  type CommandHost,
   type CommandView,
   type Failure,
   type HarnessAdapter,
   type Images,
   type Mod,
   type Options,
-  type PaneOpened,
-  type PaneOpening,
-  type Repeat,
-  type Store,
+  type PaneHost,
   type ToolRow,
   type UiNode,
+  type ViewHost,
 } from '@atuin/modkit-target/host'
 
-import { harnessFor } from './harness'
+import { createSessionResources } from './harness'
 import { callOf, followedBy, resultOf, type Block, type PiCall } from './hooks'
 import { linesOf } from './lines'
-import { configuredServer } from './mcp'
 import { Overlays } from './overlays'
 import { paintOf } from './paint'
 
@@ -48,7 +43,7 @@ export interface Session {
   redrawCards: () => void
 }
 
-export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
+export class PiRuntime extends NodeTargetRuntime<ExtensionContext> {
   readonly #pi: ExtensionAPI
   readonly #plugin: string
   readonly #dir: string
@@ -56,11 +51,39 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
   readonly #registerCommand: (command: CommandView) => void
   readonly #redrawCards: () => void
   readonly #overlays: Overlays
-  readonly #repeats: NodeJS.Timeout[] = []
   #servers: Servers | undefined = undefined
   #report: ((failure: Failure) => void) | undefined = undefined
   #statuses = 0
   #isStopped = false
+
+  protected override readonly panes: PaneHost<ExtensionContext> = {
+    open: (ctx, { id, title, focus }) => {
+      if (ctx.mode !== 'tui') {
+        return { isPlaced: false, reason: 'pi shows panes in its terminal UI' }
+      }
+      this.#overlays.show({ ctx, id: id.toString(), title, body: this.paneBody(id) ?? [], focus })
+      return { isPlaced: true }
+    },
+    close: (_ctx, id) => {
+      this.#overlays.forget(id.toString())
+    },
+    isShown: (_ctx, id) => this.#overlays.has(id.toString()),
+  }
+
+  protected override readonly commands: CommandHost<ExtensionContext> = {
+    register: (_ctx, command) => {
+      this.#registerCommand(command)
+    },
+  }
+
+  protected override readonly view: ViewHost<ExtensionContext> = {
+    redraw: (ctx) => {
+      if (this.#isStopped) return
+      this.#drawStatuses(ctx, this.statuses())
+      this.#overlays.redraw((id) => this.paneBody(id))
+      this.#redrawCards()
+    },
+  }
 
   constructor(session: Session) {
     const { mod, options, images, pi, plugin, dir, state, registerCommand, redrawCards } = session
@@ -90,10 +113,10 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   stop(ctx: ExtensionContext): void {
     this.#isStopped = true
-    for (const repeat of this.#repeats) clearInterval(repeat)
+    this[Symbol.dispose]()
     this.#overlays.stop()
     this.#drawStatuses(ctx, [])
-    this.#servers?.close()
+    this.#servers?.[Symbol.dispose]()
   }
 
   endTurn(): void {
@@ -110,8 +133,8 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
 
   async beforeCall(event: PiCall, ctx: ExtensionContext): Promise<Block | undefined> {
     try {
-      const outcome = await resolveVerdict({
-        verdict: await this.verdictFor(callOf({ event, cwd: ctx.cwd })),
+      const verdict = ModVerdict.from(await this.verdictFor(callOf({ event, cwd: ctx.cwd })))
+      const outcome = await verdict.resolve({
         canAsk: ctx.hasUI,
         confirm: async (ask) => ctx.ui.confirm(`${this.#plugin} asks`, ask),
       })
@@ -142,75 +165,18 @@ export class PiRuntime extends ModkitTargetRuntime<ExtensionContext> {
     return this.answerCommand(ctx, name)
   }
 
-  protected override async adapter(ctx: ExtensionContext): Promise<HarnessAdapter> {
-    const plugin = this.#plugin
-    const report = failureReporter({
-      plugin,
-      notify: (line) => {
-        if (ctx.hasUI) ctx.ui.notify(line, 'error')
-      },
-    })
-    this.#report = report
-    const servers = new Servers({
-      find: async (name) =>
-        configuredServer({ name, cwd: ctx.cwd, isTrusted: ctx.isProjectTrusted() }),
+  protected override adapter(ctx: ExtensionContext): HarnessAdapter {
+    const { harness, servers, report } = createSessionResources({
+      pi: this.#pi,
+      ctx,
+      plugin: this.#plugin,
+      dir: this.#dir,
+      state: this.#state,
+      isStopped: () => this.#isStopped,
     })
     this.#servers = servers
-    const store = fileStore({
-      dir: join(this.#dir, 'sessions'),
-      session: ctx.sessionManager.getSessionId(),
-      tags: this.#state,
-      report,
-    })
-    // A query still fetching when the session stopped would write its stale state over what the
-    // session's next runtime has saved since.
-    const kept: Store = {
-      get: (key) => store.get(key),
-      set: (key, stored) => {
-        if (!this.#isStopped) store.set(key, stored)
-      },
-    }
-    return harnessFor({ pi: this.#pi, ctx, plugin, servers, store: kept, report })
-  }
-
-  protected override async redraw(ctx: ExtensionContext): Promise<unknown> {
-    if (this.#isStopped) return undefined
-    this.#drawStatuses(ctx, this.statuses())
-    this.#overlays.redraw((id) => this.paneBody(id))
-    this.#redrawCards()
-    return undefined
-  }
-
-  protected override async openPane(
-    ctx: ExtensionContext,
-    { id, title, focus }: PaneOpening,
-  ): Promise<PaneOpened> {
-    if (ctx.mode !== 'tui') return { isPlaced: false, reason: 'pi shows panes in its terminal UI' }
-    this.#overlays.show({ ctx, id, title, body: this.paneBody(id) ?? [], focus })
-    return { isPlaced: true }
-  }
-
-  protected override async closePane(_ctx: ExtensionContext, id: string): Promise<unknown> {
-    this.#overlays.forget(id)
-    return undefined
-  }
-
-  protected override async isPaneShown(_ctx: ExtensionContext, id: string): Promise<boolean> {
-    return this.#overlays.has(id)
-  }
-
-  protected override async registerCommand(
-    _ctx: ExtensionContext,
-    command: CommandView,
-  ): Promise<unknown> {
-    this.#registerCommand(command)
-    return undefined
-  }
-
-  protected override repeat(_ctx: ExtensionContext, { everyMs, tick }: Repeat): void {
-    const repeat = setInterval(tick, everyMs)
-    repeat.unref()
-    this.#repeats.push(repeat)
+    this.#report = report
+    return harness
   }
 
   #statusKey(index: number): string {

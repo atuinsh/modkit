@@ -1,21 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { genImport, genObjectFromValues } from 'knitwork'
-import * as v from 'valibot'
 
-import {
-  imagesSource,
-  ModkitTarget,
-  NATIVE,
-  pluginNameOf,
-  type BuildInput,
-  type Built,
-  type Capabilities,
-  type ModInfo,
-} from '@atuin/modkit-target'
-import { bundle, missingToolNotes, settingOf, tagsOf } from '@atuin/modkit-target-node/codegen'
+import { imagesSource, NATIVE, Target, type ModkitTarget } from '@atuin/modkit-target'
+import { bundle, settingDecl, stateTags } from '@atuin/modkit-target-node/codegen'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
 
@@ -32,46 +21,8 @@ const PI_TOOLS: ReadonlySet<string> = new Set([
   'powershell',
 ])
 
-const JSON_INDENT_SPACES = 2
-
-const json = (value: unknown): string => `${JSON.stringify(value, null, JSON_INDENT_SPACES)}\n`
-
-const packageJsonOf = ({ plugin, mod }: { plugin: string; mod: ModInfo }): unknown => ({
-  name: plugin,
-  version: mod.version,
-  description: mod.description,
-  type: 'module',
-  keywords: ['pi-package'],
-  ...(mod.author !== undefined && { author: mod.author.name }),
-  pi: { extensions: ['./extension.js'] },
-})
-
-function notesOf({
-  out,
-  plugin,
-  hasSettings,
-}: {
-  out: string
-  plugin: string
-  hasSettings: boolean
-}): string[] {
-  return [
-    `pi loads ${plugin} once it's installed with: pi install ${out}`,
-    ...(hasSettings
-      ? [`${plugin}'s settings go in ~/.pi/agent/modkit/${plugin}/settings.json`]
-      : []),
-  ]
-}
-
-// No option of a mod's is pi's yet, so its section holds only the gaps it accepts.
-const OptionsSchema: v.GenericSchema<unknown, undefined> = v.pipe(
-  v.strictObject({}),
-  v.transform(() => undefined),
-)
-
-class PiTarget extends ModkitTarget<undefined> {
-  override readonly name = 'pi'
-  override readonly capabilities: Capabilities = {
+export const target: ModkitTarget<undefined> = Target.define('pi')
+  .capabilities({
     status: NATIVE,
     commands: NATIVE,
     panes: NATIVE,
@@ -83,38 +34,43 @@ class PiTarget extends ModkitTarget<undefined> {
       kind: 'lowered',
       why: "pi draws a card's buttons but can't press them, since its transcript rows take no keys",
     },
-  }
-  override readonly options: v.GenericSchema<unknown, undefined> = OptionsSchema
-
-  override async build({ compiled, dir, out }: BuildInput<undefined>): Promise<Built> {
-    const { mod, entry, state, options, tools, images, hooks } = compiled
-    const plugin = pluginNameOf(mod.name)
+  })
+  .knownTools('pi', PI_TOOLS)
+  .build(({ compiled, dir, out, plugin, emit }) => {
+    const { mod, entry, state, options, images, hooks } = compiled
+    const pluginName = plugin.toString()
     const served = {
-      plugin,
-      settings: options.map((option) => settingOf(option)),
-      state: tagsOf(state),
+      plugin: pluginName,
+      settings: options.map((option) => settingDecl(option)),
+      state: stateTags(state),
       cards: hooks.cards,
       hasPanes: hooks.hasPanes,
     }
     const source = [
-      genImport(RUNTIME, ['extensionOf']),
+      genImport(RUNTIME, ['createPiExtension']),
       genImport(entry, 'mod'),
       '',
-      `export default extensionOf({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
+      `export default createPiExtension({ mod, images: ${imagesSource(images)}, ...${genObjectFromValues(served)} })`,
       '',
     ].join('\n')
-    await mkdir(out, { recursive: true })
-    await bundle({ dir, entry: source, file: join(out, 'extension.js'), external: PROVIDED })
-    await writeFile(join(out, 'package.json'), json(packageJsonOf({ plugin, mod })))
+    emit.write(async (dest) =>
+      bundle({ dir, entry: source, file: join(dest, 'extension.js'), external: PROVIDED }),
+    )
+    emit.json('package.json', {
+      name: pluginName,
+      version: mod.version,
+      description: mod.description,
+      type: 'module',
+      keywords: ['pi-package'],
+      ...(mod.author !== undefined && { author: mod.author.name }),
+      pi: { extensions: ['./extension.js'] },
+    })
     return {
-      isOk: true,
-      plugin,
       notes: [
-        ...notesOf({ out, plugin, hasSettings: options.length > 0 }),
-        ...missingToolNotes({ tools, harness: 'pi', has: PI_TOOLS }),
+        `pi loads ${pluginName} once it's installed with: pi install ${out}`,
+        ...(options.length > 0
+          ? [`${pluginName}'s settings go in ~/.pi/agent/modkit/${pluginName}/settings.json`]
+          : []),
       ],
     }
-  }
-}
-
-export const target: ModkitTarget<undefined> = new PiTarget()
+  })
