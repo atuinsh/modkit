@@ -2,7 +2,12 @@ import { fileURLToPath } from 'node:url'
 
 import { genExport, genImport, genString } from 'knitwork'
 
-import { Target, type ArtifactWriter, type ModkitTarget } from '@atuin/modkit-target'
+import {
+  Target,
+  type ArtifactWriter,
+  type ModkitTarget,
+  type SourceEmitter,
+} from '@atuin/modkit-target'
 import { NodeBundler } from '@atuin/modkit-target-node/codegen'
 
 import { OPENCODE_CAPABILITIES, OPENCODE_TOOLS } from '../contract.ts'
@@ -15,7 +20,9 @@ const TUI = fileURLToPath(new URL('../tui/index.tsx', import.meta.url))
 
 const PROVIDED = [/^@opencode\//u, /^@opentui\//u, /^effect(?:\/|$)/u, /^solid-js(?:\/|$)/u]
 
-const source = (lines: readonly string[]): string => [...lines, ''].join('\n')
+const linesEmitter = (lines: readonly string[]): SourceEmitter => ({
+  emitSource: () => [...lines, ''].join('\n'),
+})
 
 function emitTui({
   bundler,
@@ -26,14 +33,18 @@ function emitTui({
   pluginName: string
   emit: Pick<ArtifactWriter, 'copy'>
 }): void {
-  const shared = source([
+  const shared = linesEmitter([
     genImport(CONTRACT, ['OpencodeContract']),
     '',
     `export const PLUGIN = ${genString(pluginName)}`,
     'export const CONTRACT = OpencodeContract.for(PLUGIN)',
   ])
   bundler.bundle({ entry: shared, file: 'mod.js', platform: 'neutral' })
-  bundler.bundle({ entry: source([genExport(DRAW, '*')]), file: 'draw.js', platform: 'neutral' })
+  bundler.bundle({
+    entry: linesEmitter([genExport(DRAW, '*')]),
+    file: 'draw.js',
+    platform: 'neutral',
+  })
   emit.copy('tui.tsx', TUI)
 }
 

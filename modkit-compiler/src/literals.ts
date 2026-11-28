@@ -1,4 +1,4 @@
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import { ModAst } from './entry.ts'
 import { imagesIn } from './images.ts'
 import type { ImageDecl } from './ir.ts'
@@ -35,7 +35,7 @@ export interface Literals {
   tools: ToolNames
   /** The PNGs the mod's `<Img>`s name, sorted by path. */
   images: ImageDecl[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 const TOOL_PARTS = [
@@ -46,7 +46,7 @@ const TOOL_PARTS = [
 
 interface ToolsRead {
   names: string[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 function toolsOf({
@@ -62,7 +62,7 @@ function toolsOf({
       const message = `${part}'s tools are an object literal's written-out keys: a harness hooks a tool by its name`
       return {
         names: [],
-        diagnostics: [ModDiagnostic.at({ code: 'tool-name', message, node: written })],
+        diagnostics: [DiagnosticError.at({ code: 'tool-name', message, node: written })],
       }
     }
     // A card only draws, so it goes under Bash's rows too; the shell parts decide on Bash.
@@ -70,14 +70,14 @@ function toolsOf({
     const message = `${part}.Bash is ${part.replace('Tool', 'Shell')}, which hands it the command`
     return {
       names: [],
-      diagnostics: [ModDiagnostic.at({ code: 'tool-name', message, node: written })],
+      diagnostics: [DiagnosticError.at({ code: 'tool-name', message, node: written })],
     }
   })
 }
 
 const sorted = (names: readonly string[]): string[] => [...new Set(names)].toSorted()
 
-function toolsIn(mod: ModAst): { tools: ToolNames; diagnostics: Diagnostic[] } {
+function toolsIn(mod: ModAst): { tools: ToolNames; diagnostics: DiagnosticError[] } {
   const found = TOOL_PARTS.map(([part, side]) => ({ side, read: toolsOf({ mod, part }) }))
   const namesFor = (side: keyof ToolNames): string[] =>
     sorted(
@@ -89,7 +89,7 @@ function toolsIn(mod: ModAst): { tools: ToolNames; diagnostics: Diagnostic[] } {
   }
 }
 
-function envIn(project: TsProject): { env: string[]; diagnostics: Diagnostic[] } {
+function envIn(project: TsProject): { env: string[]; diagnostics: DiagnosticError[] } {
   const env = envMethod(project)
   if (env === undefined) return { env: [], diagnostics: [] }
   const reads = project.files.flatMap((file) =>
@@ -103,7 +103,7 @@ function envIn(project: TsProject): { env: string[]; diagnostics: Diagnostic[] }
   return {
     env: sorted(names.flatMap(({ name }) => (name === undefined ? [] : [name]))),
     diagnostics: names.flatMap(({ call, name }) =>
-      name === undefined ? [ModDiagnostic.at({ code: 'env-name', message, node: call })] : [],
+      name === undefined ? [DiagnosticError.at({ code: 'env-name', message, node: call })] : [],
     ),
   }
 }

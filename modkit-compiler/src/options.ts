@@ -1,4 +1,4 @@
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import type { ModAst } from './entry.ts'
 import type { OptionDecl } from './ir.ts'
 import type { NotJson } from './not-json.ts'
@@ -9,14 +9,14 @@ import { TypeShape } from './types.ts'
 
 interface Read {
   options: OptionDecl[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 const NONE: Read = { options: [], diagnostics: [] }
 
 const fail = ({ message, node }: { message: string; node: Node }): Read => ({
   options: [],
-  diagnostics: [ModDiagnostic.at({ code: 'option-type', message, node })],
+  diagnostics: [DiagnosticError.at({ code: 'option-type', message, node })],
 })
 
 /** The settings parameter of a mod's setup function, whose props are the mod's settings. */
@@ -57,24 +57,27 @@ class SettingsParameter {
   #declared(fields: readonly Field[]): Read {
     const defaults = this.#defaults()
     const byName = new Map(fields.map((field) => [field.name, field]))
+    const options: OptionDecl[] = []
+    const diagnostics: DiagnosticError[] = []
     // In the order the props are written, which is the order the config menu lists them in.
-    const read = this.#properties().flatMap((property) => {
+    for (const property of this.#properties()) {
       const field = byName.get(property.name)
-      if (field === undefined) return []
-      const initializer = defaults.get(field.name)
+      if (field === undefined) continue
       const setting = new Setting({
         project: this.#project,
         property,
         field,
-        initializer,
+        initializer: defaults.get(field.name),
         fallback: this.#parameter,
       })
-      return [setting.option()]
-    })
-    return {
-      options: read.flatMap((one) => (one.isOk ? [one.option] : [])),
-      diagnostics: read.flatMap((one) => (one.isOk ? [] : [one.diagnostic])),
+      try {
+        options.push(setting.option())
+      } catch (error) {
+        if (error instanceof DiagnosticError) diagnostics.push(error)
+        else throw error
+      }
     }
+    return { options, diagnostics }
   }
 
   // The defaults the parameter's destructuring gives its props, by prop name.

@@ -32,20 +32,21 @@ export { ImageBundle } from './images.ts'
 export { ListedTarget, type Checked } from './listed-target.ts'
 export { ModPackage } from './package.ts'
 export { PluginName } from './plugin-name.ts'
+export type { ArtifactEmitter, SourceEmitter, VirtualModule } from './source.ts'
 export { TargetRef } from './target-ref.ts'
 export { ModkitTarget, type BuildInput, type Built, type CompiledMod } from './target.ts'
-export type {
-  Author,
-  Diagnostic,
-  Field,
-  HookNeeds,
-  ImageDecl,
-  Item,
-  ModInfo,
-  ModpartName,
-  OptionDecl,
-  OptionKind,
-  Shape,
-  StateDecl,
-  StateKind,
+export {
+  DiagnosticError,
+  type Author,
+  type Field,
+  type HookNeeds,
+  type ImageDecl,
+  type Item,
+  type ModInfo,
+  type ModpartName,
+  type OptionDecl,
+  type OptionKind,
+  type Shape,
+  type StateDecl,
+  type StateKind,
 } from '@atuin/modkit-compiler'

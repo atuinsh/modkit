@@ -1,4 +1,4 @@
-import { ModDiagnostic, type Place } from './diagnostics.ts'
+import { DiagnosticError, type Place } from './diagnostics.ts'
 import { ModAst } from './entry.ts'
 import { syntax, type Node } from './program.ts'
 
@@ -35,7 +35,7 @@ function usageOf({ mod, name }: { mod: ModAst; name: ModpartName }): ModpartUsag
   const count = Math.max(0, ...parts.map((part) => countOf(part)))
   return first === undefined || count === 0
     ? undefined
-    : { count, at: ModDiagnostic.placeAt(first) }
+    : { count, at: DiagnosticError.placeAt(first) }
 }
 
 export const modpartsIn = (mod: ModAst): Modparts => ({

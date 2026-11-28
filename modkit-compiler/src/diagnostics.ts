@@ -43,17 +43,11 @@ export type DiagnosticCode =
 
 /** A 1-based location in a source file. */
 export interface Place {
-  file: string
+  readonly file: string
   /** 1-based line number. */
-  line: number
+  readonly line: number
   /** 1-based column number. */
-  column: number
-}
-
-/** A compiler error anchored to a 1-based source location. */
-export interface Diagnostic extends Place {
-  code: DiagnosticCode
-  message: string
+  readonly column: number
 }
 
 function placeOf({ file, position }: { file: SourceFile; position: number }): Place {
@@ -61,12 +55,34 @@ function placeOf({ file, position }: { file: SourceFile; position: number }): Pl
   return { file: file.fileName, line: line + 1, column: character + 1 }
 }
 
-/** Bound wrapper and constructors for compiler {@link Diagnostic} values. */
-export class ModDiagnostic {
-  readonly #value: Diagnostic
+/** A compiler error anchored to a 1-based source location; thrown on single-item failures. */
+export class DiagnosticError extends Error implements Place {
+  override readonly name = 'DiagnosticError'
+  readonly code: DiagnosticCode
+  readonly file: string
+  readonly line: number
+  readonly column: number
 
-  constructor(value: Diagnostic) {
-    this.#value = value
+  constructor({
+    code,
+    message,
+    file,
+    line,
+    column,
+    cause,
+  }: {
+    code: DiagnosticCode
+    message: string
+    file: string
+    line: number
+    column: number
+    cause?: unknown
+  }) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.code = code
+    this.file = file
+    this.line = line
+    this.column = column
   }
 
   /** The 1-based {@link Place} where AST `node` starts. */
@@ -75,7 +91,7 @@ export class ModDiagnostic {
     return placeOf({ file, position: node.getStart(file) })
   }
 
-  /** Build a {@link Diagnostic} anchored at the start of AST `node`. */
+  /** Build a {@link DiagnosticError} anchored at the start of AST `node`. */
   static at({
     code,
     message,
@@ -84,36 +100,60 @@ export class ModDiagnostic {
     code: DiagnosticCode
     message: string
     node: Node
-  }): Diagnostic {
-    return { code, message, ...ModDiagnostic.placeAt(node) }
+  }): DiagnosticError {
+    return new DiagnosticError({ code, message, ...DiagnosticError.placeAt(node) })
   }
 
-  /** Build a {@link Diagnostic} anchored at line 1, column 1 of `file`. */
+  /** Build a {@link DiagnosticError} anchored at line 1, column 1 of `file`. */
   static atFile({
     code,
     message,
     file,
+    cause,
   }: {
     code: DiagnosticCode
     message: string
     file: string
-  }): Diagnostic {
-    return { code, message, file, line: 1, column: 1 }
+    cause?: unknown
+  }): DiagnosticError {
+    return new DiagnosticError({
+      code,
+      message,
+      file,
+      line: 1,
+      column: 1,
+      ...(cause !== undefined && { cause }),
+    })
   }
 
-  /** Convert a TypeScript diagnostic in `file` into a modkit `'type-error'` {@link Diagnostic}. */
-  static fromTypeScript({ error, file }: { error: TsDiagnostic; file: SourceFile }): Diagnostic {
-    return { code: 'type-error', message: error.text, ...placeOf({ file, position: error.pos }) }
+  /** Convert a TypeScript diagnostic in `file` into a modkit `'type-error'` {@link DiagnosticError}. */
+  static fromTypeScript({
+    error,
+    file,
+  }: {
+    error: TsDiagnostic
+    file: SourceFile
+  }): DiagnosticError {
+    return new DiagnosticError({
+      code: 'type-error',
+      message: error.text,
+      ...placeOf({ file, position: error.pos }),
+    })
   }
 
-  /** Format a {@link Diagnostic} as `<file>:<line>:<column>: <code>: <message>`. */
-  static format(diagnostic: Diagnostic): string {
-    return new ModDiagnostic(diagnostic).format()
+  /** Return a copy of this diagnostic with `file` replaced (for relative display paths). */
+  withFile(file: string): DiagnosticError {
+    return new DiagnosticError({
+      code: this.code,
+      message: this.message,
+      file,
+      line: this.line,
+      column: this.column,
+    })
   }
 
   /** Format this diagnostic as `<file>:<line>:<column>: <code>: <message>`. */
   format(): string {
-    const { file, line, column, code, message } = this.#value
-    return `${file}:${line}:${column}: ${code}: ${message}`
+    return `${this.file}:${this.line}:${this.column}: ${this.code}: ${this.message}`
   }
 }

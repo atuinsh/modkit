@@ -9,7 +9,9 @@ import {
   type ArtifactWriter,
   type ImageDecl,
   type OptionDecl,
+  type SourceEmitter,
   type StateDecl,
+  type VirtualModule,
 } from '@atuin/modkit-target'
 
 import type { SettingDecl } from '../runtime/settings.ts'
@@ -86,19 +88,27 @@ export class NodeBundler {
     }
   }
 
-  /** Bundle a virtual entry source into `file` relative to the target's output directory. */
+  /** Bundle a virtual entry {@link SourceEmitter} (plus optional {@link VirtualModule}s) into `file`. */
   bundle({
     entry,
+    modules = [],
     file,
     platform = 'node',
     external,
   }: {
-    entry: string
+    entry: string | SourceEmitter
+    modules?: readonly VirtualModule[]
     file: string
     platform?: 'node' | 'neutral'
     external?: ExternalOption
   }): void {
     const dir = this.#dir
+    const entryEmitter: SourceEmitter =
+      typeof entry === 'string' ? { emitSource: () => entry } : entry
+    const byId = new Map<string, SourceEmitter>([
+      [ENTRY, entryEmitter],
+      ...modules.map((mod): readonly [string, SourceEmitter] => [mod.id, mod]),
+    ])
     this.#emit.write(async (out) => {
       await build({
         input: ENTRY,
@@ -108,8 +118,8 @@ export class NodeBundler {
         plugins: [
           {
             name: 'modkit-entry',
-            resolveId: (id) => (id === ENTRY ? id : null),
-            load: (id) => (id === ENTRY ? entry : null),
+            resolveId: (id) => (byId.has(id) ? id : null),
+            load: (id) => byId.get(id)?.emitSource() ?? null,
           },
         ],
         transform: { jsx: { runtime: 'automatic', importSource: '@atuin/modkit' } },
@@ -137,15 +147,19 @@ export class NodeBundler {
   emitEntry<Fn>(options: RuntimeEntryOptions<Fn>): void {
     const { file, runtimeUrl, exportName, mode, mod, images, payload, external } = options
     const runtimePath = fileURLToPath(runtimeUrl)
-    const call = `${exportName}({ mod, images: ${new ImageBundle(images).toSource()}, ...${genObjectFromValues(payload)} })`
-    const invocation = mode === 'top-level-await' ? `await ${call}` : `export default ${call}`
-    const entry = [
-      genImport(runtimePath, [exportName]),
-      genImport(mod, 'mod'),
-      '',
-      invocation,
-      '',
-    ].join('\n')
+    const entry: SourceEmitter = {
+      emitSource: () => {
+        const call = `${exportName}({ mod, images: ${new ImageBundle(images).emitSource()}, ...${genObjectFromValues(payload)} })`
+        const invocation = mode === 'top-level-await' ? `await ${call}` : `export default ${call}`
+        return [
+          genImport(runtimePath, [exportName]),
+          genImport(mod, 'mod'),
+          '',
+          invocation,
+          '',
+        ].join('\n')
+      },
+    }
     this.bundle({ file, entry, ...(external !== undefined && { external }) })
   }
 }

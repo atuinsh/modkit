@@ -1,4 +1,10 @@
-import type { ArtifactWriter, HookNeeds, ModInfo, PluginName } from '@atuin/modkit-target'
+import type {
+  ArtifactEmitter,
+  ArtifactWriter,
+  HookNeeds,
+  ModInfo,
+  PluginName,
+} from '@atuin/modkit-target'
 
 import { CodexHookEvent, HOOK_TOOL, type HookEventName } from '../protocol.ts'
 
@@ -96,7 +102,7 @@ function buildHooksJson({
 }
 
 /** Typed Codex plugin manifests (`.codex-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`). */
-export class CodexPluginManifest {
+export class CodexPluginManifest implements ArtifactEmitter {
   readonly #plugin: PluginJson
   readonly #mcp: McpJson
   readonly #hooks: HooksJson

@@ -3,11 +3,12 @@ import { dirname, join } from 'node:path'
 
 import type * as v from 'valibot'
 
-import type { Diagnostic } from '@atuin/modkit-compiler'
+import type { DiagnosticError } from '@atuin/modkit-compiler'
 
 import type { Capabilities } from './host/capabilities.ts'
 import type { HarnessTools } from './host/tools.ts'
 import { PluginName } from './plugin-name.ts'
+import type { SourceEmitter } from './source.ts'
 import { ModkitTarget, type BuildInput, type Built } from './target.ts'
 
 const JSON_INDENT_SPACES = 2
@@ -19,7 +20,7 @@ export interface ArtifactWriter {
   /** Emit a formatted JSON file relative to `out`. */
   json: (path: string, value: unknown) => void
   /** Emit a UTF-8 text file relative to `out`. */
-  text: (path: string, content: string) => void
+  text: (path: string, content: string | SourceEmitter) => void
   /** Copy a file from `from` to `path` relative to `out`. */
   copy: (path: string, from: string) => void
   /** Queue an async writer (such as a bundler) targeting `out`. */
@@ -37,7 +38,7 @@ export interface TargetBuildContext<Options> extends BuildInput<Options> {
 /** Outcome returned by a {@link TargetBuilder.build} callback. */
 export type TargetBuilt =
   | { readonly isOk?: true; readonly notes?: readonly string[] }
-  | { readonly isOk: false; readonly diagnostics: readonly Diagnostic[] }
+  | { readonly isOk: false; readonly diagnostics: readonly DiagnosticError[] }
   | undefined
 
 export interface TargetConfig<Options> {
@@ -99,7 +100,11 @@ export class DefinedTarget<Options> extends ModkitTarget<Options> {
         artifacts.push({ kind: 'text', path, content: jsonText(value) })
       },
       text: (path, content) => {
-        artifacts.push({ kind: 'text', path, content })
+        artifacts.push({
+          kind: 'text',
+          path,
+          content: typeof content === 'string' ? content : content.emitSource(),
+        })
       },
       copy: (path, from) => {
         artifacts.push({ kind: 'copy', path, from })

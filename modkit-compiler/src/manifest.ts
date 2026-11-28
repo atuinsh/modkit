@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import slugify from '@sindresorhus/slugify'
 import * as v from 'valibot'
 
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import type { Author, ModInfo } from './ir.ts'
 
 // Maximum plugin name length enforced by Claude Code and kept consistent across targets.
@@ -70,48 +70,49 @@ export class ModManifest {
     return slugify(bare, { decamelize: false }).slice(0, NAME_LENGTH)
   }
 
-  /** Read this directory's `package.json`, or return the `'manifest'` diagnostic saying why it isn't one. */
-  readJson(): { isOk: true; manifest: unknown } | { isOk: false; diagnostic: Diagnostic } {
-    const path = join(this.#dir, 'package.json')
-    if (!existsSync(path)) {
-      const message = 'a mod is a package, and its folder has no package.json'
-      return {
-        isOk: false,
-        diagnostic: ModDiagnostic.atFile({ code: 'manifest', message, file: path }),
-      }
+  /** Read this directory's `package.json`, throwing a `'manifest'` {@link DiagnosticError} if missing or invalid JSON. */
+  readJson(): unknown {
+    const file = join(this.#dir, 'package.json')
+    if (!existsSync(file)) {
+      throw DiagnosticError.atFile({
+        code: 'manifest',
+        message: 'a mod is a package, and its folder has no package.json',
+        file,
+      })
     }
     try {
-      return { isOk: true, manifest: JSON.parse(readFileSync(path, 'utf8')) }
+      return JSON.parse(readFileSync(file, 'utf8'))
     } catch (error) {
       const message = `package.json isn't JSON: ${Error.isError(error) ? error.message : String(error)}`
-      return {
-        isOk: false,
-        diagnostic: ModDiagnostic.atFile({ code: 'manifest', message, file: path }),
-      }
+      throw DiagnosticError.atFile({ code: 'manifest', message, file, cause: error })
     }
   }
 
-  /** Read and validate `package.json`, returning {@link ModInfo} or a `'manifest'` diagnostic. */
-  readInfo(): ModInfo | Diagnostic {
+  /** Read and validate `package.json`, throwing a `'manifest'` {@link DiagnosticError} on invalid metadata. */
+  readInfo(): ModInfo {
     const file = join(this.#dir, 'package.json')
-    const read = this.readJson()
-    if (!read.isOk) return read.diagnostic
-    const parsed = v.safeParse(ManifestSchema, read.manifest)
+    const parsed = v.safeParse(ManifestSchema, this.readJson())
     if (!parsed.success) {
-      const message =
-        "a mod's package.json gives its name, version and description, which every harness shows"
-      return ModDiagnostic.atFile({ code: 'manifest', message, file })
+      throw DiagnosticError.atFile({
+        code: 'manifest',
+        message:
+          "a mod's package.json gives its name, version and description, which every harness shows",
+        file,
+      })
     }
     const { name, version, description, author } = parsed.output
     const by = ModManifest.parseAuthor(author)
     return { name, version, description, ...(by !== undefined && { author: by }) }
   }
 
-  /** Resolve `tsconfig.json` in this directory, or return a `'project'` diagnostic if absent. */
-  resolveTsconfig(): string | Diagnostic {
+  /** Resolve `tsconfig.json` in this directory, throwing a `'project'` {@link DiagnosticError} if absent. */
+  resolveTsconfig(): string {
     const file = resolve(this.#dir, 'tsconfig.json')
     if (existsSync(file)) return file
-    const message = "a mod's project is configured by tsconfig.json, beside its package.json"
-    return ModDiagnostic.atFile({ code: 'project', message, file })
+    throw DiagnosticError.atFile({
+      code: 'project',
+      message: "a mod's project is configured by tsconfig.json, beside its package.json",
+      file,
+    })
   }
 }

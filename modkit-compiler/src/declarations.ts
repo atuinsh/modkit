@@ -1,6 +1,6 @@
 import { relative } from 'node:path'
 
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import type { StateDecl, StateKind } from './ir.ts'
 import { ModkitSymbols } from './modkit.ts'
 import {
@@ -23,10 +23,6 @@ interface Declared extends StateDecl {
   call: syntax.CallExpression
 }
 
-type Found =
-  | { isDeclared: true; declared: Declared }
-  | { isDeclared: false; diagnostic: Diagnostic }
-
 /** A `state()` or `query()` call in the mod, which declares one value the mod keeps. */
 class StateCall {
   readonly #project: TsProject
@@ -47,38 +43,35 @@ class StateCall {
     this.#kind = kind
   }
 
-  /** The declaration the call makes, or the diagnostic saying why it makes none. */
-  declared(): Found {
+  /** The declaration the call makes; throws a {@link DiagnosticError} if invalid. */
+  declared(): Declared {
     const kind = this.#kind
     const id = this.#id()
     if (id === undefined) {
-      return this.#fail(
+      throw this.#error(
         'state-id',
         `${kind}() takes an object literal whose id is a string literal: its value is stored under it`,
       )
     }
     const held = this.#held()
     if (held === undefined) {
-      return this.#fail('state-not-json', `TypeScript gives ${id} no value type`)
+      throw this.#error('state-not-json', `TypeScript gives ${id} no value type`)
     }
     const shaped = TypeShape.in(this.#project).of(held)
     if (!shaped.isJson) {
       const where = shaped.notJson.path === '' ? 'as its value' : `at ${shaped.notJson.path}`
-      return this.#fail(
+      throw this.#error(
         'state-not-json',
         `${id} can't hold ${shaped.notJson.found} ${where}: a mod's state is JSON`,
       )
     }
     const jsonShape = JsonShape.of(shaped.shape)
     return {
-      isDeclared: true,
-      declared: {
-        id,
-        kind,
-        shape: jsonShape.canonical(),
-        tag: jsonShape.tag(),
-        call: this.#call,
-      },
+      id,
+      kind,
+      shape: jsonShape.canonical(),
+      tag: jsonShape.tag(),
+      call: this.#call,
     }
   }
 
@@ -108,8 +101,8 @@ class StateCall {
       : undefined
   }
 
-  #fail(code: Diagnostic['code'], message: string): Found {
-    return { isDeclared: false, diagnostic: ModDiagnostic.at({ code, message, node: this.#call }) }
+  #error(code: DiagnosticError['code'], message: string): DiagnosticError {
+    return DiagnosticError.at({ code, message, node: this.#call })
   }
 }
 
@@ -119,7 +112,7 @@ function duplicatesIn({
 }: {
   project: TsProject
   declared: readonly Declared[]
-}): Diagnostic[] {
+}): DiagnosticError[] {
   const first = new Map<string, Declared>()
   return declared.flatMap((one) => {
     const earlier = first.get(one.id)
@@ -131,28 +124,49 @@ function duplicatesIn({
     const { line } = file.getLineAndCharacterOfPosition(earlier.call.getStart(file))
     const where = `${relative(project.dir, file.fileName)}:${line + 1}`
     const message = `${one.id} is also the id declared at ${where}; give one another`
-    return [ModDiagnostic.at({ code: 'duplicate-state', message, node: one.call })]
+    return [DiagnosticError.at({ code: 'duplicate-state', message, node: one.call })]
   })
+}
+
+function collectCall({
+  project,
+  call,
+  kind,
+  declared,
+  problems,
+}: {
+  project: TsProject
+  call: syntax.CallExpression
+  kind: StateKind
+  declared: Declared[]
+  problems: DiagnosticError[]
+}): void {
+  try {
+    declared.push(new StateCall({ project, call, kind }).declared())
+  } catch (error) {
+    if (error instanceof DiagnosticError) problems.push(error)
+    else throw error
+  }
 }
 
 export function declarationsIn(project: TsProject): {
   state: StateDecl[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 } {
   const kinds = new Map(
     new ModkitSymbols(project)
       .exports()
       .flatMap((symbol) => (isKind(symbol.name) ? [[symbol.id, symbol.name] as const] : [])),
   )
-  const found = project.files.flatMap((file) =>
-    ModkitSymbols.callsIn(file).flatMap((call): Found[] => {
+  const declared: Declared[] = []
+  const problems: DiagnosticError[] = []
+  for (const file of project.files) {
+    for (const call of ModkitSymbols.callsIn(file)) {
       const symbol = project.resolveSymbol(call.expression)
       const kind = symbol === undefined ? undefined : kinds.get(symbol.id)
-      return kind === undefined ? [] : [new StateCall({ project, call, kind }).declared()]
-    }),
-  )
-  const declared = found.flatMap((one) => (one.isDeclared ? [one.declared] : []))
-  const problems = found.flatMap((one) => (one.isDeclared ? [] : [one.diagnostic]))
+      if (kind !== undefined) collectCall({ project, call, kind, declared, problems })
+    }
+  }
   return {
     state: declared.map(({ id, kind, tag, shape }) => ({ id, kind, tag, shape })),
     diagnostics: [...problems, ...duplicatesIn({ project, declared })],

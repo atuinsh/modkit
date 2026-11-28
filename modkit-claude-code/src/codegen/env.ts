@@ -10,8 +10,11 @@
 
 import { genString } from 'knitwork'
 
+import type { VirtualModule } from '@atuin/modkit-target'
+
 /** Generator for the virtual `modkit-claude:env` module exporting `readEnv($, name)`. */
-export class ClaudeEnvModule {
+export class ClaudeEnvModule implements VirtualModule {
+  readonly id = 'modkit-claude:env'
   readonly #names: readonly string[]
 
   constructor(names: readonly string[]) {
@@ -19,7 +22,7 @@ export class ClaudeEnvModule {
   }
 
   /** Emit the virtual module source declaring literal `$.env.get(...)` branches. */
-  source(): string {
+  emitSource(): string {
     return [
       'export function readEnv($, name) {',
       '  switch (name) {',

@@ -20,11 +20,11 @@ import { resolve as resolveImport } from 'import-meta-resolve'
 import * as v from 'valibot'
 
 import {
+  DiagnosticError,
   ModCompiler,
   ModManifest,
   MODPARTS,
   type Compiled,
-  type Diagnostic,
   type DiagnosticCode,
   type ModpartName,
 } from '@atuin/modkit-compiler'
@@ -34,7 +34,7 @@ import { ListedTarget } from './listed-target.ts'
 import { TargetRef } from './target-ref.ts'
 import { ModkitTarget } from './target.ts'
 
-export type Read<T> = { isOk: true; value: T } | { isOk: false; diagnostics: Diagnostic[] }
+export type Read<T> = { isOk: true; value: T } | { isOk: false; diagnostics: DiagnosticError[] }
 
 /** One target a mod lists: its ref, the gaps the mod accepts there, and the rest of its section. */
 interface Listing {
@@ -128,14 +128,14 @@ export class ModPackage {
     const listed = this.#listed()
     if (!listed.isOk) return listed
     const all = await Promise.all(listed.value.map(async (one) => this.#loaded(one)))
-    const diagnostics: Diagnostic[] = all.flatMap((one) => (one.isOk ? [] : one.diagnostics))
+    const diagnostics: DiagnosticError[] = all.flatMap((one) => (one.isOk ? [] : one.diagnostics))
     if (diagnostics.length > 0) return { isOk: false, diagnostics }
     return { isOk: true, value: all.flatMap((one) => (one.isOk ? [one.value] : [])) }
   }
 
   /** A diagnostic about the package's package.json, whose JSON has no positions to anchor it to. */
-  error(code: DiagnosticCode, message: string): Diagnostic {
-    return { code, message, file: join(this.#dir, 'package.json'), line: 1, column: 1 }
+  error(code: DiagnosticCode, message: string): DiagnosticError {
+    return DiagnosticError.atFile({ code, message, file: join(this.#dir, 'package.json') })
   }
 
   #failed(code: DiagnosticCode, message: string): Read<never> {
@@ -144,12 +144,16 @@ export class ModPackage {
 
   // The `modkit` field of package.json, which a mod without one is told to add.
   #field(): Read<unknown> {
-    const manifest = new ModManifest(this.#dir).readJson()
-    if (!manifest.isOk) return { isOk: false, diagnostics: [manifest.diagnostic] }
-    const field = v.safeParse(ManifestSchema, manifest.manifest)
-    const modkit = field.success ? field.output.modkit : undefined
-    if (modkit !== undefined) return { isOk: true, value: modkit }
-    return this.#failed('targets', MISSING)
+    try {
+      const manifest = new ModManifest(this.#dir).readJson()
+      const field = v.safeParse(ManifestSchema, manifest)
+      const modkit = field.success ? field.output.modkit : undefined
+      if (modkit !== undefined) return { isOk: true, value: modkit }
+      return this.#failed('targets', MISSING)
+    } catch (error) {
+      if (error instanceof DiagnosticError) return { isOk: false, diagnostics: [error] }
+      throw error
+    }
   }
 
   #listed(): Read<Listing[]> {
@@ -180,7 +184,10 @@ export class ModPackage {
   }
 
   // Sections of the `modkit` field for targets it does not list.
-  #strays(targets: readonly string[], sections: Readonly<Record<string, unknown>>): Diagnostic[] {
+  #strays(
+    targets: readonly string[],
+    sections: Readonly<Record<string, unknown>>,
+  ): DiagnosticError[] {
     return Object.keys(sections)
       .filter((key) => !targets.includes(key))
       .map((key) =>

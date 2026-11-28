@@ -21,7 +21,7 @@ import { defineCommand, runMain } from 'citty'
 import { uniqBy } from 'es-toolkit/array'
 import { debounce } from 'es-toolkit/function'
 
-import { ModDiagnostic, type Diagnostic } from '@atuin/modkit-compiler'
+import type { DiagnosticError } from '@atuin/modkit-compiler'
 import {
   errorMessage,
   ModPackage,
@@ -37,8 +37,8 @@ function shown(path: string): string {
   return near === '' ? '.' : near
 }
 
-function failed(diagnostics: readonly Diagnostic[]): false {
-  const lines = diagnostics.map((one) => ModDiagnostic.format({ ...one, file: shown(one.file) }))
+function failed(diagnostics: readonly DiagnosticError[]): false {
+  const lines = diagnostics.map((one) => one.withFile(shown(one.file)).format())
   console.error(lines.join('\n'))
   return false
 }
@@ -81,7 +81,7 @@ class Build {
         ...(compiled.isOk ? [] : compiled.diagnostics),
         ...(targets.isOk ? [] : targets.diagnostics),
       ]
-      return failed(uniqBy(all, (one) => ModDiagnostic.format(one)))
+      return failed(uniqBy(all, (one) => one.format()))
     }
     const checks = targets.value.map((target) => ({ target, checked: target.check(compiled) }))
     const diagnostics = checks.flatMap(({ checked }) => checked.diagnostics)

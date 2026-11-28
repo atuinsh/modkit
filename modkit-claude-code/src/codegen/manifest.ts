@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { ModInfo, OptionDecl } from '@atuin/modkit-target'
+import type { ArtifactEmitter, ArtifactWriter, ModInfo, OptionDecl } from '@atuin/modkit-target'
 
 interface UserConfigField {
   type: 'string' | 'number' | 'boolean'
@@ -39,8 +39,8 @@ export interface ManifestJson {
   userConfig?: Readonly<Record<string, UserConfigField>>
 }
 
-/** Builder for Claude Code's `.claude-plugin/plugin.json` manifest. */
-export class ClaudeManifest {
+/** Builder for Claude Code's `.claude-plugin/plugin.json` and `hooks/hooks.json` manifests. */
+export class ClaudeManifest implements ArtifactEmitter {
   readonly #plugin: string
   readonly #mod: ModInfo
   readonly #options: readonly OptionDecl[]
@@ -78,5 +78,10 @@ export class ClaudeManifest {
         userConfig: Object.fromEntries(options.map((option) => [option.name, fieldOf(option)])),
       }),
     }
+  }
+
+  emitTo(emit: ArtifactWriter): void {
+    emit.json('.claude-plugin/plugin.json', this.toJson())
+    emit.json('hooks/hooks.json', { modules: ['./register.js'] })
   }
 }

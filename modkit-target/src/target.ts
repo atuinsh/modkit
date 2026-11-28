@@ -1,6 +1,6 @@
 import type * as v from 'valibot'
 
-import type { Compiled, Diagnostic } from '@atuin/modkit-compiler'
+import type { Compiled, DiagnosticError } from '@atuin/modkit-compiler'
 
 import type { Capabilities } from './host/capabilities.ts'
 
@@ -26,7 +26,7 @@ export type Built =
       /** Lines printed under the build, such as how to load the package. */
       notes: readonly string[]
     }
-  | { isOk: false; diagnostics: readonly Diagnostic[] }
+  | { isOk: false; diagnostics: readonly DiagnosticError[] }
 
 /**
  * A harness target: the name a mod picks it by, the modparts it provides, and how it builds a mod.

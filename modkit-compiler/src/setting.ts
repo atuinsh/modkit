@@ -1,6 +1,6 @@
 import { splitByCase, upperFirst } from 'scule'
 
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import type { OptionDecl, OptionKind } from './ir.ts'
 import {
   isNumberLiteralType,
@@ -110,55 +110,39 @@ export class Setting {
     return `${name} can't be a setting${holds === undefined ? '' : `, as it holds ${holds}`}: a setting holds ${SETTING_KINDS}`
   }
 
-  /** The option the prop declares, or the diagnostic saying why it can't be one. */
-  option(): { isOk: true; option: OptionDecl } | { isOk: false; diagnostic: Diagnostic } {
+  /** The option the prop declares; throws a {@link DiagnosticError} if it cannot be a setting. */
+  option(): OptionDecl {
     const { name } = this.#field
     const kind = kindOf(this.#field.shape)
     if (kind === undefined) {
-      return {
-        isOk: false,
-        diagnostic: ModDiagnostic.at({
-          code: 'option-type',
-          message: Setting.cantBe({ name }),
-          node: this.#where(),
-        }),
-      }
+      throw DiagnosticError.at({
+        code: 'option-type',
+        message: Setting.cantBe({ name }),
+        node: this.#where(),
+      })
     }
     const description = this.#description()
     if (description === '') {
       const message = `${name} has no doc comment, which harnesses show as the setting's description`
-      return {
-        isOk: false,
-        diagnostic: ModDiagnostic.at({
-          code: 'option-no-description',
-          message,
-          node: this.#where(),
-        }),
-      }
+      throw DiagnosticError.at({ code: 'option-no-description', message, node: this.#where() })
     }
     const held = this.#defaulted(kind)
     if (held === undefined) {
       const message = `${name}'s default is written into the built manifest, so it's a literal or a const holding one`
-      return {
-        isOk: false,
-        diagnostic: ModDiagnostic.at({
-          code: 'option-default',
-          message,
-          node: this.#initializer ?? this.#where(),
-        }),
-      }
+      throw DiagnosticError.at({
+        code: 'option-default',
+        message,
+        node: this.#initializer ?? this.#where(),
+      })
     }
     const { title, isSensitive } = this.#tags()
     return {
-      isOk: true,
-      option: {
-        ...held,
-        name,
-        title: title ?? titleOf(name),
-        description,
-        isRequired: !this.#field.optional && this.#initializer === undefined,
-        isSensitive,
-      },
+      ...held,
+      name,
+      title: title ?? titleOf(name),
+      description,
+      isRequired: !this.#field.optional && this.#initializer === undefined,
+      isSensitive,
     }
   }
 

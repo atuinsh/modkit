@@ -1,16 +1,16 @@
-import { MODPARTS, type Diagnostic, type ModpartName } from '@atuin/modkit-compiler'
+import { DiagnosticError, MODPARTS, type ModpartName } from '@atuin/modkit-compiler'
 
 import { Gap } from './gap.ts'
 import type { ModPackage } from './package.ts'
 import type { Built, CompiledMod, ModkitTarget } from './target.ts'
 
 /** What checking one modpart found: a gap the mod accepts, a gap it does not, or nothing. */
-type Found = { isGap: true; gap: Gap } | { isGap: false; diagnostic: Diagnostic } | undefined
+type Found = { isGap: true; gap: Gap } | { isGap: false; diagnostic: DiagnosticError } | undefined
 
 /** What checking a mod against a target found: the gaps it accepts, and why it can't be built. */
 export interface Checked {
   gaps: Gap[]
-  diagnostics: Diagnostic[]
+  diagnostics: DiagnosticError[]
 }
 
 /**
@@ -87,6 +87,9 @@ export class ListedTarget {
     const gap = new Gap({ modpart, support })
     if (isAccepted) return { isGap: true, gap }
     const message = `${name} ${gap.toString()}; to build for it anyway, add "${modpart}" to modkit.${name}.gaps in package.json`
-    return { isGap: false, diagnostic: { code: 'target-gap', message, ...usage.at } }
+    return {
+      isGap: false,
+      diagnostic: new DiagnosticError({ code: 'target-gap', message, ...usage.at }),
+    }
   }
 }

@@ -1,5 +1,5 @@
 export { ModCompiler } from './compile.ts'
-export { ModDiagnostic, type Diagnostic, type DiagnosticCode, type Place } from './diagnostics.ts'
+export { DiagnosticError, type DiagnosticCode, type Place } from './diagnostics.ts'
 export type {
   Author,
   Compiled,

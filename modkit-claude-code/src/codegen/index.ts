@@ -19,37 +19,39 @@ import { fileURLToPath } from 'node:url'
 
 import { build } from 'rolldown'
 
-import { Target, type ModkitTarget } from '@atuin/modkit-target'
+import { Target, type ModkitTarget, type VirtualModule } from '@atuin/modkit-target'
 
 import { CLAUDE_CODE_CAPABILITIES } from '../spec.ts'
+import { StateContract } from './contract.ts'
+import { ClaudeEntryModule } from './entry.ts'
 import { ClaudeEnvModule } from './env.ts'
 import { ClaudeManifest } from './manifest.ts'
 import { StateModule } from './state.ts'
 
 const RUNTIME = fileURLToPath(new URL('../runtime/index.ts', import.meta.url))
-const ENTRY = '\0modkit-claude-entry'
-const STATE = 'modkit-claude:state'
-const ENV = 'modkit-claude:env'
 
 async function bundle({
   dir,
   out,
+  entry,
   modules,
 }: {
   dir: string
   out: string
-  modules: ReadonlyMap<string, string>
+  entry: VirtualModule
+  modules: readonly VirtualModule[]
 }): Promise<void> {
+  const byId = new Map(modules.map((mod) => [mod.id, mod]))
   await build({
-    input: ENTRY,
+    input: entry.id,
     cwd: dir,
     platform: 'neutral',
     external: ['claude-code'],
     plugins: [
       {
         name: 'modkit-claude-entry',
-        resolveId: (id) => (modules.has(id) ? id : null),
-        load: (id) => modules.get(id) ?? null,
+        resolveId: (id) => (byId.has(id) ? id : null),
+        load: (id) => byId.get(id)?.emitSource() ?? null,
       },
     ],
     transform: { jsx: { runtime: 'automatic', importSource: '@atuin/modkit' } },
@@ -72,23 +74,14 @@ export const target: ModkitTarget<undefined> = Target.define('claude-code')
   .build(({ compiled, dir, out, plugin, emit }) => {
     const { mod, entry, state, options, env, tools, images } = compiled
     const pluginName = plugin.toString()
-    const stateModule = new StateModule({ plugin: pluginName, state })
-    emit.write(async (dest) =>
-      bundle({
-        dir,
-        out: dest,
-        modules: new Map([
-          [ENTRY, StateModule.entrySource({ mod: entry, runtime: RUNTIME, tools, images })],
-          [STATE, stateModule.source()],
-          [ENV, new ClaudeEnvModule(env).source()],
-        ]),
-      }),
-    )
-    emit.json(
-      '.claude-plugin/plugin.json',
-      new ClaudeManifest({ plugin: pluginName, mod, options }).toJson(),
-    )
-    emit.json('hooks/hooks.json', { modules: ['./register.js'] })
-    emit.text('types/index.d.ts', stateModule.contract())
+    const entryModule = new ClaudeEntryModule({ mod: entry, runtime: RUNTIME, tools, images })
+    const modules: readonly VirtualModule[] = [
+      entryModule,
+      new StateModule({ plugin: pluginName, state }),
+      new ClaudeEnvModule(env),
+    ]
+    emit.write(async (dest) => bundle({ dir, out: dest, entry: entryModule, modules }))
+    new ClaudeManifest({ plugin: pluginName, mod, options }).emitTo(emit)
+    new StateContract({ plugin: pluginName, state }).emitTo(emit)
     return { notes: [`load it with claude --plugin-dir ${out}`] }
   })

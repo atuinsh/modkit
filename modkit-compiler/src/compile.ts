@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 
 import { declarationsIn } from './declarations.ts'
-import { ModDiagnostic, type Diagnostic } from './diagnostics.ts'
+import { DiagnosticError } from './diagnostics.ts'
 import { ModAst } from './entry.ts'
 import { hostImportsIn } from './imports.ts'
 import type { Compiled, HookNeeds, ModInfo, StateDecl } from './ir.ts'
@@ -9,41 +9,32 @@ import { literalsIn, type Literals } from './literals.ts'
 import { ModManifest } from './manifest.ts'
 import { modpartsIn, type Modparts } from './modparts.ts'
 import { optionsIn } from './options.ts'
-import { TsProject, type SourceFile } from './program.ts'
+import { TsProject } from './program.ts'
 
 // TypeScript's own errors, which stop the build before modkit reads an ill-typed program.
-function typeErrorsIn(project: TsProject): Diagnostic[] {
-  const broken = project
-    .projectErrors()
-    .map(({ fileName, text }) =>
-      ModDiagnostic.atFile({ code: 'project', message: text, file: fileName ?? project.tsconfig }),
-    )
+function typeErrorsIn(project: TsProject): DiagnosticError[] {
+  const broken = project.projectErrors().map(({ fileName, text }) =>
+    DiagnosticError.atFile({
+      code: 'project',
+      message: text,
+      file: fileName ?? project.tsconfig,
+    }),
+  )
   if (broken.length > 0) return broken
   return project.files.flatMap((file) =>
-    project.fileErrors(file).map((error) => ModDiagnostic.fromTypeScript({ error, file })),
+    project.fileErrors(file).map((error) => DiagnosticError.fromTypeScript({ error, file })),
   )
 }
 
-const isDiagnostic = (value: object): value is Diagnostic => 'code' in value
-
-// The manifest, TypeScript or a missing entry, any of which keeps modkit from reading the mod.
-function unreadable({
-  mod,
-  typeErrors,
-  entry,
-  path,
-}: {
-  mod: ModInfo | Diagnostic
-  typeErrors: readonly Diagnostic[]
-  entry: SourceFile | undefined
-  path: string
-}): Compiled {
-  const message = "a mod's entry is mod.tsx, beside its package.json"
-  const missing: Diagnostic[] =
-    entry === undefined ? [ModDiagnostic.atFile({ code: 'no-mod', message, file: path })] : []
-  return {
-    isOk: false,
-    diagnostics: [...(isDiagnostic(mod) ? [mod] : []), ...typeErrors, ...missing],
+function capture<T>(fn: () => T, diagnostics: DiagnosticError[]): T | undefined {
+  try {
+    return fn()
+  } catch (error) {
+    if (error instanceof DiagnosticError) {
+      diagnostics.push(error)
+      return undefined
+    }
+    throw error
   }
 }
 
@@ -82,25 +73,56 @@ export class ModCompiler {
   /** Compile the bound mod directory into target-independent {@link Compiled} IR. */
   compile(): Compiled {
     const manifest = new ModManifest(this.#dir)
-    const tsconfig = manifest.resolveTsconfig()
-    if (typeof tsconfig !== 'string') {
-      const mod = manifest.readInfo()
-      return { isOk: false, diagnostics: isDiagnostic(mod) ? [mod, tsconfig] : [tsconfig] }
-    }
+    const initial: DiagnosticError[] = []
+    const mod = capture(() => manifest.readInfo(), initial)
+    const tsconfig = capture(() => manifest.resolveTsconfig(), initial)
+    if (tsconfig === undefined) return { isOk: false, diagnostics: initial }
     using project = TsProject.open(tsconfig)
-    return this.#compileProject(project, manifest)
+    return this.#compileProject({ project, mod, initial })
   }
 
-  #compileProject(project: TsProject, manifest: ModManifest): Compiled {
-    const mod = manifest.readInfo()
+  #compileProject({
+    project,
+    mod,
+    initial,
+  }: {
+    project: TsProject
+    mod: ModInfo | undefined
+    initial: readonly DiagnosticError[]
+  }): Compiled {
     const typeErrors = typeErrorsIn(project)
     const path = resolve(this.#dir, 'mod.tsx')
     const entry = project.files.find((file) => resolve(file.fileName) === path)
-    if (isDiagnostic(mod) || typeErrors.length > 0 || entry === undefined) {
-      return unreadable({ mod, typeErrors, entry, path })
+    if (mod === undefined || typeErrors.length > 0 || entry === undefined) {
+      const missing =
+        entry === undefined
+          ? [
+              DiagnosticError.atFile({
+                code: 'no-mod',
+                message: "a mod's entry is mod.tsx, beside its package.json",
+                file: path,
+              }),
+            ]
+          : []
+      return { isOk: false, diagnostics: [...initial, ...typeErrors, ...missing] }
     }
-    const ast = ModAst.from({ project, entry })
-    if (isDiagnostic(ast)) return { isOk: false, diagnostics: [ast] }
+    const astErrors: DiagnosticError[] = []
+    const ast = capture(() => ModAst.from({ project, entry }), astErrors)
+    if (ast === undefined) return { isOk: false, diagnostics: astErrors }
+    return this.#assemble({ project, mod, path, ast })
+  }
+
+  #assemble({
+    project,
+    mod,
+    path,
+    ast,
+  }: {
+    project: TsProject
+    mod: ModInfo
+    path: string
+    ast: ModAst
+  }): Compiled {
     const declared = declarationsIn(project)
     const settings = optionsIn({ project, mod: ast })
     const literals = literalsIn({ project, mod: ast, dir: this.#dir })
