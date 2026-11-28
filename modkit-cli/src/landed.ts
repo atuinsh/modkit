@@ -15,6 +15,17 @@ import { readIfAny } from './files.ts'
 
 const JSON_INDENT_SPACES = 2
 
+// What a target's name holds that a dekit task's path can't, which takes letters, digits, `-`, `.`
+// and `_`: each escaped as `_` and its code in hex, as a bare name holds no `_` to mistake for one.
+const ESCAPES: Readonly<Record<string, string>> = { '@': '_40', '/': '_2F', _: '_5F', '~': '_7E' }
+
+/**
+ * What the target `name` goes by in `modkit dev`'s dekit project, as a task's path and in its
+ * file names: `_40acme_2Fmodkit-custom` for `@acme/modkit-custom`, and `claude-code` as it is.
+ */
+export const slugOf = (name: string): string =>
+  name.replaceAll(/[@/_~]/gu, (char) => ESCAPES[char] ?? char)
+
 /** The time of day `at` was, `14:46:37`. */
 export const clock = (at: Date): string => at.toLocaleTimeString('en-GB', { hour12: false })
 
@@ -85,7 +96,7 @@ export class Landed {
 
   /** Where the record for the target `name` is in `dev`, the dekit project's directory. */
   static pathOf({ dev, name }: { dev: string; name: string }): string {
-    return join(dev, `${name}.landed.json`)
+    return join(dev, `${slugOf(name)}.landed.json`)
   }
 
   /** The record at `path`, if one was written. */

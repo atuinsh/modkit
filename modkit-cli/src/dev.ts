@@ -20,7 +20,7 @@ import type { Env } from '@atuin/modkit-target'
 import { Build } from './build.ts'
 import { Dekit, type DekitTask } from './dekit.ts'
 import { readIfAny } from './files.ts'
-import { Landed } from './landed.ts'
+import { Landed, slugOf } from './landed.ts'
 import { launch } from './launch.ts'
 import { Workspace } from './workspace.ts'
 
@@ -77,7 +77,7 @@ function tasksOf({
     autostart: true,
   }
   const harnesses = names.map((name) => ({
-    path: name,
+    path: slugOf(name),
     label: name,
     cmd,
     cwd,

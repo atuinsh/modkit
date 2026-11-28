@@ -13,7 +13,7 @@ import type { DevHarness, Env } from '@atuin/modkit-target'
 
 import type { TargetBuild } from './build.ts'
 import type { Dekit } from './dekit.ts'
-import { clock, digestOf, Landed } from './landed.ts'
+import { clock, digestOf, Landed, slugOf } from './landed.ts'
 
 /** How a harness comes onto a build: not at all, by loading it itself, or by a restart. */
 type Way = 'kept' | 'reloaded' | 'started'
@@ -54,7 +54,7 @@ export class HarnessTask {
     // The harness's task reads the record as it starts, so it is written before the restart.
     await landed.write(Landed.pathOf({ dev: this.#dekit.root, name: this.#name }))
     this.#loaded = landed
-    if (way === 'started') await this.#dekit.restart(this.#name)
+    if (way === 'started') await this.#dekit.restart(slugOf(this.#name))
     console.log(`${this.#name}: ${way} on the ${clock(landed.at)} build`)
   }
 
@@ -81,13 +81,13 @@ export class HarnessTask {
 
   async #wayOnto({ harness, digest }: { harness: DevHarness; digest: string }): Promise<Way> {
     // A harness that exited is started again on any build.
-    const loaded = (await this.#dekit.isUp(this.#name)) ? this.#loaded : undefined
+    const loaded = (await this.#dekit.isUp(slugOf(this.#name))) ? this.#loaded : undefined
     if (loaded === undefined) return 'started'
     if (digest === loaded.digest) return 'kept'
     return harness.reload === 'watched' ? 'reloaded' : 'started'
   }
 
   get #scratch(): string {
-    return join(this.#dekit.root, this.#name)
+    return join(this.#dekit.root, slugOf(this.#name))
   }
 }
